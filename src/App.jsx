@@ -1443,7 +1443,7 @@ const WEEK_DAYS = [
   { key: "thu", label: "T5" }, { key: "fri", label: "T6" }, { key: "sat", label: "T7" }, { key: "sun", label: "CN" },
 ];
 
-function SettingsView({ onBack }) {
+function SettingsView({ onBack, onSignOut }) {
   const [goal, setGoal] = useState(null);
   const [plan, setPlan] = useState(null);
   const [overallPct, setOverallPct] = useState(0);
@@ -1572,6 +1572,9 @@ function SettingsView({ onBack }) {
         <button className="cg-post-btn settings-save-btn" onClick={save}>
           {saved ? <><CheckCircle2 size={15} /> Đã lưu!</> : "Lưu kế hoạch học tập"}
         </button>
+        {onSignOut && (
+          <button className="settings-signout-btn" onClick={onSignOut}>Đăng xuất</button>
+        )}
       </div>
     </section>
   );
@@ -6058,8 +6061,8 @@ function AuthView({ onDone }) {
   );
 }
 
-export default function KoreanStudyDashboard() {
-  const [profile, setProfile] = useState(undefined); // undefined=đang tải, null=chưa đăng nhập, object=đã có hồ sơ
+export default function KoreanStudyDashboard({ authenticatedProfile = null, onSignOut = null }) {
+  const [profile, setProfile] = useState(authenticatedProfile || undefined); // undefined=đang tải, null=chưa đăng nhập, object=đã có hồ sơ
   const [active, setActive] = useState("home");
   const [view, setView] = useState("home");
   const [lesson, setLesson] = useState(null);
@@ -6079,13 +6082,17 @@ export default function KoreanStudyDashboard() {
   const immersive = IMMERSIVE_VIEWS.includes(view);
 
   useEffect(() => {
+    if (authenticatedProfile) {
+      setProfile(authenticatedProfile);
+      return undefined;
+    }
     let alive = true;
     window.storage.get(PROFILE_KEY).then((res) => {
       if (!alive) return;
       setProfile(res?.value ? JSON.parse(res.value) : null);
     }).catch(() => { if (alive) setProfile(null); });
     return () => { alive = false; };
-  }, []);
+  }, [authenticatedProfile]);
 
   // Đồng hồ tính phút học trong ngày cho "Mục tiêu trong ngày" — cứ mỗi 30s
   // app còn mở thì cộng thêm 0.5 phút vào mục tiêu hôm nay (tự reset khi
@@ -6248,7 +6255,7 @@ export default function KoreanStudyDashboard() {
         {view.startsWith("soon-") && (
           <ComingSoonView modeId={view.replace("soon-", "")} onBack={goHome} />
         )}
-        {view === "caidat" && <SettingsView onBack={goHome} />}
+        {view === "caidat" && <SettingsView onBack={goHome} onSignOut={onSignOut} />}
         {view === "curriculum-hub" && <CurriculumHubView onBack={goHome} onOpenBook={() => setView("tuvung-bai")} />}
         {view === "tuvung-bai" && <LessonsView onBack={() => setView("curriculum-hub")} onSelect={openLesson} />}
         {view === "lesson-detail" && lesson && (
@@ -8106,4 +8113,6 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .auth-note{
   display:flex;align-items:flex-start;gap:8px;margin-top:18px;font-size:11px;font-weight:600;
   color:#A9865A;line-height:1.5;background:#FDF3E7;border-radius:12px;padding:11px 13px;;flex-wrap:wrap}
+.settings-signout-btn{width:100%;margin-top:12px;border:1.5px solid #D65B68;background:#fff;color:#B73E4B;border-radius:12px;padding:11px 16px;font:700 14px 'Quicksand';cursor:pointer}
+.settings-signout-btn:hover{background:#FFF2F3}
 `;
