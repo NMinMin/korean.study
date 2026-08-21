@@ -1,0 +1,11 @@
+project_id = "korean-study"
+
+[auth]
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173/auth/callback", "http://localhost:5173/auth/reset-password"]
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
