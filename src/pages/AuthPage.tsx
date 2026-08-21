@@ -1,7 +1,8 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { Mail, Moon, Sun } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import background from '../../UIUX/backgrounddangnhap.png'
+import loginBackground from '../../UIUX/backgrounddangnhap.png'
+import registerBackground from '../../UIUX/backgrounddangky.png'
 import hidePasswordIcon from '../../UIUX/Hide.png'
 import showPasswordIcon from '../../UIUX/Show.png'
 import './auth.css'
@@ -101,10 +102,14 @@ export default function AuthPage() {
       <button className="theme-button" type="button" onClick={toggleTheme} aria-label={dark ? 'Bật giao diện sáng' : 'Bật giao diện tối'}>
         {dark ? <Moon /> : <Sun />}
       </button>
-      <section className="auth-shell" aria-label={title}>
+      <section className={`auth-shell ${mode === 'register' ? 'register-mode' : 'login-mode'}`} aria-label={title}>
         <div className="auth-visual">
           <div className="brand"><span className="brand-mark">한</span><span>Korean <b>Study</b></span></div>
-          <img src={background} alt="Bạn học tiếng Hàn cùng thỏ Korean Study" />
+          <img
+            key={mode}
+            src={mode === 'login' ? loginBackground : registerBackground}
+            alt={mode === 'login' ? 'Bạn học tiếng Hàn cùng thỏ Korean Study' : 'Chào mừng bạn tạo tài khoản Korean Study'}
+          />
         </div>
         <div className="auth-panel">
           <div className="mobile-tabs" role="tablist" aria-label="Chọn đăng ký hoặc đăng nhập">
