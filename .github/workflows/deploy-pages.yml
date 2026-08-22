@@ -47,6 +47,19 @@ jobs:
           fi
           npm run build
 
+      - name: Prepare GitHub Pages artifact
+        shell: bash
+        run: |
+          touch dist/.nojekyll
+          cp dist/index.html dist/404.html
+          entry_file="$(grep -oE 'assets/index-[^"]+\.js' dist/index.html | head -n 1)"
+          if [ -z "$entry_file" ] || [ ! -f "dist/$entry_file" ]; then
+            echo "::error::Bundle JavaScript được index.html tham chiếu không tồn tại trong dist."
+            find dist -maxdepth 2 -type f -print
+            exit 1
+          fi
+          echo "Verified dist/$entry_file"
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
