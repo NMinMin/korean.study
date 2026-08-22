@@ -2,7 +2,8 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { adminApi } from '../lib/adminApi'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { BookOpen, BookText, Users, LayoutDashboard, LogOut, X, ShieldCheck, GraduationCap, Plus, Search, Eye, EyeOff, Lock, Unlock, Flag, MessageSquare, Pencil, Trash2, ChevronDown, ChevronUp, Save, Check, Clock3, Star, Download, TrendingUp } from 'lucide-react'
+import { BookOpen, BookText, Users, LayoutDashboard, LogOut, X, ShieldCheck, GraduationCap, Plus, Search, Eye, EyeOff, Lock, Unlock, Flag, MessageSquare, Pencil, Trash2, ChevronDown, ChevronUp, Save, Check, Clock3, Star, Download, TrendingUp, ClipboardList } from 'lucide-react'
+import AdminExercises from './AdminExercises'
 import './admin.css'
 
 type Status = 'draft' | 'published' | 'locked' | 'no_content'
@@ -19,7 +20,7 @@ const statuses: { value: Status; label: string }[] = [
   { value: 'locked', label: 'Đã khóa' }, { value: 'no_content', label: 'Chưa có nội dung' },
 ]
 
-function AdminSelect({ value, options, onChange, label }: { value: string; options: { value: string; label: string }[]; onChange: (value: string) => void; label?: string }) {
+export function AdminSelect({ value, options, onChange, label }: { value: string; options: { value: string; label: string }[]; onChange: (value: string) => void; label?: string }) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const selected = options.find((option) => option.value === value) || options[0]
@@ -40,7 +41,7 @@ function AdminSelect({ value, options, onChange, label }: { value: string; optio
 
 export default function AdminPage() {
   const { profile, signOut } = useAuth()
-  const [tab, setTab] = useState<'dashboard' | 'textbooks' | 'lessons' | 'community' | 'users'>('dashboard')
+  const [tab, setTab] = useState<'dashboard' | 'textbooks' | 'lessons' | 'exercises' | 'community' | 'users'>('dashboard')
   const [textbooks, setTextbooks] = useState<Textbook[]>([])
   const [lessons, setLessons] = useState<Lesson[]>([])
   const [users, setUsers] = useState<AdminUser[]>([])
@@ -215,6 +216,7 @@ export default function AdminPage() {
         <button className={tab === 'dashboard' ? 'active' : ''} onClick={() => setTab('dashboard')}><LayoutDashboard size={20} /><span>Dashboard</span></button>
         <button className={tab === 'textbooks' ? 'active' : ''} onClick={() => setTab('textbooks')}><BookOpen size={20} /><span>Giáo trình</span><b>{textbooks.length || dashboard?.totalTextbooks || 0}</b></button>
         <button className={tab === 'lessons' ? 'active' : ''} onClick={() => setTab('lessons')}><BookText size={20} /><span>Bài học</span><b>{lessons.length || dashboard?.totalLessons || 0}</b></button>
+        <button className={tab === 'exercises' ? 'active' : ''} onClick={() => setTab('exercises')}><ClipboardList size={20} /><span>Bài tập</span></button>
         <button className={tab === 'community' ? 'active' : ''} onClick={() => setTab('community')}><MessageSquare size={20} /><span>Cộng đồng</span><b>{community.reports.filter((report) => report.status === 'pending').length || ''}</b></button>
         <button className={tab === 'users' ? 'active' : ''} onClick={() => setTab('users')}><Users size={20} /><span>Người dùng</span><b>{users.length || dashboard?.totalUsers || 0}</b></button>
       </nav>
@@ -222,7 +224,7 @@ export default function AdminPage() {
       <button className="admin-signout" onClick={() => void signOut()}><LogOut size={18} /><span>Đăng xuất</span></button>
     </aside>
     <main className="admin-page">
-      {tab === 'dashboard' ? <header className="admin-header admin-welcome"><div className="admin-welcome-avatar">{(profile?.displayName || 'A').slice(0, 1).toUpperCase()}</div><div className="admin-welcome-copy"><span className="admin-kicker">KOREAN STUDY ADMIN</span><h1>Chào {profile?.displayName || 'Quản trị viên'}! <span>👋</span></h1><p>Chúc bạn một ngày quản lý hệ thống thật hiệu quả.</p><div className="admin-welcome-chips"><span><Users size={17} /><b>{dashboard?.activeUsers || 0}</b> học viên hoạt động</span><span><ShieldCheck size={17} /> Hệ thống an toàn</span></div></div></header> : <header className="admin-header"><div><span className="admin-kicker">KOREAN STUDY ADMIN</span><h1>{tab === 'textbooks' ? 'Quản lý giáo trình' : tab === 'lessons' ? 'Quản lý bài học' : tab === 'community' ? 'Quản lý cộng đồng' : 'Quản lý người dùng'}</h1><p>Dữ liệu và quyền quản trị được xử lý an toàn qua backend.</p></div></header>}
+      {tab === 'dashboard' ? <header className="admin-header admin-welcome"><div className="admin-welcome-avatar">{(profile?.displayName || 'A').slice(0, 1).toUpperCase()}</div><div className="admin-welcome-copy"><span className="admin-kicker">KOREAN STUDY ADMIN</span><h1>Chào {profile?.displayName || 'Quản trị viên'}! <span>👋</span></h1><p>Chúc bạn một ngày quản lý hệ thống thật hiệu quả.</p><div className="admin-welcome-chips"><span><Users size={17} /><b>{dashboard?.activeUsers || 0}</b> học viên hoạt động</span><span><ShieldCheck size={17} /> Hệ thống an toàn</span></div></div></header> : <header className="admin-header"><div><span className="admin-kicker">KOREAN STUDY ADMIN</span><h1>{tab === 'textbooks' ? 'Quản lý giáo trình' : tab === 'lessons' ? 'Quản lý bài học' : tab === 'exercises' ? 'Quản lý bài tập' : tab === 'community' ? 'Quản lý cộng đồng' : 'Quản lý người dùng'}</h1><p>Dữ liệu và quyền quản trị được xử lý an toàn qua backend.</p></div></header>}
       {error && <div className="admin-error">{error}<button onClick={() => setError('')} aria-label="Đóng thông báo"><X size={20} /></button></div>}
       {loading ? <div className="admin-loading">Đang tải dữ liệu quản trị…</div> : <section className="admin-panel">
         {tab === 'dashboard' && dashboard && <div className="admin-dashboard">
@@ -276,6 +278,7 @@ export default function AdminPage() {
           </tbody></table></div>
           {!filteredLessons.length && <div className="admin-empty">Không tìm thấy bài học phù hợp.</div>}
         </>}
+        {tab === 'exercises' && <AdminExercises />}
         {tab === 'community' && <>
           <div className="admin-panel-title"><div><h2>Kiểm duyệt cộng đồng</h2><p>Ẩn hoặc xóa nội dung vi phạm, khóa bình luận và xử lý báo cáo.</p></div><span className="admin-report-summary"><Flag size={17} /> {community.reports.filter((report) => report.status === 'pending').length} báo cáo chờ xử lý</span></div>
           <div className="admin-toolbar admin-toolbar-with-filters"><label><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm nội dung hoặc người đăng…" /></label><div className="admin-filter-controls"><AdminSelect value={communityStatus} options={[{ value: 'all', label: 'Tất cả bài viết' }, { value: 'reported', label: 'Có báo cáo chờ xử lý' }, { value: 'visible', label: 'Đang hiển thị' }, { value: 'hidden', label: 'Đã ẩn' }]} label="Lọc bài viết cộng đồng" onChange={setCommunityStatus} /><span>{filteredCommunityPosts.length} bài viết</span></div></div>

@@ -9,10 +9,14 @@ const app = Fastify({ logger: true, requestIdHeader: 'x-request-id' })
 
 await app.register(cors, {
   origin(origin, callback) {
-    if (!origin || config.allowedOrigins.includes(origin)) return callback(null, true)
+    const normalizedOrigin = origin?.replace(/\/$/, '')
+    if (!normalizedOrigin || config.allowedOrigins.includes(normalizedOrigin)) return callback(null, true)
     callback(new Error('Origin is not allowed'), false)
   },
   credentials: true,
+  methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
+  maxAge: 86400,
 })
 
 app.get('/health', async () => ({ status: 'ok', service: 'korean-study-api', timestamp: new Date().toISOString() }))

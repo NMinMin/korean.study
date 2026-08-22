@@ -4,6 +4,7 @@ import { requireAdmin } from '../plugins/admin.js'
 
 type Status = 'draft' | 'published' | 'locked' | 'no_content'
 type ReportStatus = 'pending' | 'resolved' | 'dismissed'
+type SkillType = 'vocabulary_grammar' | 'dictation' | 'shadowing' | 'review'
 const DASHBOARD_CACHE_VERSION = 2
 const APP_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 
@@ -158,6 +159,37 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.delete<{ Params: { id: string } }>('/admin/lessons/:id', async (request, reply) => {
     const { error } = await supabaseAdmin.from('lessons').delete().eq('id', request.params.id)
     if (error) return reply.code(400).send({ code: 'LESSON_DELETE_FAILED', message: error.message, requestId: request.id })
+    return reply.code(204).send()
+  })
+
+  app.get<{ Querystring: { lessonId?: string; skillType?: SkillType } }>('/admin/exercises', async (request, reply) => {
+    let query = supabaseAdmin.from('lesson_exercises').select('*, lessons(lesson_number, title_ko, textbook_id, textbooks(title_ko))').order('sort_order')
+    if (request.query.lessonId) query = query.eq('lesson_id', request.query.lessonId)
+    if (request.query.skillType) query = query.eq('skill_type', request.query.skillType)
+    const { data, error } = await query
+    if (error) return reply.code(500).send({ code: 'EXERCISES_READ_FAILED', message: 'Không thể tải danh sách bài tập. Hãy chạy migration 20260823000100_lesson_exercises.sql.', requestId: request.id })
+    return { data }
+  })
+
+  app.post<{ Body: { lessonId: string; skillType: SkillType; exerciseType?: string; promptKo: string; promptVi?: string; answer?: unknown; explanationVi?: string; mediaUrl?: string; sortOrder?: number; status?: Status } }>('/admin/exercises', async (request, reply) => {
+    const body = request.body
+    if (!body.lessonId || !body.skillType || !body.promptKo?.trim()) return reply.code(400).send({ code: 'EXERCISE_FIELDS_REQUIRED', message: 'Bài học, kỹ năng và nội dung tiếng Hàn là bắt buộc.', requestId: request.id })
+    const { data, error } = await supabaseAdmin.from('lesson_exercises').insert({ lesson_id: body.lessonId, skill_type: body.skillType, exercise_type: body.exerciseType?.trim() || 'question', prompt_ko: body.promptKo.trim(), prompt_vi: body.promptVi?.trim() || null, answer: body.answer ?? {}, explanation_vi: body.explanationVi?.trim() || null, media_url: body.mediaUrl?.trim() || null, sort_order: body.sortOrder ?? 0, status: body.status ?? 'draft' }).select().single()
+    if (error) return reply.code(400).send({ code: 'EXERCISE_CREATE_FAILED', message: error.message, requestId: request.id })
+    return reply.code(201).send({ data })
+  })
+
+  app.patch<{ Params: { id: string }; Body: { lessonId?: string; skillType?: SkillType; exerciseType?: string; promptKo?: string; promptVi?: string; answer?: unknown; explanationVi?: string; mediaUrl?: string; sortOrder?: number; status?: Status } }>('/admin/exercises/:id', async (request, reply) => {
+    const body = request.body
+    const patch = { ...(body.lessonId !== undefined && { lesson_id: body.lessonId }), ...(body.skillType !== undefined && { skill_type: body.skillType }), ...(body.exerciseType !== undefined && { exercise_type: body.exerciseType.trim() || 'question' }), ...(body.promptKo !== undefined && { prompt_ko: body.promptKo.trim() }), ...(body.promptVi !== undefined && { prompt_vi: body.promptVi.trim() || null }), ...(body.answer !== undefined && { answer: body.answer }), ...(body.explanationVi !== undefined && { explanation_vi: body.explanationVi.trim() || null }), ...(body.mediaUrl !== undefined && { media_url: body.mediaUrl.trim() || null }), ...(body.sortOrder !== undefined && { sort_order: body.sortOrder }), ...(body.status !== undefined && { status: body.status }), updated_at: new Date().toISOString() }
+    const { data, error } = await supabaseAdmin.from('lesson_exercises').update(patch).eq('id', request.params.id).select().single()
+    if (error) return reply.code(400).send({ code: 'EXERCISE_UPDATE_FAILED', message: error.message, requestId: request.id })
+    return { data }
+  })
+
+  app.delete<{ Params: { id: string } }>('/admin/exercises/:id', async (request, reply) => {
+    const { error } = await supabaseAdmin.from('lesson_exercises').delete().eq('id', request.params.id)
+    if (error) return reply.code(400).send({ code: 'EXERCISE_DELETE_FAILED', message: error.message, requestId: request.id })
     return reply.code(204).send()
   })
 

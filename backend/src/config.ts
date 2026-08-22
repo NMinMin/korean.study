@@ -25,5 +25,8 @@ if (!result.success) {
 }
 export const config = {
   ...result.data,
-  allowedOrigins: result.data.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean),
+  allowedOrigins: Array.from(new Set([
+    ...result.data.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim().replace(/\/$/, '')).filter(Boolean),
+    'https://nminmin.github.io',
+  ])),
 }
