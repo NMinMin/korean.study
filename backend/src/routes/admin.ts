@@ -4,6 +4,25 @@ import { requireAdmin } from '../plugins/admin.js'
 
 type Status = 'draft' | 'published' | 'locked' | 'no_content'
 type ReportStatus = 'pending' | 'resolved' | 'dismissed'
+const DASHBOARD_CACHE_VERSION = 2
+const APP_TIME_ZONE = 'Asia/Ho_Chi_Minh'
+
+function appDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: APP_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `${value.year}-${value.month}-${value.day}`
+}
+
+function shiftDateKey(key: string, days: number) {
+  const [year = 1970, month = 1, day = 1] = key.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day + days))
+  return date.toISOString().slice(0, 10)
+}
 
 export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.addHook('preHandler', requireAdmin)
@@ -13,12 +32,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const freshAfter = new Date(Date.now() - 5 * 60 * 1000).toISOString()
     if (request.query.refresh !== 'true') {
       const { data: cached } = await supabaseAdmin.from('admin_dashboard_cache').select('payload, refreshed_at').eq('range_days', days).gte('refreshed_at', freshAfter).maybeSingle()
-      if (cached?.payload) return { data: cached.payload, cached: true }
+      if (cached?.payload && (cached.payload as { cacheVersion?: number }).cacheVersion === DASHBOARD_CACHE_VERSION) return { data: cached.payload, cached: true }
     }
-    const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - days + 1)
-    const previousStart = new Date(start); previousStart.setDate(previousStart.getDate() - days)
+    const todayKey = appDateKey()
+    const startKey = shiftDateKey(todayKey, -days + 1)
+    const previousStartKey = shiftDateKey(startKey, -days)
     const [{ data: stats, error: statsError }, { data: progress, error: progressError }, { data: vocabProgress, error: vocabError }, textbookCount, lessonCount, userCount] = await Promise.all([
-      supabaseAdmin.from('daily_study_stats').select('user_id, study_date, minutes').gte('study_date', previousStart.toISOString().slice(0, 10)),
+      supabaseAdmin.from('daily_study_stats').select('user_id, study_date, minutes').gte('study_date', previousStartKey).lte('study_date', todayKey),
       supabaseAdmin.from('lesson_progress').select('user_id, textbook_id, progress_percent, textbooks(title_ko)'),
       supabaseAdmin.from('vocabulary_progress').select('vocabulary_id, incorrect_count, correct_count, vocabulary(word_ko, meaning_vi), textbooks(title_ko)').gt('incorrect_count', 0),
       supabaseAdmin.from('textbooks').select('*', { count: 'exact', head: true }),
@@ -26,7 +46,6 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }),
     ])
     if (statsError || progressError || vocabError) return reply.code(500).send({ code: 'DASHBOARD_READ_FAILED', message: 'Không thể tải thống kê dashboard.', requestId: request.id })
-    const startKey = start.toISOString().slice(0, 10)
     const recent = (stats ?? []).filter((item) => item.study_date >= startKey)
     const previous = (stats ?? []).filter((item) => item.study_date < startKey)
     const activeUsers = new Set(recent.map((item) => item.user_id))
@@ -35,8 +54,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const totalMinutes = recent.reduce((sum, item) => sum + Number(item.minutes || 0), 0)
     const completed = (progress ?? []).filter((item) => Number(item.progress_percent) >= 100)
     const chart = Array.from({ length: days }, (_, index) => {
-      const date = new Date(start); date.setDate(date.getDate() + index)
-      const key = date.toISOString().slice(0, 10)
+      const key = shiftDateKey(startKey, index)
       return { date: key, minutes: recent.filter((item) => item.study_date === key).reduce((sum, item) => sum + Number(item.minutes || 0), 0) }
     })
     const courseMap = new Map<string, { title: string; total: number; count: number }>()
@@ -51,7 +69,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       current.incorrect += Number(item.incorrect_count || 0); current.total += Number(item.incorrect_count || 0) + Number(item.correct_count || 0); hardMap.set(item.vocabulary_id, current)
     }
     const payload = {
-      days, activeUsers: activeUsers.size, averageCompletedLessons: activeUsers.size ? completed.length / activeUsers.size : 0,
+      cacheVersion: DASHBOARD_CACHE_VERSION, days, activeUsers: activeUsers.size, averageCompletedLessons: activeUsers.size ? completed.length / activeUsers.size : 0,
       averageMinutes: recent.length ? totalMinutes / recent.length : 0, retentionRate: activeUsers.size ? retained / activeUsers.size * 100 : 0,
       totalTextbooks: textbookCount.count ?? 0, totalLessons: lessonCount.count ?? 0, totalUsers: userCount.count ?? 0,
       chart, courses: [...courseMap.values()].map((item) => ({ title: item.title, percent: item.count ? item.total / item.count : 0 })).sort((a, b) => b.percent - a.percent).slice(0, 5),

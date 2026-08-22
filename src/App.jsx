@@ -11,7 +11,7 @@ import {
 import { supabase } from "./lib/supabase";
 import { loadRemoteDailyGoal, loadRemoteStudyPlan, saveRemoteDailyGoal, saveRemoteStudyPlan } from "./lib/studySettings";
 import { loadRemoteVocabularyState, saveRemoteVocabularyState } from "./lib/vocabularyProgress";
-import { addUserTextbook, loadLearningCatalog, markLessonStarted } from "./lib/learningContent";
+import { addUserTextbook, loadLearningCatalog, markLessonStarted, syncLessonProgress } from "./lib/learningContent";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:3001").replace(/\/$/, "");
 
@@ -1283,7 +1283,7 @@ function ReviewSchedule({ lesson, userId, onReview, vocabulary = VOCAB_SAMPLE })
 }
 
 function ContinueLearning({ onGo, textbook, lesson, hasStarted = false }) {
-  const overallPct = textbook?.progressPercent || 0;
+  const overallPct = lesson?.progressPercent ?? textbook?.progressPercent ?? 0;
   if (!textbook || !lesson) {
     return (
       <section className="card continue continue-empty">
@@ -1872,7 +1872,7 @@ function TopicsView({ onBack }) {
 /* ------------------------------------------------------------------ */
 /*  TỪ VỰNG — THEO BÀI (회화 익힘책 2-1, 7 bài)                        */
 /* ------------------------------------------------------------------ */
-function LessonsView({ onBack, onSelect, lessons = LESSONS_2_1, textbookTitle = "세종한국어 회화 익힘책 2-1", title = "Từ vựng · Theo bài", backLabel = "Quay lại" }) {
+function LessonsView({ onBack, onSelect, onChangeTextbook, textbooks = [], activeTextbookId, continueLesson, lessons = LESSONS_2_1, textbookTitle = "세종한국어 회화 익힘책 2-1", title = "Từ vựng · Theo bài", backLabel = "Quay lại" }) {
   return (
     <section className="card page">
       <div className="card-title-row">
@@ -1880,8 +1880,21 @@ function LessonsView({ onBack, onSelect, lessons = LESSONS_2_1, textbookTitle = 
         <button className="link-btn" onClick={onBack}><ChevronLeft size={15} /> {backLabel}</button>
       </div>
       <div className="lesson-book-tag">
-        <span className="book-chip">{textbookTitle}</span>
+        {textbooks.length > 1 ? (
+          <label className="book-switcher">
+            <BookOpen size={15} aria-hidden="true" />
+            <select
+              value={activeTextbookId || ""}
+              onChange={(event) => onChangeTextbook?.(event.target.value)}
+              aria-label="Chọn giáo trình"
+            >
+              {textbooks.map((book) => <option key={book.id} value={book.id}>{book.title}</option>)}
+            </select>
+            <ChevronDown size={15} aria-hidden="true" />
+          </label>
+        ) : <span className="book-chip">{textbookTitle}</span>}
         <span className="lesson-count">{lessons.length} bài</span>
+        {continueLesson && <span className="current-study-chip">Đang học · Bài {continueLesson.no}</span>}
       </div>
       <div className="lesson-list">
         {lessons.map((l) => (
@@ -3621,11 +3634,20 @@ const ACTIVITIES = [
 /* Tính % tiến độ THẬT cho từng thẻ hoạt động, đọc từ đúng dữ liệu đã lưu   */
 /* qua window.storage — không còn bảng số cố định. "Ôn tập" tính theo tỉ lệ */
 /* nội dung đã ôn "vững" (đúng nhiều hơn sai) trên tổng số mục có thể ôn.   */
-async function loadActivityProgress(lesson) {
+async function loadActivityProgress(lesson, userId) {
   const out = { tuvung: 0, shadowing: 0, nghechep: 0, ontap: 0 };
   try {
-    const v = await window.storage.get(vocabProgressKey(lesson));
-    if (v?.value) out.tuvung = Math.round((Object.keys(JSON.parse(v.value)).length / VOCAB_SAMPLE.length) * 100);
+    const userKey = vocabProgressKey(lesson, userId);
+    const [v, legacy, legacyOwner, remote] = await Promise.all([
+      window.storage.get(userKey),
+      userId ? window.storage.get(vocabProgressKey(lesson)) : Promise.resolve(null),
+      userId ? window.storage.get(`${legacyVocabProgressKey(lesson)}:migrated-owner`) : Promise.resolve(null),
+      userId ? loadRemoteVocabularyState(lesson.no, userId) : Promise.resolve(null),
+    ]);
+    const canUseLegacy = !userId || !legacyOwner?.value || legacyOwner.value === userId;
+    const localState = v?.value ? JSON.parse(v.value) : canUseLegacy && legacy?.value ? JSON.parse(legacy.value) : {};
+    const merged = remote ? mergeVocabStates(localState, remote) : localState;
+    if (Object.keys(merged).length) out.tuvung = Math.round((Object.keys(merged).length / VOCAB_SAMPLE.length) * 100);
   } catch (e) {}
   try {
     const s = await window.storage.get(shadowProgressKey(lesson));
@@ -3647,20 +3669,25 @@ async function loadActivityProgress(lesson) {
   return out;
 }
 
-function LessonDetailView({ lesson, onBack, onStartActivity }) {
+function LessonDetailView({ lesson, userId, textbookTitle, onBack, onStartActivity, onProgressChange }) {
   const [pcts, setPcts] = useState({ tuvung: 0, shadowing: 0, nghechep: 0, ontap: 0 });
 
   useEffect(() => {
     let alive = true;
-    loadActivityProgress(lesson).then((p) => { if (alive) setPcts(p); });
+    loadActivityProgress(lesson, userId).then((p) => {
+      if (!alive) return;
+      setPcts(p);
+      const overall = Math.round(Object.values(p).reduce((sum, value) => sum + value, 0) / Object.keys(p).length);
+      onProgressChange?.(overall, p);
+    });
     return () => { alive = false; };
-  }, [lesson]);
+  }, [lesson, userId]);
 
   return (
     <section className="card page">
       <div className="card-title-row">
         <div className="card-title">
-          <NotebookPen size={19} color="#7C6FE4" /> Bài {lesson.no} · 회화 익힘책 2-1
+          <NotebookPen size={19} color="#7C6FE4" /> Bài {lesson.no} · {textbookTitle}
         </div>
         <button className="link-btn" onClick={onBack}>← Danh sách bài</button>
       </div>
@@ -4055,8 +4082,7 @@ function CurriculumHubView({ onBack, onOpenBook, onAddBook, myBooks = [], availa
   );
 }
 
-function GrammarHubView({ onBack, onOpenBook, books = null }) {
-  const visibleBooks = books?.length ? books : UPLOADED_BOOKS.map((title) => ({ title, hasContent: title.includes("2-1"), lessonCount: title.includes("2-1") ? LESSONS_2_1.length : 0 }));
+function GrammarHubView({ onBack, onOpenBook, onAddBook, books = [] }) {
   return (
     <section className="cg-page wide-page">
       <div className="fc2-topbar">
@@ -4065,28 +4091,36 @@ function GrammarHubView({ onBack, onOpenBook, books = null }) {
           <span className="fc2-title"><NotebookPen size={18} color="#3FA95C" /> Ngữ pháp</span>
         </div>
       </div>
-      <p className="cg-sub" style={{ marginTop: 0 }}>Ngữ pháp của tất cả các bài được tổng hợp tại đây — chọn giáo trình để bắt đầu.</p>
-      <div className="gm-hub-grid">
-        {visibleBooks.map((book) => {
+      <p className="cg-sub" style={{ marginTop: 0 }}>Ngữ pháp được sắp xếp theo các giáo trình bạn đã thêm — chọn giáo trình để bắt đầu.</p>
+      {!books.length ? (
+        <div className="curriculum-empty grammar-empty">
+          <NotebookPen size={28} />
+          <b>Bạn chưa có giáo trình</b>
+          <span>Thêm giáo trình trước để xem ngữ pháp theo đúng nội dung đang học.</span>
+          <button type="button" className="curriculum-empty-action" onClick={onAddBook}><Plus size={15} /> Thêm giáo trình</button>
+        </div>
+      ) : <div className="gm-hub-grid">
+        {books.map((book) => {
           const title = book.title;
           const hasContent = book.hasContent;
           return (
             <button
               key={title}
               className={`gm-hub-card ${hasContent ? "has" : "soon"}`}
-              onClick={() => hasContent && onOpenBook()}
+              onClick={() => hasContent && onOpenBook(book)}
               disabled={!hasContent}
               title={hasContent ? undefined : "Chưa có nội dung ngữ pháp"}
             >
               <span className="gm-hub-badge">NGỮ PHÁP</span>
               <b lang="ko">{title}</b>
+              {book.titleVi && <span className="gm-grammar-book-description">{book.titleVi}</span>}
               <span className="gm-hub-count">
                 {hasContent ? `${book.lessonCount} bài · ${GRAMMAR_SAMPLE.length} mẫu ngữ pháp` : book.lessonCount ? `${book.lessonCount} bài · Đang biên soạn` : "Chưa có nội dung"}
               </span>
             </button>
           );
         })}
-      </div>
+      </div>}
     </section>
   );
 }
@@ -6625,6 +6659,21 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     setView("tuvung-bai");
   };
 
+  const openGrammarBook = async (book) => {
+    const catalog = prepareLearningCatalog(await loadLearningCatalog(book.id));
+    if (catalog) setLearningCatalog(catalog);
+    setView("nguphap-book");
+  };
+
+  const switchLessonTextbook = async (textbookId) => {
+    if (!textbookId || textbookId === learningCatalog?.activeTextbook?.id) return;
+    const catalog = prepareLearningCatalog(await loadLearningCatalog(textbookId));
+    if (catalog) {
+      setLearningCatalog(catalog);
+      setLesson(catalog.continueLesson || catalog.lessons?.[0] || null);
+    }
+  };
+
   const handleAddTextbook = async (book) => {
     setAddingTextbookId(book.id);
     setCatalogNotice(null);
@@ -6638,6 +6687,22 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     } finally {
       setAddingTextbookId(null);
     }
+  };
+
+  const handleLessonProgressChange = async (lessonProgress, activities) => {
+    if (!lesson?.id || !lesson?.textbookId) return;
+    const lastActivity = Object.entries(activities).sort((a, b) => b[1] - a[1])[0]?.[0] || "lesson";
+    setLearningCatalog((current) => {
+      if (!current) return current;
+      const updatedLessons = current.lessons.map((item) => item.id === lesson.id ? { ...item, progressPercent: lessonProgress } : item);
+      const updatedContinueLesson = current.continueLesson?.id === lesson.id ? { ...current.continueLesson, progressPercent: lessonProgress } : current.continueLesson;
+      return { ...current, hasStarted: true, lessons: updatedLessons, continueLesson: updatedContinueLesson };
+    });
+    try {
+      await syncLessonProgress(lesson.textbookId, lesson.id, lessonProgress, lastActivity);
+      const catalog = prepareLearningCatalog(await loadLearningCatalog(lesson.textbookId));
+      if (catalog) setLearningCatalog(catalog);
+    } catch (error) {}
   };
 
   useEffect(() => {
@@ -6759,13 +6824,24 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             onReview={() => { setReviewHubBackView("study-hub"); setView("review-hub"); }}
           />
         )}
-        {view === "nguphap-hub" && <GrammarHubView books={learningCatalog?.textbooks} onBack={goHome} onOpenBook={() => setView("nguphap-book")} />}
+        {view === "nguphap-hub" && (
+          <GrammarHubView
+            books={learningCatalog?.myTextbooks || []}
+            onBack={goHome}
+            onOpenBook={openGrammarBook}
+            onAddBook={() => { setCatalogNotice(null); setView("curriculum-hub"); setActive("giaotrinh"); }}
+          />
+        )}
         {view === "nguphap-book" && (
           <GrammarBookView
             lessons={catalogLessons}
             textbookTitle={activeTextbookTitle}
             onBack={() => setView("nguphap-hub")}
-            onSelectLesson={(idx) => { setLesson(catalogLessons[idx]); setView("flashcards-grammar"); }}
+            onSelectLesson={(idx) => {
+              const selectedLesson = catalogLessons[idx];
+              if (selectedLesson?.textbookId && selectedLesson?.id) markLessonStarted(selectedLesson.textbookId, selectedLesson.id).catch(() => {});
+              setLesson(selectedLesson); setView("flashcards-grammar");
+            }}
           />
         )}
         {view === "flashcards-grammar" && lesson && (
@@ -6865,11 +6941,14 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             onAddBook={handleAddTextbook}
           />
         )}
-        {view === "tuvung-bai" && <LessonsView lessons={catalogLessons} textbookTitle={activeTextbookTitle} title="Giáo trình · Danh sách bài" backLabel={lessonListBackView === "home" ? "Trang chủ" : "Giáo trình"} onBack={() => setView(lessonListBackView)} onSelect={(selectedLesson) => openLesson(selectedLesson, "tuvung-bai")} />}
-        {view === "vocab-lessons" && <LessonsView lessons={catalogLessons} textbookTitle={activeTextbookTitle} title="Từ vựng · Chọn bài học" backLabel="Từ vựng & bài học" onBack={() => setView("study-hub")} onSelect={(selectedLesson) => openVocabulary(selectedLesson, "study-hub")} />}
+        {view === "tuvung-bai" && <LessonsView lessons={catalogLessons} textbooks={learningCatalog?.myTextbooks || []} activeTextbookId={learningCatalog?.activeTextbook?.id} continueLesson={learningCatalog?.hasStarted ? learningCatalog?.continueLesson : null} onChangeTextbook={switchLessonTextbook} textbookTitle={activeTextbookTitle} title="Giáo trình · Danh sách bài" backLabel={lessonListBackView === "home" ? "Trang chủ" : "Giáo trình"} onBack={() => setView(lessonListBackView)} onSelect={(selectedLesson) => openLesson(selectedLesson, "tuvung-bai")} />}
+        {view === "vocab-lessons" && <LessonsView lessons={catalogLessons} textbooks={learningCatalog?.myTextbooks || []} activeTextbookId={learningCatalog?.activeTextbook?.id} continueLesson={learningCatalog?.hasStarted ? learningCatalog?.continueLesson : null} onChangeTextbook={switchLessonTextbook} textbookTitle={activeTextbookTitle} title="Từ vựng · Chọn bài học" backLabel="Từ vựng & bài học" onBack={() => setView("study-hub")} onSelect={(selectedLesson) => openVocabulary(selectedLesson, "study-hub")} />}
         {view === "lesson-detail" && lesson && (
           <LessonDetailView
             lesson={lesson}
+            userId={profile.id}
+            textbookTitle={activeTextbookTitle}
+            onProgressChange={handleLessonProgressChange}
             onBack={() => setView(lessonDetailBackView)}
             onStartActivity={(actId) => {
               if (actId === "tuvung") { setVocabBackView("lesson-detail"); setView("vocab-list"); }
@@ -7293,7 +7372,21 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   background:#7C6FE4;color:#fff;border-radius:99px;padding:5px 14px;
   font:700 13px 'Quicksand';box-shadow:0 3px 8px rgba(124,111,228,.3);
 }
+.book-switcher{
+  position:relative;display:flex;align-items:center;min-width:260px;max-width:min(460px,70vw);
+  min-height:36px;padding-left:12px;border:1.5px solid #DCD5F5;border-radius:12px;
+  color:#6E60D8;background:#fff;box-shadow:0 3px 10px rgba(124,111,228,.1);
+  transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease;
+}
+.book-switcher:hover{border-color:#AFA3EE;box-shadow:0 5px 14px rgba(124,111,228,.15);transform:translateY(-1px)}
+.book-switcher:focus-within{border-color:#7C6FE4;box-shadow:0 0 0 3px rgba(124,111,228,.12)}
+.book-switcher select{
+  width:100%;min-width:0;height:34px;padding:0 34px 0 9px;border:0;outline:0;appearance:none;
+  color:#4B4470;background:transparent;font:700 12.5px 'Quicksand';cursor:pointer;
+}
+.book-switcher>svg:last-child{position:absolute;right:11px;pointer-events:none}
 .lesson-count{font-size:13px;font-weight:600;color:#8B85AB}
+.current-study-chip{padding:5px 10px;border-radius:99px;color:#279C5B;background:#EAF8F0;font:700 11.5px 'Quicksand';white-space:nowrap}
 
 .lesson-list{display:flex;flex-direction:column;gap:9px}
 .lesson-row{
@@ -7327,6 +7420,9 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 @media (max-width:760px){
   .topics-grid{grid-template-columns:repeat(2,1fr)}
   .lesson-main em{display:none}
+  .lesson-book-tag{align-items:stretch;flex-wrap:wrap;gap:7px}
+  .book-switcher{width:100%;min-width:0;max-width:none}
+  .lesson-count,.current-study-chip{align-self:center}
 }
 
 /* ---------------- Lesson detail ---------------- */
@@ -8685,6 +8781,8 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .gm-hub-card b{font:700 15px 'Baloo 2';color:#3B2A55}
 .gm-hub-count{font-size:12.5px;color:#8B85AB;font-weight:600}
 .gm-hub-description{margin:0;color:#77708F;font-size:11.5px;font-weight:500;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:34px}
+.gm-grammar-book-description{font-size:11.5px;color:#8B85AB;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+.grammar-empty{min-height:230px;margin-top:4px}
 .gm-book-action{width:100%;margin-top:auto;min-height:38px;border:1px solid #DCD5F2;border-radius:11px;background:#fff;color:#6558CC;display:flex;align-items:center;justify-content:center;gap:6px;font:650 12.5px 'Quicksand';cursor:pointer;transition:.16s}
 .gm-book-action:hover:not(:disabled){border-color:#8B7BE8;background:#F6F3FF;transform:translateY(-1px)}
 .gm-book-action.add{border-color:#7C6FE4;background:#7C6FE4;color:#fff;box-shadow:0 5px 13px rgba(124,111,228,.2)}
@@ -9122,7 +9220,7 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   .logo-badge{width:36px;height:36px;border-radius:10px;font-size:17px}
   .logo-text{font-size:15px;white-space:nowrap}
   .logo-row .lucide-sparkles{display:none}
-  .home-pill{margin-bottom:8px;padding:10px 12px;border-radius:12px;font-size:13px}
+  .home-pill{min-height:48px;margin-bottom:6px;padding:7px 12px;border-radius:13px;font-size:13px}
   .nav-grid{display:flex;flex-direction:column;gap:6px}
   .nav-tile{
     min-height:48px;flex-direction:row;justify-content:flex-start;gap:10px;
