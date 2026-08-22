@@ -16,6 +16,10 @@ concurrency:
 
 jobs:
   build:
+    # Cho phép bước build đọc các secret được lưu trong Environment
+    # "github-pages" (Settings > Environments > github-pages).
+    environment:
+      name: github-pages
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -33,10 +37,15 @@ jobs:
       - name: Build frontend
         env:
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
-        run: npm run build
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL || vars.VITE_API_URL }}
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "::error::Thiếu VITE_SUPABASE_URL hoặc VITE_SUPABASE_ANON_KEY trong GitHub Secrets/Variables của environment github-pages."
+            exit 1
+          fi
+          npm run build
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
