@@ -876,8 +876,8 @@ function Plant({ progress = 0 }) {
   const stageLabel = ["Hạt giống", "Nảy mầm", "Cây non", "Đang phát triển", "Cây sum suê", "Cây Mugunghwa nở hoa"][stage];
 
   return (
-    <svg key={stage} className={`progress-plant stage-${stage}`} viewBox="0 0 90 110" width="72" height="88" role="img" aria-label={`${stageLabel}, tiến độ ${pct}%`}>
-      <title>{stageLabel} — tiến độ giáo trình {pct}%</title>
+    <span key={stage} className="progress-plant-wrap" tabIndex={0} aria-label={`${stageLabel}, tiến độ ${pct}%`}>
+    <svg className={`progress-plant stage-${stage}`} viewBox="0 0 90 110" width="72" height="88" aria-hidden="true">
       <ellipse cx="45" cy="77" rx="16" ry="5" fill="#7B5136" />
       {stage === 0 && <ellipse className="plant-seed" cx="45" cy="70" rx="5" ry="3.5" fill="#8C623F" />}
       {stage >= 1 && <path className="plant-stem" d={`M45 73 C44 63 45 ${stage >= 4 ? 29 : stage === 3 ? 38 : stage === 2 ? 49 : 61} 46 ${stage >= 4 ? 22 : stage === 3 ? 34 : stage === 2 ? 46 : 58}`} fill="none" stroke={stage === 5 ? "#397A3F" : "#4E9E5F"} strokeWidth={stage === 5 ? 5 : 3.5} strokeLinecap="round" />}
@@ -930,6 +930,8 @@ function Plant({ progress = 0 }) {
       <path d="M28 78 h34 l-4 26 a6 6 0 0 1-6 5 h-14 a6 6 0 0 1-6-5 Z" fill="#E8B98B" />
       <path d="M26 74 h38 v8 h-38 z" fill="#D9A876" rx="3" />
     </svg>
+    <span className="plant-tooltip" aria-hidden="true"><span className="plant-tooltip-icon">{stage === 5 ? "🌺" : "🌱"}</span><span><b>{stageLabel}</b><small>Tiến độ giáo trình</small></span><strong>{pct}%</strong></span>
+    </span>
   );
 }
 
@@ -7350,7 +7352,7 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .cont-bar{display:flex;align-items:center;gap:9px;margin-top:9px}
 .cont-bar > div{flex:1}
 .cont-bar em,.book-bar em{font:700 12.5px 'Quicksand';font-style:normal;color:#8B85AB}
-.cont-plant{flex-shrink:0}
+.cont-plant{flex-shrink:0}.progress-plant-wrap{position:relative;display:inline-grid;place-items:center;outline:none;cursor:help}.plant-tooltip{position:absolute;z-index:20;right:-10px;bottom:calc(100% - 2px);display:flex;align-items:center;gap:9px;min-width:190px;padding:10px 12px;border:1px solid #ded8f3;border-radius:14px;background:rgba(255,255,255,.97);box-shadow:0 12px 30px rgba(52,42,97,.18);color:#40385f;opacity:0;pointer-events:none;transform:translateY(7px) scale(.96);transform-origin:right bottom;transition:opacity .18s ease,transform .18s ease}.plant-tooltip::after{content:"";position:absolute;right:28px;bottom:-6px;width:11px;height:11px;border-right:1px solid #ded8f3;border-bottom:1px solid #ded8f3;background:#fff;transform:rotate(45deg)}.progress-plant-wrap:hover .plant-tooltip,.progress-plant-wrap:focus-visible .plant-tooltip{opacity:1;transform:none}.plant-tooltip-icon{display:grid;place-items:center;width:32px;height:32px;border-radius:10px;background:#edf8ef;font-size:17px}.plant-tooltip>span:nth-child(2){display:flex;flex:1;flex-direction:column;line-height:1.2}.plant-tooltip b{font:650 13px 'Baloo 2';color:#373052}.plant-tooltip small{margin-top:2px;color:#938aa9;font-size:10px;white-space:nowrap}.plant-tooltip>strong{color:#6f60dc;font:700 14px 'Baloo 2'}
 .progress-plant{overflow:visible;animation:plant-grow-in .5s cubic-bezier(.2,1.25,.4,1) both;filter:drop-shadow(0 5px 5px rgba(68,113,67,.12))}
 .plant-stem{stroke-dasharray:70;stroke-dashoffset:70;animation:plant-stem-grow .55s .08s ease-out forwards}
 .plant-leaf{opacity:0;transform-box:fill-box;transform-origin:center;animation:plant-leaf-open .35s cubic-bezier(.2,1.4,.5,1) forwards}
