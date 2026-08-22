@@ -4,9 +4,20 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>my-web</title>
+    <meta name="application-name" content="Korean Study" />
+    <title>Korean Study</title>
   </head>
   <body>
+    <script>
+      // Khôi phục URL SPA sau khi GitHub Pages chuyển hướng qua 404.html.
+      (function (location) {
+        if (!location.search.startsWith('?/')) return;
+        var decoded = location.search.slice(2).split('&').map(function (part) {
+          return part.replace(/~and~/g, '&');
+        }).join('?');
+        window.history.replaceState(null, '', location.pathname + decoded + location.hash);
+      })(window.location);
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

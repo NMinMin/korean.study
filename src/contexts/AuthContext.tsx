@@ -90,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
         options: {
           data: { display_name: displayName },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: `${window.location.origin}${import.meta.env.BASE_URL}auth/callback`,
         },
       })
       if (error) throw error
@@ -99,7 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async requestPasswordReset(email) {
       if (!supabase) throw new Error('Supabase chưa được cấu hình.')
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
+        redirectTo: `${window.location.origin}${import.meta.env.BASE_URL}auth/reset-password`,
       })
       if (error) throw error
     },

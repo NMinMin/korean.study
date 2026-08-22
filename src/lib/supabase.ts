@@ -7,10 +7,11 @@ export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
 
 const authStorage = {
   getItem(key: string) {
-    return sessionStorage.getItem(key) ?? localStorage.getItem(key)
+    const persistent = localStorage.getItem('kstudy:session-preference') === 'persistent'
+    return persistent ? localStorage.getItem(key) : sessionStorage.getItem(key)
   },
   setItem(key: string, value: string) {
-    if (localStorage.getItem('kstudy:session-preference') === 'session-only') {
+    if (localStorage.getItem('kstudy:session-preference') !== 'persistent') {
       localStorage.removeItem(key)
       sessionStorage.setItem(key, value)
     } else {

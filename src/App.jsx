@@ -981,7 +981,7 @@ function Sidebar({ active, setActive, setView, setLesson, goHome, onSignOut, isA
           );
         })}
         {isAdmin && (
-          <button className="nav-tile admin-nav-button" onClick={() => { window.location.href = "/admin"; }}>
+          <button className="nav-tile admin-nav-button" onClick={() => { window.location.href = `${import.meta.env.BASE_URL}admin`; }}>
             <span className="nav-tile-ico"><Settings size={22} color="#8A5CF6" /></span>
             <span className="nav-tile-label">Quản trị</span>
           </button>
@@ -2069,6 +2069,20 @@ Trả lời CHỈ bằng JSON, không thêm markdown hay chữ nào khác ngoài
 /* ------------------------------------------------------------------ */
 const shadowProgressKey = (lesson) => `shadow-progress:2-1:${lesson.no}`;
 const dictationProgressKey = (lesson) => `dictation-progress:2-1:${lesson.no}`;
+const activityCompletionKey = (lesson, userId) =>
+  `activity-completion:${userId || "guest"}:${lesson?.textbookId || "2-1"}:${lesson?.id || lesson?.no}`;
+
+async function markActivityCompleted(lesson, userId, activityId) {
+  const key = activityCompletionKey(lesson, userId);
+  let completed = {};
+  try {
+    const saved = await window.storage.get(key);
+    if (saved?.value) completed = JSON.parse(saved.value);
+  } catch (e) {}
+  completed[activityId] = { completedAt: new Date().toISOString() };
+  await window.storage.set(key, JSON.stringify(completed));
+  return completed;
+}
 
 
 /* ------------------------------------------------------------------ */
@@ -2113,7 +2127,7 @@ function SwBunnyEmpty() {
   );
 }
 
-function ShadowingView({ lesson, onBack }) {
+function ShadowingView({ lesson, onBack, onFinish }) {
   const [idx, setIdx] = useState(0);
   const [autoPlay, setAutoPlay] = useState(false);
   const [status, setStatus] = useState("idle"); // idle | recording | grading | done | error | unsupported
@@ -2530,7 +2544,7 @@ function ShadowingView({ lesson, onBack }) {
             />
           ))}
         </div>
-        <button className="fc-nav-btn primary" onClick={idx === total - 1 ? onBack : goNext}>
+        <button className="fc-nav-btn primary" onClick={idx === total - 1 ? (onFinish || onBack) : goNext}>
           {idx === total - 1 ? "Hoàn thành" : "Câu tiếp"} <ChevronRight size={18} />
         </button>
       </div>
@@ -3653,6 +3667,14 @@ async function loadActivityProgress(lesson, userId) {
       out.ontap = Math.round((mastered / totalReviewable) * 100);
     }
   } catch (e) {}
+  try {
+    const completed = await window.storage.get(activityCompletionKey(lesson, userId));
+    if (completed?.value) {
+      Object.keys(JSON.parse(completed.value)).forEach((activityId) => {
+        if (Object.prototype.hasOwnProperty.call(out, activityId)) out[activityId] = 100;
+      });
+    }
+  } catch (e) {}
   return out;
 }
 
@@ -4317,7 +4339,7 @@ function WordOfDayWidget({ onOpen, vocabulary = VOCAB_SAMPLE }) {
 }
 
 
-function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords, deckTitle, vocabulary = VOCAB_SAMPLE, includeMastered = false }) {
+function FlashcardView({ lesson, userId, onBack, onFinish, finishLabel = "Làm bài tập", initialTab, deckWords, deckTitle, vocabulary = VOCAB_SAMPLE, includeMastered = false }) {
   const [contentTab, setContentTab] = useState(initialTab || "vocab"); // "vocab" | "grammar"
   const [grammarIdx, setGrammarIdx] = useState(0);
   const [grammarFlipped, setGrammarFlipped] = useState(false);
@@ -4614,7 +4636,7 @@ function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords
           <div className="fc2-session-done-emoji">🎉</div>
           <h3>Đã thuộc hết {total} từ!</h3>
           <p>Bạn đã học xong toàn bộ {deckTitle ? deckTitle : "bộ thẻ"} trong phiên này.</p>
-          <button className="fc2-act-btn primary" onClick={onFinish}>Làm bài tập <ChevronRight size={16} /></button>
+          <button className="fc2-act-btn primary" onClick={onFinish}>{finishLabel} <ChevronRight size={16} /></button>
         </div>
       ) : (
       <>
@@ -5076,7 +5098,7 @@ function ChooseImageView({ onBack }) {
 /*  NGHE CHÉP CHÍNH TẢ — dùng audio thật (4 câu 1과.mp3 đã cắt sẵn      */
 /*  cho Shadowing), gợi ý hé lộ từng ký tự khi trả lời sai              */
 /* ------------------------------------------------------------------ */
-function DictationView({ lesson, onBack, onGoVocab }) {
+function DictationView({ lesson, onBack, onFinish, onGoVocab }) {
   const [mode, setMode] = useState("practice"); // "practice" (không giới hạn) | "test" (giới hạn 2 lần)
   const [idx, setIdx] = useState(0);
   const [inputs, setInputs] = useState({});
@@ -5326,7 +5348,7 @@ function DictationView({ lesson, onBack, onGoVocab }) {
             />
           ))}
         </div>
-        <button className="fc-nav-btn primary" onClick={() => (idx === total - 1 ? onBack() : goto(idx + 1))}>
+        <button className="fc-nav-btn primary" onClick={() => (idx === total - 1 ? (onFinish || onBack)() : goto(idx + 1))}>
           {idx === total - 1 ? "Hoàn thành" : "Câu tiếp"} <ChevronRight size={18} />
         </button>
       </div>
@@ -6625,6 +6647,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const [learningCatalog, setLearningCatalog] = useState(null);
   const [addingTextbookId, setAddingTextbookId] = useState(null);
   const [catalogNotice, setCatalogNotice] = useState(null);
+  const [lessonCelebration, setLessonCelebration] = useState(false);
   const goHome = () => { setView("home"); setActive("home"); };
   const openLesson = (l, backView = "tuvung-bai") => {
     if (l?.textbookId && l?.id) markLessonStarted(l.textbookId, l.id).catch(() => {});
@@ -6698,6 +6721,27 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     } catch (error) {}
   };
 
+  const handleActivityFinish = async (activityId) => {
+    if (!lesson) return;
+    try {
+      await markActivityCompleted(lesson, profile?.id, activityId);
+      const activities = await loadActivityProgress(lesson, profile?.id);
+      const lessonProgress = Math.round(Object.values(activities).reduce((sum, value) => sum + value, 0) / ACTIVITIES.length);
+      await handleLessonProgressChange(lessonProgress, activities);
+      const lessonDone = ACTIVITIES.every((activity) => (activities[activity.id] || 0) >= 100);
+      if (lessonDone) {
+        goHome();
+        setLessonCelebration(true);
+        if (isCelebrationSoundEnabled()) playCelebrationSound();
+        window.setTimeout(() => setLessonCelebration(false), 2600);
+      } else {
+        setView("lesson-detail");
+      }
+    } catch (error) {
+      setView("lesson-detail");
+    }
+  };
+
   useEffect(() => {
     if (authenticatedProfile) {
       setProfile(authenticatedProfile);
@@ -6760,6 +6804,16 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   return (
     <div className={`app ${immersive ? "no-sidebar" : ""}`}>
       <style>{css}</style>
+      {lessonCelebration && (
+        <div className="lesson-celebration" role="status" aria-live="polite">
+          <ConfettiBurst />
+          <div className="lesson-celebration-card">
+            <span>🎉</span>
+            <strong>Hoàn thành bài học!</strong>
+            <p>Bạn đã hoàn thành cả 4 kỹ năng.</p>
+          </div>
+        </div>
+      )}
       {!immersive && (
         <Sidebar active={active} setActive={setActive} setView={setView} setLesson={setLesson} goHome={goHome} onSignOut={onSignOut} isAdmin={profile?.role === "admin"} />
       )}
@@ -6914,7 +6968,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             mode={reviewMode}
             onRetry={() => setView("review-quiz")}
             onChangeSet={reviewMode === "random" ? () => { setReviewSeed(null); setView("review-quiz"); } : undefined}
-            onHome={goHome}
+            onHome={() => handleActivityFinish("ontap")}
           />
         )}
         {view.startsWith("soon-") && (
@@ -6991,7 +7045,8 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             userId={profile.id}
             vocabulary={catalogVocabulary}
             onBack={() => setView("vocab-list")}
-            onFinish={() => setView("vocab-test-select")}
+            finishLabel="Hoàn thành"
+            onFinish={() => handleActivityFinish("tuvung")}
           />
         )}
         {view === "vocab-test-select" && lesson && (
@@ -7023,7 +7078,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
           />
         )}
         {view === "shadowing" && lesson && (
-          <ShadowingView lesson={lesson} onBack={() => setView("shadowing-select")} />
+          <ShadowingView lesson={lesson} onBack={() => setView("shadowing-select")} onFinish={() => handleActivityFinish("shadowing")} />
         )}
         {view === "dictation-select" && (
           <ActivityLessonSelectView
@@ -7041,6 +7096,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
           <DictationView
             lesson={lesson}
             onBack={() => setView("dictation-select")}
+            onFinish={() => handleActivityFinish("nghechep")}
             onGoVocab={() => setView("flashcards")}
           />
         )}
@@ -7195,6 +7251,11 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .confetti-wrap{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:2}
 .confetti-piece{position:absolute;top:-10px;width:7px;height:11px;opacity:.9;animation:confetti-fall 1.1s ease-in forwards;border-radius:2px}
 @keyframes confetti-fall{to{transform:translateY(150px) rotate(340deg);opacity:0}}
+.lesson-celebration{position:fixed;inset:0;z-index:150;display:grid;place-items:center;pointer-events:none;background:rgba(53,44,102,.12);backdrop-filter:blur(2px)}
+.lesson-celebration .confetti-wrap{position:fixed}.lesson-celebration .confetti-piece{width:10px;height:16px;animation-duration:2.15s}
+.lesson-celebration-card{position:relative;z-index:3;min-width:300px;padding:26px 32px;text-align:center;border:1px solid #E5E0FA;border-radius:24px;background:#fff;box-shadow:0 22px 60px rgba(69,54,145,.22);animation:lesson-celebration-in .35s cubic-bezier(.2,.9,.3,1.2)}
+.lesson-celebration-card>span{display:block;font-size:42px;margin-bottom:5px}.lesson-celebration-card strong{display:block;font:700 25px 'Baloo 2','Quicksand',sans-serif;color:#282044}.lesson-celebration-card p{margin-top:2px;color:#8177A7;font-size:14px}
+@keyframes lesson-celebration-in{from{opacity:0;transform:translateY(14px) scale(.9)}to{opacity:1;transform:none}}
 
 /* ---- Menu truy cập nhanh ---- */
 .qa-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;width:100%}
