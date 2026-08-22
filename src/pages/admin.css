@@ -126,12 +126,12 @@
 .admin-course-card>button{font:600 12.5px 'Quicksand',sans-serif!important}
 
 @media (max-width: 860px) {
-  .admin-sidebar { inset: auto 8px 8px; width:calc(100% - 16px);max-width:calc(100vw - 16px);height:68px;padding:7px;gap:4px;overflow:hidden;border:1px solid #e4def4;border-radius:20px;flex-direction:row;align-items:center;box-shadow:0 10px 30px rgba(68,52,121,.2); }
+  .admin-sidebar { inset: auto 8px 8px; width:calc(100% - 16px);max-width:calc(100vw - 16px);height:68px;padding:7px;gap:3px;overflow:hidden;border:1px solid #e4def4;border-radius:20px;flex-direction:row;align-items:stretch;box-shadow:0 10px 30px rgba(68,52,121,.2); }
   .admin-brand, .admin-account { display: none; }
-  .admin-menu { flex:1;min-width:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px; }
-  .admin-menu button { display:flex;min-width:0;min-height:52px;gap:0;justify-content:center;padding:5px 2px;text-align:center;font-size:0;line-height:1;overflow:hidden; }.admin-menu button > span{display:none}.admin-menu button b { display: none; }.admin-menu button:hover { transform: none; }
+  .admin-menu { display:contents; }
+  .admin-menu button { display:flex;flex:1 1 0;width:auto;min-width:0;min-height:52px;gap:0;justify-content:center;padding:5px 2px;text-align:center;font-size:0;line-height:1;overflow:hidden; }.admin-menu button > span{display:none}.admin-menu button b { display: none; }.admin-menu button:hover { transform: none; }
   .admin-menu button > svg { width:25px;height:25px;padding:1px;background:transparent; }.admin-menu button.active > svg { background:transparent; }
-  .admin-signout { width:38px;min-width:38px;min-height:52px;overflow:hidden;padding:0; }.admin-signout span { display:none; }
+  .admin-signout { flex:1 1 0;width:auto;min-width:0;min-height:52px;overflow:hidden;padding:0; }.admin-signout span { display:none; }
   .admin-page { margin-left: 0; padding: 12px 12px 94px; }
   .admin-header { align-items: flex-start; padding: 20px; border-radius: 21px; }
   .admin-header p { display: none; }

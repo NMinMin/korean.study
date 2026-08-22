@@ -6,12 +6,13 @@ import {
   BookMarked, MessageCircle, Hexagon, Volume2, Square, RotateCcw,
   CheckCircle2, XCircle, AlertTriangle, Link2, Image as ImageIcon,
   Lock, Eraser, Scissors, Smile, Target, Trash2, Copy, Bell, Edit2,
-  LogOut, Flag, Bot,
+  LogOut, Flag, Bot, Coffee,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { loadRemoteDailyGoal, loadRemoteStudyPlan, saveRemoteDailyGoal, saveRemoteStudyPlan } from "./lib/studySettings";
-import { loadRemoteVocabularyState, saveRemoteVocabularyState } from "./lib/vocabularyProgress";
+import { loadRemoteVocabularyState, loadRemoteVocabularyStateForWords, saveRemoteVocabularyState, saveRemoteVocabularyStateForWords } from "./lib/vocabularyProgress";
 import { addUserTextbook, loadLearningCatalog, markLessonStarted, syncLessonProgress } from "./lib/learningContent";
+import { loadVocabularyReviewSchedule } from "./lib/reviewSchedule";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:3001").replace(/\/$/, "");
 
@@ -1206,40 +1207,27 @@ function PersonalProgressSection({ profile }) {
   );
 }
 
-function ReviewSchedule({ lesson, userId, onReview, vocabulary = VOCAB_SAMPLE }) {
+function ReviewSchedule({ userId, onReview }) {
   const [schedule, setSchedule] = useState([]);
   const [selected, setSelected] = useState(0);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      let progress = {};
-      try {
-        const result = await window.storage.get(vocabProgressKey(lesson, userId));
-        if (result?.value) progress = JSON.parse(result.value);
-      } catch (error) {}
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
-      const days = Array.from({ length: 14 }, (_, index) => {
-        const date = new Date(start);
-        date.setDate(start.getDate() + index);
-        const next = new Date(date); next.setDate(date.getDate() + 1);
-        const words = vocabulary.filter((word) => {
-          const dueAt = progress[word.word]?.dueAt;
-          if (!dueAt) return false;
-          const due = new Date(dueAt);
-          return index === 0 ? due < next : due >= date && due < next;
-        });
+      const result = await loadVocabularyReviewSchedule(userId, 14);
+      const days = result.map((item, index) => {
+        const [year, month, day] = item.dateKey.split("-").map(Number);
+        const date = new Date(year, month - 1, day);
         return {
           date,
-          words,
+          words: item.words,
           label: index === 0 ? "Hôm nay" : index === 1 ? "Ngày mai" : date.toLocaleDateString("vi-VN", { weekday: "short" }),
         };
       });
       if (alive) setSchedule(days);
     })();
     return () => { alive = false; };
-  }, [lesson, userId, vocabulary]);
+  }, [userId]);
 
   const picked = schedule[selected];
   return (
@@ -1250,25 +1238,24 @@ function ReviewSchedule({ lesson, userId, onReview, vocabulary = VOCAB_SAMPLE })
       </div>
       <div className="days">
         {schedule.map((d, index) => (
-          <div key={d.date.toISOString()} className={`day ${index === 0 ? "today" : ""} ${selected === index ? "selected" : ""}`} role="button" tabIndex={0} onClick={() => setSelected(index)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelected(index); } }}>
+          <div key={d.date.toISOString()} className={`day ${index === 0 ? "today" : ""} ${selected === index ? "selected" : ""} ${d.words.length ? "has-review" : "rest-day"}`} role="button" tabIndex={0} onClick={() => setSelected(index)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelected(index); } }}>
             <span className="day-name">{d.label}</span>
             <span className="day-date">{d.date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })}</span>
-            <span className="day-words">{d.words.length} từ</span>
-            {index === 0 ? (
+            <span className="day-words">{d.words.length ? `${d.words.length} từ` : "Nghỉ ngơi"}</span>
+            {index === 0 && d.words.length ? (
               <button
-                className={`on-ngay ${d.words.length ? "" : "disabled"}`}
-                disabled={!d.words.length}
+                className="on-ngay"
                 onClick={(event) => { event.stopPropagation(); if (d.words.length) onReview(d.words, d.label); }}
               >
-                {d.words.length ? "Ôn ngay" : "Đã xong"}
+                Ôn ngay
               </button>
-            ) : <span className="day-ico"><BookMarked size={16} /></span>}
+            ) : <span className={`day-ico ${d.words.length ? "" : "rest"}`}>{d.words.length ? <BookMarked size={16} /> : <Coffee size={16} />}</span>}
           </div>
         ))}
       </div>
       {picked && (
         <div className="review-selected-day">
-          <div><b>{picked.label} · {picked.date.toLocaleDateString("vi-VN")}</b><span>{picked.words.length ? `${picked.words.length} từ đang chờ bạn ôn lại` : "Không có từ nào đến hạn trong ngày này"}</span></div>
+          <div><b>{picked.label} · {picked.date.toLocaleDateString("vi-VN")}</b><span>{picked.words.length ? `${picked.words.length} từ đang chờ bạn ôn lại` : "Ngày nghỉ — không có từ nào cần ôn"}</span></div>
           {selected === 0 && picked.words.length > 0 && <span className="review-current-note">Bấm “Ôn ngay” ở ô Hôm nay để bắt đầu</span>}
         </div>
       )}
@@ -4335,6 +4322,7 @@ function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords
   const [grammarIdx, setGrammarIdx] = useState(0);
   const [grammarFlipped, setGrammarFlipped] = useState(false);
   const deck = deckWords && deckWords.length ? deckWords : vocabulary;
+  const isIdentifiedDeck = Boolean(deckWords?.length && deckWords.every((word) => word.id && word.lessonId && word.textbookId));
   // Hàng đợi phiên học: mảng chỉ số vào `deck`. "Chưa thuộc" đẩy từ đó xuống
   // cuối hàng đợi để lặp lại trong CÙNG phiên, cho đến khi được "Đã thuộc".
   const [queue, setQueue] = useState(() => deck.map((_, i) => i));
@@ -4374,11 +4362,15 @@ function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords
           }
         }
         const localSaved = res?.value ? JSON.parse(res.value) : {};
-        const remoteSaved = await loadRemoteVocabularyState(lesson.no, userId);
+        const remoteSaved = isIdentifiedDeck
+          ? await loadRemoteVocabularyStateForWords(deckWords, userId)
+          : await loadRemoteVocabularyState(lesson.no, userId);
         const saved = remoteSaved ? mergeVocabStates(localSaved, remoteSaved) : localSaved;
         if (remoteSaved) {
           await window.storage.set(storageKey, JSON.stringify(saved));
-          if (Object.keys(localSaved).length) void saveRemoteVocabularyState(lesson.no, userId, saved);
+          if (Object.keys(localSaved).length) void (isIdentifiedDeck
+            ? saveRemoteVocabularyStateForWords(deckWords, userId, saved)
+            : saveRemoteVocabularyState(lesson.no, userId, saved));
         }
         if (alive && Object.keys(saved).length) {
           const remaining = deck
@@ -4397,7 +4389,7 @@ function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords
       }
     })();
     return () => { alive = false; };
-  }, [storageKey, userId, includeMastered]);
+  }, [storageKey, userId, includeMastered, isIdentifiedDeck]);
 
   // Mỗi khi chuyển thẻ (kể cả khi cùng 1 từ bị đẩy lại ngay do "Chưa thuộc"
   // và hàng đợi chỉ còn 1 từ): quay về mặt trước + nạp ghi chú đã lưu.
@@ -4412,7 +4404,8 @@ function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords
     setProgress(updated);
     try {
       await window.storage.set(storageKey, JSON.stringify(updated));
-      await saveRemoteVocabularyState(lesson.no, userId, updated);
+      if (isIdentifiedDeck) await saveRemoteVocabularyStateForWords(deckWords, userId, updated);
+      else await saveRemoteVocabularyState(lesson.no, userId, updated);
     } catch (e) {
       /* lưu thất bại — tiến trình vẫn hiển thị tạm trong phiên này */
     }
@@ -6793,9 +6786,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             <PersonalProgressSection profile={profile} />
             <div className="mid-row">
               <ReviewSchedule
-                lesson={primaryLesson}
                 userId={profile.id}
-                vocabulary={catalogVocabulary}
                 onReview={(words) => { setLesson(primaryLesson); setReviewDeck(words); setView("flashcards-schedule"); }}
               />
               <MyTextbooks
@@ -7255,6 +7246,10 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .day.today .day-name{color:#7C6FE4}
 .day.selected{border-color:#7C6FE4;box-shadow:0 0 0 3px rgba(124,111,228,.11)}
 .day.selected .day-ico{color:#7C6FE4;opacity:1}
+.day.rest-day{background:#FAFAFD;border-style:dashed}
+.day.rest-day .day-words{color:#AAA4BC;font-size:12.5px;font-weight:600}
+.day-ico.rest{color:#B2ACC4;opacity:.85}
+.day.has-review .day-words{color:#6C5FD6}
 .review-cycle{font-size:11.5px;font-weight:700;color:#9A94B5;background:#F6F4FC;border-radius:99px;padding:6px 10px}
 .review-selected-day{margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 14px;background:#F7F5FE;border:1px solid #E7E1F7;border-radius:14px}
 .review-selected-day>div{display:flex;flex-direction:column;gap:2px;min-width:0}.review-selected-day b{font-size:12.5px;color:#373151}.review-selected-day span{font-size:11.5px;font-weight:600;color:#8B85AB}
@@ -9358,10 +9353,10 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
     font-size:0;text-align:center;
   }
   .sidebar .home-pill svg{width:22px;height:22px}
-  .sidebar .nav-grid{display:flex;gap:2px;flex:5;min-width:0}
+  .sidebar .nav-grid{display:contents}
   .sidebar .nav-tile{
-    flex:1;min-width:0;height:52px;padding:3px 1px;gap:0;border:0;border-radius:11px;
-    justify-content:center;background:transparent;
+    flex:1 1 0;min-width:0;width:auto;height:52px;padding:3px 1px;gap:0;border:0;border-radius:11px;
+    justify-content:center;background:#F7F6FC;
   }
   .sidebar .home-pill.active,.sidebar .nav-tile.active{
     background:#7C6FE4;color:#fff;border-color:#7C6FE4;
@@ -9370,11 +9365,11 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   .sidebar .nav-tile.active .nav-tile-ico{background:rgba(255,255,255,.18)!important}
   .sidebar .nav-tile.active .nav-tile-ico svg{color:#fff!important;stroke:#fff!important}
   .sidebar .nav-tile.active .nav-tile-label{color:#fff}
-  .sidebar .nav-tile-ico{width:35px;height:35px;border-radius:10px}
+  .sidebar .nav-tile-ico{width:35px;height:35px;border-radius:10px;background:transparent!important}
   .sidebar .nav-tile-ico svg{width:21px;height:21px}
   .sidebar .nav-tile-label,.sidebar .nav-label-desktop,.sidebar .nav-label-mobile{display:none}
   .sidebar .sidebar-signout{
-    display:flex;width:38px;min-width:38px;height:52px;margin:0;padding:0;border:0;border-radius:11px;
+    display:flex;flex:1 1 0;width:auto;min-width:0;height:52px;margin:0;padding:0;border:0;border-radius:11px;
     align-items:center;justify-content:center;background:#FFF2F4;color:#B94B5B;
   }
   .sidebar .sidebar-signout span{display:none}.sidebar .sidebar-signout svg{width:20px;height:20px}
