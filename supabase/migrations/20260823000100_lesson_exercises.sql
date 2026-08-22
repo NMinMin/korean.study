@@ -1,5 +1,6 @@
 create table if not exists public.lesson_exercises (
   id uuid primary key default gen_random_uuid(),
+  source_key text,
   lesson_id uuid not null references public.lessons(id) on delete cascade,
   skill_type text not null check (skill_type in ('vocabulary_grammar','dictation','shadowing','review')),
   exercise_type text not null default 'question',
@@ -27,3 +28,5 @@ create policy "admins manage lesson exercises" on public.lesson_exercises
 create index if not exists lesson_exercises_lesson_skill_idx
   on public.lesson_exercises(lesson_id, skill_type, sort_order);
 
+create unique index if not exists lesson_exercises_source_key_uidx
+  on public.lesson_exercises(source_key);
