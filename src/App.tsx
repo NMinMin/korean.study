@@ -4,6 +4,7 @@ import LegacyDashboard from './App.jsx'
 import { AuthProvider, useAuth, type AppProfile } from './contexts/AuthContext'
 import AuthPage from './pages/AuthPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
+import AdminPage from './pages/AdminPage'
 
 const Dashboard = LegacyDashboard as ComponentType<{
   authenticatedProfile: AppProfile
@@ -20,6 +21,7 @@ function AppRoutes() {
       displayName: auth.profile.displayName,
       email: auth.profile.email,
       avatarUrl: auth.profile.avatarUrl,
+      role: auth.profile.role,
       joinedAt: Date.now(),
     }))
   }, [auth.profile])
@@ -27,10 +29,19 @@ function AppRoutes() {
   if (auth.loading) return <div className="app-loading" role="status">Đang tải Korean Study…</div>
 
   return <Routes>
-    <Route path="/auth" element={auth.profile ? <Navigate to="/" replace /> : <AuthPage />} />
-    <Route path="/auth/callback" element={<Navigate to="/" replace />} />
+    <Route path="/auth" element={auth.profile ? <Navigate to={auth.profile.role === 'admin' ? '/admin' : '/'} replace /> : <AuthPage />} />
+    <Route path="/auth/callback" element={<Navigate to={auth.profile?.role === 'admin' ? '/admin' : '/'} replace />} />
     <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
-    <Route path="/*" element={auth.profile ? <Dashboard authenticatedProfile={auth.profile} onSignOut={auth.signOut} /> : <Navigate to="/auth" replace />} />
+    <Route path="/admin" element={!auth.profile
+      ? <Navigate to="/auth" replace />
+      : auth.profile.role === 'admin'
+        ? <AdminPage />
+        : <Navigate to="/" replace />} />
+    <Route path="/*" element={!auth.profile
+      ? <Navigate to="/auth" replace />
+      : auth.profile.role === 'admin'
+        ? <Navigate to="/admin" replace />
+        : <Dashboard authenticatedProfile={auth.profile} onSignOut={auth.signOut} />} />
   </Routes>
 }
 

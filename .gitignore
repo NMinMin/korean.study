@@ -31,3 +31,4 @@ backend/.env.*
 *service-account*.json
 backend/dist
 ~$*.docx
+TODO_YEU_CAU_APP_KOREAN_STUDY.md

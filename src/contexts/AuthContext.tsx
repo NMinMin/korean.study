@@ -7,6 +7,7 @@ export type AppProfile = {
   displayName: string
   email: string | null
   avatarUrl: string | null
+  role: 'user' | 'admin'
 }
 
 type SignUpInput = { displayName: string; email: string; password: string }
@@ -31,6 +32,7 @@ function profileFromUser(user: User): AppProfile {
     displayName: String(user.user_metadata?.display_name || user.email?.split('@')[0] || 'Người học'),
     email: user.email ?? null,
     avatarUrl: typeof user.user_metadata?.avatar_url === 'string' ? user.user_metadata.avatar_url : null,
+    role: 'user',
   }
 }
 
@@ -46,16 +48,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
     const fallback = profileFromUser(nextSession.user)
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, display_name, avatar_url')
-      .eq('id', nextSession.user.id)
-      .maybeSingle()
+    const [{ data }, { data: roleData }] = await Promise.all([
+      supabase.from('profiles').select('id, display_name, avatar_url').eq('id', nextSession.user.id).maybeSingle(),
+      supabase.from('user_roles').select('role').eq('user_id', nextSession.user.id).maybeSingle(),
+    ])
     setProfile(data ? {
       id: data.id,
       displayName: data.display_name,
       avatarUrl: data.avatar_url,
       email: nextSession.user.email ?? null,
+      role: roleData?.role === 'admin' ? 'admin' : 'user',
     } : fallback)
   }, [])
 

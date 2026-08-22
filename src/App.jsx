@@ -6,7 +6,60 @@ import {
   BookMarked, MessageCircle, Hexagon, Volume2, Square, RotateCcw,
   CheckCircle2, XCircle, AlertTriangle, Link2, Image as ImageIcon,
   Lock, Eraser, Scissors, Smile, Target, Trash2, Copy, Bell, Edit2,
+  LogOut, Flag, Bot,
 } from "lucide-react";
+import { supabase } from "./lib/supabase";
+import { loadRemoteDailyGoal, loadRemoteStudyPlan, saveRemoteDailyGoal, saveRemoteStudyPlan } from "./lib/studySettings";
+import { loadRemoteVocabularyState, saveRemoteVocabularyState } from "./lib/vocabularyProgress";
+import { addUserTextbook, loadLearningCatalog, markLessonStarted } from "./lib/learningContent";
+
+const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:3001").replace(/\/$/, "");
+
+async function uploadCloudinaryAsset(file, kind = "lesson") {
+  if (!supabase) throw new Error("Supabase chưa được cấu hình nên không thể xác thực tải tệp.");
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error("Bạn cần đăng nhập lại trước khi tải tệp.");
+
+  // Dùng SHA-256 làm dấu vân tay. Nếu người dùng đã tải đúng tệp này trước đó,
+  // tái sử dụng asset Cloudinary cũ thay vì tạo thêm một bản sao.
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  const fingerprint = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const cacheKey = `kstudy:cloudinary-assets:${session.user.id}`;
+  let assetCache = {};
+  try { assetCache = JSON.parse(localStorage.getItem(cacheKey) || "{}"); } catch (error) { assetCache = {}; }
+  if (assetCache[fingerprint]?.url) return assetCache[fingerprint];
+
+  const signatureResponse = await fetch(`${API_URL}/v1/uploads/cloudinary/signature`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ kind }),
+  });
+  const signed = await signatureResponse.json().catch(() => ({}));
+  if (!signatureResponse.ok) throw new Error(signed.message || "Không thể chuẩn bị tải tệp lên Cloudinary.");
+  if (file.size > signed.maxBytes) throw new Error("Tệp vượt quá giới hạn 20 MB.");
+
+  const body = new FormData();
+  body.append("file", file);
+  body.append("api_key", signed.apiKey);
+  body.append("timestamp", String(signed.timestamp));
+  body.append("folder", signed.folder);
+  body.append("signature", signed.signature);
+  const uploadResponse = await fetch(`https://api.cloudinary.com/v1_1/${signed.cloudName}/auto/upload`, { method: "POST", body });
+  const uploaded = await uploadResponse.json().catch(() => ({}));
+  if (!uploadResponse.ok) throw new Error(uploaded.error?.message || "Cloudinary không nhận được tệp.");
+  const asset = {
+    url: uploaded.secure_url,
+    publicId: uploaded.public_id,
+    resourceType: uploaded.resource_type,
+    format: uploaded.format,
+    bytes: uploaded.bytes,
+    name: file.name,
+  };
+  try {
+    localStorage.setItem(cacheKey, JSON.stringify({ ...assetCache, [fingerprint]: asset }));
+  } catch (error) { /* Trình duyệt có thể chặn localStorage; upload vẫn thành công. */ }
+  return asset;
+}
 
 /* ================================================================== */
 /*  STORAGE SHIM — cho phép app chạy NGOÀI artifact (Vercel, v.v.)     */
@@ -60,16 +113,6 @@ if (typeof window !== "undefined" && !window.storage) {
 /*  MOCK DATA                                                          */
 /* ------------------------------------------------------------------ */
 const USER = { name: "Mai Anh", level: 12, xp: 1250, xpMax: 2000, streak: 12, todayLessons: 3, gems: 1250 };
-
-const REVIEW_DAYS = [
-  { day: "Hôm nay", date: "17/05", words: 20, today: true },
-  { day: "Thứ 7", date: "18/05", words: 15 },
-  { day: "Chủ nhật", date: "19/05", words: 25 },
-  { day: "Thứ 2", date: "20/05", words: 20 },
-  { day: "Thứ 3", date: "21/05", words: 30 },
-  { day: "Thứ 4", date: "22/05", words: 15 },
-  { day: "Thứ 5", date: "23/05", words: 20 },
-];
 
 const TEXTBOOKS = [
   { id: "2-1", name: "회화 익힘책 2-1", pct: 15, color: "#7C6FE4", tag: "2-1", studying: true },
@@ -825,12 +868,64 @@ function BunnyMascot() {
   );
 }
 
-/* Little plant (continue-learning card) */
-function Plant() {
+/* Cây tiến độ: phát triển cùng phần trăm hoàn thành giáo trình. */
+function Plant({ progress = 0 }) {
+  const pct = Math.max(0, Math.min(100, Math.round(progress)));
+  const stage = pct === 100 ? 5 : pct >= 75 ? 4 : pct >= 50 ? 3 : pct >= 25 ? 2 : pct > 0 ? 1 : 0;
+  const stageLabel = ["Hạt giống", "Nảy mầm", "Cây non", "Đang phát triển", "Cây sum suê", "Cây Mugunghwa nở hoa"][stage];
+
   return (
-    <svg viewBox="0 0 90 110" width="72" height="88" aria-hidden="true">
-      <path d="M45 68 C45 40 30 34 22 22 C40 26 44 40 45 52 C46 36 52 24 68 16 C60 34 50 42 46 62 Z" fill="#4E9E5F" />
-      <path d="M45 70 C42 56 32 52 24 50 C34 62 40 66 44 74 Z" fill="#6BBB77" />
+    <svg key={stage} className={`progress-plant stage-${stage}`} viewBox="0 0 90 110" width="72" height="88" role="img" aria-label={`${stageLabel}, tiến độ ${pct}%`}>
+      <title>{stageLabel} — tiến độ giáo trình {pct}%</title>
+      <ellipse cx="45" cy="77" rx="16" ry="5" fill="#7B5136" />
+      {stage === 0 && <ellipse className="plant-seed" cx="45" cy="70" rx="5" ry="3.5" fill="#8C623F" />}
+      {stage >= 1 && <path className="plant-stem" d={`M45 73 C44 63 45 ${stage >= 4 ? 29 : stage === 3 ? 38 : stage === 2 ? 49 : 61} 46 ${stage >= 4 ? 22 : stage === 3 ? 34 : stage === 2 ? 46 : 58}`} fill="none" stroke={stage === 5 ? "#397A3F" : "#4E9E5F"} strokeWidth={stage === 5 ? 5 : 3.5} strokeLinecap="round" />}
+      {stage >= 1 && <path className="plant-leaf leaf-one" d="M45 62 C35 52 29 54 27 57 C33 65 39 67 45 66 Z" fill="#65B96F" />}
+      {stage >= 2 && <path className="plant-leaf leaf-two" d="M45 53 C53 42 62 42 66 46 C60 55 54 58 45 58 Z" fill="#4E9E5F" />}
+      {stage >= 3 && <path className="plant-leaf leaf-three" d="M45 44 C36 34 27 35 24 39 C30 48 37 51 45 50 Z" fill="#72C57B" />}
+      {stage >= 4 && <path className="plant-leaf leaf-four" d="M45 34 C54 23 65 24 69 29 C62 38 55 41 45 40 Z" fill="#3F9B54" />}
+      {stage === 4 && <path className="plant-leaf leaf-five" d="M45 29 C38 19 30 19 27 23 C31 31 37 35 45 35 Z" fill="#5AAF67" />}
+      {stage === 5 && (
+        <g className="mature-crown">
+          <circle cx="33" cy="31" r="15" fill="#57A95E" />
+          <circle cx="49" cy="22" r="17" fill="#438E4D" />
+          <circle cx="62" cy="34" r="15" fill="#62B66A" />
+          <circle cx="45" cy="41" r="17" fill="#50A45A" />
+          {/* Quốc hoa Hàn Quốc — hoa Mugunghwa năm cánh màu hồng, tâm đỏ. */}
+          <g className="mugunghwa-flower flower-one" transform="translate(33 25) scale(.72)">
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F7B8CD" />
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F8C3D5" transform="rotate(72)" />
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F6AFC8" transform="rotate(144)" />
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F8C3D5" transform="rotate(216)" />
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F7B8CD" transform="rotate(288)" />
+            <circle r="4" fill="#C94769" /><circle r="1.6" fill="#F7D36A" />
+          </g>
+          <g className="mugunghwa-flower flower-two" transform="translate(55 19) scale(.62)">
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F8C3D5" />
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F6AFC8" transform="rotate(72)" />
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F8C3D5" transform="rotate(144)" />
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F7B8CD" transform="rotate(216)" />
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F8C3D5" transform="rotate(288)" />
+            <circle r="4" fill="#C94769" /><circle r="1.6" fill="#F7D36A" />
+          </g>
+          <g className="mugunghwa-flower flower-three" transform="translate(61 38) scale(.68)">
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F7B8CD" />
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F8C3D5" transform="rotate(72)" />
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F6AFC8" transform="rotate(144)" />
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F8C3D5" transform="rotate(216)" />
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F7B8CD" transform="rotate(288)" />
+            <circle r="4" fill="#C94769" /><circle r="1.6" fill="#F7D36A" />
+          </g>
+          <g className="mugunghwa-flower flower-four" transform="translate(40 43) scale(.58)">
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F8C3D5" />
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F6AFC8" transform="rotate(72)" />
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F8C3D5" transform="rotate(144)" />
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F7B8CD" transform="rotate(216)" />
+            <ellipse cy="-7" ry="8" rx="5.5" fill="#F8C3D5" transform="rotate(288)" />
+            <circle r="4" fill="#C94769" /><circle r="1.6" fill="#F7D36A" />
+          </g>
+        </g>
+      )}
       <path d="M28 78 h34 l-4 26 a6 6 0 0 1-6 5 h-14 a6 6 0 0 1-6-5 Z" fill="#E8B98B" />
       <path d="M26 74 h38 v8 h-38 z" fill="#D9A876" rx="3" />
     </svg>
@@ -841,14 +936,14 @@ function Plant() {
 /*  SIDEBAR                                                            */
 /* ------------------------------------------------------------------ */
 const NAV_TILES = [
-  { id: "giaotrinh", label: "Giáo trình", icon: BookOpen, color: "#4A90E2", bg: "#EEF4FD" },
-  { id: "tuvunghub", label: "Từ vựng & bài học", icon: Type, color: "#3FA95C", bg: "#EBF7EE" },
-  { id: "nguphap", label: "Ngữ pháp", icon: NotebookPen, color: "#7C6FE4", bg: "#F0EEFC" },
-  { id: "xephanghub", label: "Xếp hạng", icon: Trophy, color: "#F0912E", bg: "#FDF3E7" },
-  { id: "caidat", label: "Cài đặt", icon: Settings, color: "#8B85AB", bg: "#F3F1FC" },
+  { id: "giaotrinh", label: "Giáo trình", mobileLabel: "Giáo trình", icon: BookOpen, color: "#4A90E2", bg: "#EEF4FD" },
+  { id: "tuvunghub", label: "Từ vựng & bài học", mobileLabel: "Từ vựng", icon: Type, color: "#3FA95C", bg: "#EBF7EE" },
+  { id: "nguphap", label: "Ngữ pháp", mobileLabel: "Ngữ pháp", icon: NotebookPen, color: "#7C6FE4", bg: "#F0EEFC" },
+  { id: "xephanghub", label: "Xếp hạng", mobileLabel: "Xếp hạng", icon: Trophy, color: "#F0912E", bg: "#FDF3E7" },
+  { id: "caidat", label: "Cài đặt", mobileLabel: "Cài đặt", icon: Settings, color: "#8B85AB", bg: "#F3F1FC" },
 ];
 
-function Sidebar({ active, setActive, setView, setLesson, goHome }) {
+function Sidebar({ active, setActive, setView, setLesson, goHome, onSignOut, isAdmin }) {
   const handleTileClick = (id) => {
     setActive(id);
     if (id === "giaotrinh") setView("curriculum-hub");
@@ -879,10 +974,17 @@ function Sidebar({ active, setActive, setView, setLesson, goHome }) {
               <span className="nav-tile-ico" style={{ background: isActive ? "rgba(255,255,255,.25)" : t.bg }}>
                 <Icon size={22} color={isActive ? "#fff" : t.color} />
               </span>
-              <span className="nav-tile-label">{t.label}</span>
+              <span className="nav-tile-label nav-label-desktop">{t.label}</span>
+              <span className="nav-tile-label nav-label-mobile">{t.mobileLabel}</span>
             </button>
           );
         })}
+        {isAdmin && (
+          <button className="nav-tile admin-nav-button" onClick={() => { window.location.href = "/admin"; }}>
+            <span className="nav-tile-ico"><Settings size={22} color="#8A5CF6" /></span>
+            <span className="nav-tile-label">Quản trị</span>
+          </button>
+        )}
       </div>
 
       <div className="mascot"><BunnyMascot /></div>
@@ -891,6 +993,10 @@ function Sidebar({ active, setActive, setView, setLesson, goHome }) {
         <Gem size={17} color="#7C6FE4" fill="#B9AFF0" />
         <span>{USER.gems.toLocaleString("vi-VN")}</span>
         <ChevronRight size={16} className="gem-chev" />
+      </button>
+      <button className="sidebar-signout" onClick={onSignOut} aria-label="Đăng xuất khỏi tài khoản">
+        <LogOut size={17} />
+        <span>Đăng xuất</span>
       </button>
     </aside>
   );
@@ -1100,25 +1206,72 @@ function PersonalProgressSection({ profile }) {
   );
 }
 
-function ReviewSchedule() {
+function ReviewSchedule({ lesson, userId, onReview, vocabulary = VOCAB_SAMPLE }) {
+  const [schedule, setSchedule] = useState([]);
+  const [selected, setSelected] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      let progress = {};
+      try {
+        const result = await window.storage.get(vocabProgressKey(lesson, userId));
+        if (result?.value) progress = JSON.parse(result.value);
+      } catch (error) {}
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const days = Array.from({ length: 14 }, (_, index) => {
+        const date = new Date(start);
+        date.setDate(start.getDate() + index);
+        const next = new Date(date); next.setDate(date.getDate() + 1);
+        const words = vocabulary.filter((word) => {
+          const dueAt = progress[word.word]?.dueAt;
+          if (!dueAt) return false;
+          const due = new Date(dueAt);
+          return index === 0 ? due < next : due >= date && due < next;
+        });
+        return {
+          date,
+          words,
+          label: index === 0 ? "Hôm nay" : index === 1 ? "Ngày mai" : date.toLocaleDateString("vi-VN", { weekday: "short" }),
+        };
+      });
+      if (alive) setSchedule(days);
+    })();
+    return () => { alive = false; };
+  }, [lesson, userId, vocabulary]);
+
+  const picked = schedule[selected];
   return (
     <section className="card review">
       <div className="card-title-row">
         <div className="card-title"><CalendarDays size={19} color="#7C6FE4" /> Lịch ôn từ vựng</div>
-        <button className="link-btn">Xem lịch đầy đủ <ChevronRight size={15} /></button>
+        <span className="review-cycle">Chu kỳ 1–3–7 ngày</span>
       </div>
       <div className="days">
-        {REVIEW_DAYS.map((d) => (
-          <div key={d.date} className={`day ${d.today ? "today" : ""}`}>
-            <span className="day-name">{d.day}</span>
-            <span className="day-date">{d.date}</span>
-            <span className="day-words">{d.words} từ</span>
-            {d.today
-              ? <button className="on-ngay">Ôn ngay</button>
-              : <span className="day-ico"><BookMarked size={17} color="#9A8FE0" /></span>}
+        {schedule.map((d, index) => (
+          <div key={d.date.toISOString()} className={`day ${index === 0 ? "today" : ""} ${selected === index ? "selected" : ""}`} role="button" tabIndex={0} onClick={() => setSelected(index)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelected(index); } }}>
+            <span className="day-name">{d.label}</span>
+            <span className="day-date">{d.date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })}</span>
+            <span className="day-words">{d.words.length} từ</span>
+            {index === 0 ? (
+              <button
+                className={`on-ngay ${d.words.length ? "" : "disabled"}`}
+                disabled={!d.words.length}
+                onClick={(event) => { event.stopPropagation(); if (d.words.length) onReview(d.words, d.label); }}
+              >
+                {d.words.length ? "Ôn ngay" : "Đã xong"}
+              </button>
+            ) : <span className="day-ico"><BookMarked size={16} /></span>}
           </div>
         ))}
       </div>
+      {picked && (
+        <div className="review-selected-day">
+          <div><b>{picked.label} · {picked.date.toLocaleDateString("vi-VN")}</b><span>{picked.words.length ? `${picked.words.length} từ đang chờ bạn ôn lại` : "Không có từ nào đến hạn trong ngày này"}</span></div>
+          {selected === 0 && picked.words.length > 0 && <span className="review-current-note">Bấm “Ôn ngay” ở ô Hôm nay để bắt đầu</span>}
+        </div>
+      )}
       <div className="tip">
         <Lightbulb size={17} color="#E8A93D" fill="#F7D98B" />
         <b>Mẹo học tập</b>
@@ -1129,33 +1282,35 @@ function ReviewSchedule() {
   );
 }
 
-function ContinueLearning({ onGo }) {
-  const [progress, setProgress] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    computeHomeProgress().then((p) => { if (alive) setProgress(p); });
-    return () => { alive = false; };
-  }, []);
-  // % tiến độ giáo trình hiện tại = trung bình 4 mảng đã tính thật (không số ảo)
-  const overallPct = progress ? Math.round(progress.reduce((s, p) => s + p.pct, 0) / progress.length) : 0;
+function ContinueLearning({ onGo, textbook, lesson, hasStarted = false }) {
+  const overallPct = textbook?.progressPercent || 0;
+  if (!textbook || !lesson) {
+    return (
+      <section className="card continue continue-empty">
+        <div className="card-title">Bắt đầu học</div>
+        <div className="continue-empty-body"><BookOpen size={28} /><div><b>Chưa có giáo trình để học</b><span>Thêm một giáo trình vào danh sách của bạn để bắt đầu.</span></div></div>
+        <button className="primary-btn" onClick={onGo}><Plus size={16} /> Thêm giáo trình</button>
+      </section>
+    );
+  }
   return (
     <section className="card continue">
       <div className="card-title-row">
-        <div className="card-title">Tiếp tục học</div>
+        <div className="card-title">{hasStarted ? "Tiếp tục học" : "Bắt đầu học"}</div>
       </div>
       <div className="cont-body">
-        <div className="book-3d" style={{ "--bk": "#7C6FE4" }}>1과</div>
+        <div className="book-3d" style={{ "--bk": "#7C6FE4" }}>{lesson.no}과</div>
         <div className="cont-info">
-          <b>Bài 1</b>
-          <span className="cont-book">세종한국어 회화 익힘책 2-1</span>
+          <b>Bài {lesson.no}</b>
+          <span className="cont-book">{textbook.title}</span>
           <div className="cont-bar">
             <Bar pct={overallPct} color="#8B7BE8" h={8} />
             <em>{overallPct}%</em>
           </div>
         </div>
-        <div className="cont-plant"><Plant /></div>
+        <div className="cont-plant"><Plant progress={overallPct} /></div>
       </div>
-      <button className="primary-btn" onClick={onGo}><Play size={16} fill="#fff" /> Học ngay</button>
+      <button className="primary-btn" onClick={onGo}><Play size={16} fill="#fff" /> {hasStarted ? "Tiếp tục học" : "Bắt đầu học"}</button>
     </section>
   );
 }
@@ -1178,6 +1333,12 @@ function playCelebrationSound() {
   } catch (e) {}
 }
 
+const CELEBRATION_SOUND_KEY = "kstudy:celebration-sound-enabled";
+function isCelebrationSoundEnabled() {
+  try { return localStorage.getItem(CELEBRATION_SOUND_KEY) !== "false"; }
+  catch (e) { return true; }
+}
+
 function ConfettiBurst() {
   const pieces = useMemo(() => Array.from({ length: 18 }, (_, i) => ({
     id: i, left: Math.random() * 100, delay: Math.random() * 0.25,
@@ -1192,16 +1353,22 @@ function ConfettiBurst() {
   );
 }
 
-function DailyGoalRing() {
+function DailyGoalRing({ onChangeGoal }) {
   const [goal, setGoal] = useState(null);
-  const [editing, setEditing] = useState(false);
-  const [editVal, setEditVal] = useState(15);
   const [showConfetti, setShowConfetti] = useState(false);
   const celebratedRef = useRef(false);
 
   const refresh = () => getDailyGoal().then((g) => setGoal(g));
-  useEffect(() => { refresh(); const id = setInterval(refresh, 5000); return () => clearInterval(id); }, []);
-  useEffect(() => { if (goal) setEditVal(goal.targetMinutes); }, [goal?.targetMinutes]);
+  useEffect(() => {
+    const syncImmediately = (event) => event.detail ? setGoal(event.detail) : refresh();
+    refresh();
+    const id = setInterval(refresh, 5000);
+    window.addEventListener("kstudy:daily-goal-updated", syncImmediately);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("kstudy:daily-goal-updated", syncImmediately);
+    };
+  }, []);
 
   useEffect(() => {
     if (!goal) return;
@@ -1209,7 +1376,7 @@ function DailyGoalRing() {
     if (done && !celebratedRef.current) {
       celebratedRef.current = true;
       setShowConfetti(true);
-      playCelebrationSound();
+      if (isCelebrationSoundEnabled()) playCelebrationSound();
       setTimeout(() => setShowConfetti(false), 1300);
     }
     if (!done) celebratedRef.current = false;
@@ -1221,27 +1388,13 @@ function DailyGoalRing() {
   const dash = c * (pct / 100);
   const done = pct >= 100;
 
-  const saveTarget = async () => {
-    const v = Math.max(5, Math.min(180, parseInt(editVal, 10) || 15));
-    const ng = { ...goal, targetMinutes: v };
-    setGoal(ng); setEditing(false);
-    await saveDailyGoal(ng);
-  };
-
   return (
     <section className="card goal-card">
       <div className="card-title-row">
         <div className="card-title"><Target size={19} color="#7C6FE4" /> Mục tiêu trong ngày</div>
-        <button className="link-btn" onClick={() => setEditing((v) => !v)}><Edit2 size={13} /> Đổi mục tiêu</button>
+        <button className="link-btn" onClick={onChangeGoal}><Edit2 size={13} /> Đổi mục tiêu</button>
       </div>
-      {editing ? (
-        <div className="goal-edit-row">
-          <input type="number" min={5} max={180} value={editVal} onChange={(e) => setEditVal(e.target.value)} className="goal-edit-input" />
-          <span>phút / ngày</span>
-          <button className="cg-post-btn" onClick={saveTarget}>Lưu</button>
-        </div>
-      ) : (
-        <div className="goal-ring-row">
+      <div className="goal-ring-row">
           {showConfetti && <ConfettiBurst />}
           <svg viewBox="0 0 100 100" width="88" height="88">
             <circle cx="50" cy="50" r={r} fill="none" stroke="#EEEBF8" strokeWidth="9" />
@@ -1257,8 +1410,7 @@ function DailyGoalRing() {
               ? <span>🎉 Chúc mừng, bạn đã đạt mục tiêu học hôm nay!</span>
               : <span>Còn khoảng {Math.max(0, Math.round(goal.targetMinutes - goal.todayMinutes))} phút nữa là đạt mục tiêu hôm nay!</span>}
           </div>
-        </div>
-      )}
+      </div>
     </section>
   );
 }
@@ -1271,7 +1423,7 @@ function QuickAccessMenu({ onDictation, onShadowing, onReview }) {
     { label: "Ôn tập", icon: BookMarked, color: "#F0912E", bg: "#FDF3E7", onClick: onReview },
   ];
   return (
-    <section className="card">
+    <section className="card quick-access-card">
       <div className="card-title"><Sparkles size={19} color="#7C6FE4" /> Truy cập nhanh</div>
       <div className="qa-grid">
         {items.map((it) => (
@@ -1316,6 +1468,36 @@ function RankPreviewCard({ profile, onOpen }) {
   );
 }
 
+function RecentActivityCard({ profile }) {
+  const [summary, setSummary] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all([computeHomeProgress(), computeAndSyncUserStats(profile)]).then(([progress, stats]) => {
+      if (!alive) return;
+      const best = [...progress].sort((a, b) => b.pct - a.pct)[0];
+      setSummary({ best, streak: stats?.streak ?? 0 });
+    });
+    return () => { alive = false; };
+  }, [profile]);
+
+  return (
+    <section className="recent-card">
+      <div className="card-title"><TrendingUp size={18} color="#7C6FE4" /> Hoạt động gần đây</div>
+      <div className="recent-list">
+        <div className="recent-item purple">
+          <span className="recent-dot" />
+          <div><span>Tiến độ tốt nhất</span><b>{summary?.best?.label || "Chưa có hoạt động"}{summary?.best ? ` · ${summary.best.pct}%` : ""}</b></div>
+        </div>
+        <div className="recent-item green">
+          <span className="recent-dot" />
+          <div><span>Chuyên cần</span><b>Đạt chuỗi {summary?.streak ?? 0} ngày streak</b></div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ---- Bảng xếp hạng thật — XP suy ra từ tiến độ, dùng chung mọi người ---- */
 /* ------------------------------------------------------------------ */
 /*  XẾP HẠNG & CỘNG ĐỒNG — gộp chung 1 điểm truy cập, chuyển bằng tab   */
@@ -1323,7 +1505,7 @@ function RankPreviewCard({ profile, onOpen }) {
 function RankingCommunityView({ profile, onBack, onStudyCustomLesson, initialTab }) {
   const [tab, setTab] = useState(initialTab || "xephang"); // "xephang" | "congdong"
   return (
-    <section className="cg-page">
+    <section className={`cg-page ${tab === "xephang" ? "wide-page ranking-page" : "wide-page community-wide-page"}`}>
       <div className="fc2-topbar">
         <div className="fc2-top-left">
           <button className="fc2-back" onClick={onBack} aria-label="Về trang chủ"><ChevronLeft size={20} /></button>
@@ -1352,7 +1534,7 @@ function LeaderboardView({ profile, onBack, hideHeader }) {
   }, [profile]);
 
   return (
-    <section className="cg-page">
+    <section className="cg-page wide-page leaderboard-page">
       {!hideHeader && (
         <div className="fc2-topbar">
           <div className="fc2-top-left">
@@ -1387,36 +1569,42 @@ function LeaderboardView({ profile, onBack, hideHeader }) {
   );
 }
 
-function MyTextbooks({ onOpenBook }) {
+function MyTextbooks({ onOpenBook, onAddBook, books = [] }) {
   return (
     <section className="card">
       <div className="card-title-row">
         <div className="card-title"><BookOpen size={19} color="#7C6FE4" /> Giáo trình của tôi</div>
-        <button className="link-btn" onClick={onOpenBook}>Xem tất cả <ChevronRight size={15} /></button>
+        <button className="link-btn" onClick={onAddBook}>Quản lý <ChevronRight size={15} /></button>
       </div>
       <div className="books-grid">
-        {TEXTBOOKS.map((b) => (
+        {!books.length && (
+          <div className="my-books-empty">
+            <BookOpen size={22} />
+            <span>Bạn chưa thêm giáo trình nào.</span>
+          </div>
+        )}
+        {books.slice(0, 3).map((b, index) => (
           <div
             key={b.id}
-            className={`book-card ${b.studying ? "clickable" : ""}`}
-            onClick={b.studying ? onOpenBook : undefined}
-            role={b.studying ? "button" : undefined}
-            tabIndex={b.studying ? 0 : undefined}
+            className={`book-card ${b.hasContent ? "clickable" : ""}`}
+            onClick={b.hasContent ? () => onOpenBook(b) : undefined}
+            role={b.hasContent ? "button" : undefined}
+            tabIndex={b.hasContent ? 0 : undefined}
           >
-            <div className="book-3d small" style={{ "--bk": b.color }}>
-              세종<br />회화 {b.tag}
+            <div className="book-3d small" style={{ "--bk": b.color || ["#7C6FE4", "#E5566B", "#4A90E2"][index] }}>
+              세종<br />회화 {b.tag || b.slug?.split("-").slice(-2).join("-")}
             </div>
             <div className="book-meta">
-              <b>{b.name}</b>
-              {b.studying && <span className="studying">Đang học</span>}
+              <b>{b.name || b.title}</b>
+              <span className="studying">{b.userStatus === "completed" ? "Đã hoàn thành" : b.userStatus === "paused" ? "Tạm dừng" : "Đang học"}</span>
               <div className="book-bar">
-                <Bar pct={b.pct} color={b.color} h={7} />
-                <em>{b.pct}%</em>
+                <Bar pct={b.pct || 0} color={b.color || "#7C6FE4"} h={7} />
+                <em>{b.pct || 0}%</em>
               </div>
             </div>
           </div>
         ))}
-        <button className="add-book" title="Tính năng thêm giáo trình mới sẽ sớm ra mắt!">
+        <button className="add-book" onClick={onAddBook}>
           <span className="add-circle"><Plus size={16} /></span>
           Thêm giáo trình
         </button>
@@ -1443,12 +1631,13 @@ const WEEK_DAYS = [
   { key: "thu", label: "T5" }, { key: "fri", label: "T6" }, { key: "sat", label: "T7" }, { key: "sun", label: "CN" },
 ];
 
-function SettingsView({ onBack, onSignOut }) {
+function SettingsView({ onBack }) {
   const [goal, setGoal] = useState(null);
   const [plan, setPlan] = useState(null);
   const [overallPct, setOverallPct] = useState(0);
   const [saved, setSaved] = useState(false);
   const [notifPermNote, setNotifPermNote] = useState("");
+  const [celebrationSound, setCelebrationSound] = useState(isCelebrationSoundEnabled);
 
   useEffect(() => {
     let alive = true;
@@ -1474,7 +1663,7 @@ function SettingsView({ onBack, onSignOut }) {
     const clampedGoal = { ...goal, targetMinutes: Math.max(5, Math.min(180, parseInt(goal.targetMinutes, 10) || 15)) };
     setGoal(clampedGoal);
     await saveDailyGoal(clampedGoal);
-    await saveStudyPlan(plan);
+    await saveStudyPlan(plan, celebrationSound);
     if (plan.reminderEnabled && typeof window !== "undefined" && "Notification" in window) {
       try {
         const perm = await Notification.requestPermission();
@@ -1489,7 +1678,7 @@ function SettingsView({ onBack, onSignOut }) {
   };
 
   return (
-    <section className="cg-page">
+    <section className="cg-page wide-page settings-wide-page">
       <div className="fc2-topbar">
         <div className="fc2-top-left">
           <button className="fc2-back" onClick={onBack} aria-label="Về trang chủ"><ChevronLeft size={20} /></button>
@@ -1498,10 +1687,10 @@ function SettingsView({ onBack, onSignOut }) {
       </div>
 
       <div className="settings-card">
-        <div className="settings-card-title"><Target size={17} color="#7C6FE4" /> Kế hoạch học tập</div>
+        <div className="settings-card-title"><span><Target size={20} /></span><div>Kế hoạch học tập<small>Tạo nhịp học phù hợp với bạn</small></div></div>
         <p className="settings-hint">Đặt mục tiêu và lịch học để duy trì động lực lâu dài — tất cả đều dựa trên tiến độ thật của bạn.</p>
 
-        <div className="settings-row">
+        <div className="settings-row settings-goal-row">
           <div className="settings-row-label">
             <b>Mục tiêu mỗi ngày</b>
             <span>Số phút học tối thiểu bạn muốn đạt mỗi ngày</span>
@@ -1516,7 +1705,7 @@ function SettingsView({ onBack, onSignOut }) {
           </div>
         </div>
 
-        <div className="settings-row">
+        <div className="settings-row settings-date-row">
           <div className="settings-row-label">
             <b>Ngày mục tiêu hoàn thành</b>
             <span>Đặt hạn để hoàn thành giáo trình 세종한국어 2-1</span>
@@ -1533,7 +1722,7 @@ function SettingsView({ onBack, onSignOut }) {
           </div>
         )}
 
-        <div className="settings-row column">
+        <div className="settings-row column settings-schedule-row">
           <div className="settings-row-label">
             <b>Lịch học trong tuần</b>
             <span>Chọn những ngày bạn dự định học</span>
@@ -1547,7 +1736,7 @@ function SettingsView({ onBack, onSignOut }) {
           </div>
         </div>
 
-        <div className="settings-row">
+        <div className="settings-row settings-reminder-row">
           <div className="settings-row-label">
             <b>Nhắc nhở học mỗi ngày</b>
             <span>Nhắc bạn vào khung giờ cố định nếu hôm nay chưa học</span>
@@ -1557,11 +1746,20 @@ function SettingsView({ onBack, onSignOut }) {
           </button>
         </div>
         {plan.reminderEnabled && (
-          <div className="settings-row">
+          <div className="settings-row settings-time-row">
             <div className="settings-row-label"><b>Giờ nhắc</b></div>
             <input type="time" className="settings-time-input" value={plan.reminderTime} onChange={(e) => update({ reminderTime: e.target.value })} />
           </div>
         )}
+        <div className="settings-row settings-sound-row">
+          <div className="settings-row-label">
+            <b>Âm thanh chúc mừng</b>
+            <span>Phát âm thanh nhẹ khi hoàn thành mục tiêu trong ngày</span>
+          </div>
+          <button className={`settings-toggle ${celebrationSound ? "on" : ""}`} onClick={() => setCelebrationSound((enabled) => !enabled)} aria-label="Bật/tắt âm thanh chúc mừng" aria-pressed={celebrationSound}>
+            <span className="settings-toggle-knob" />
+          </button>
+        </div>
         {plan.reminderEnabled && (
           <p className="settings-note">
             <Lightbulb size={13} color="#E8A93D" /> App web nên nhắc nhở chỉ hoạt động khi bạn đang mở app trên trình duyệt (hiện banner ngay trong app) — chưa gửi được thông báo khi đã đóng trình duyệt.
@@ -1572,9 +1770,6 @@ function SettingsView({ onBack, onSignOut }) {
         <button className="cg-post-btn settings-save-btn" onClick={save}>
           {saved ? <><CheckCircle2 size={15} /> Đã lưu!</> : "Lưu kế hoạch học tập"}
         </button>
-        {onSignOut && (
-          <button className="settings-signout-btn" onClick={onSignOut}>Đăng xuất</button>
-        )}
       </div>
     </section>
   );
@@ -1677,19 +1872,19 @@ function TopicsView({ onBack }) {
 /* ------------------------------------------------------------------ */
 /*  TỪ VỰNG — THEO BÀI (회화 익힘책 2-1, 7 bài)                        */
 /* ------------------------------------------------------------------ */
-function LessonsView({ onBack, onSelect }) {
+function LessonsView({ onBack, onSelect, lessons = LESSONS_2_1, textbookTitle = "세종한국어 회화 익힘책 2-1", title = "Từ vựng · Theo bài", backLabel = "Quay lại" }) {
   return (
     <section className="card page">
       <div className="card-title-row">
-        <div className="card-title"><NotebookPen size={19} color="#7C6FE4" /> Từ vựng · Theo bài</div>
-        <button className="link-btn" onClick={onBack}>← Về trang chủ</button>
+        <div className="card-title"><NotebookPen size={19} color="#7C6FE4" /> {title}</div>
+        <button className="link-btn" onClick={onBack}><ChevronLeft size={15} /> {backLabel}</button>
       </div>
       <div className="lesson-book-tag">
-        <span className="book-chip">세종한국어 회화 익힘책 2-1</span>
-        <span className="lesson-count">{LESSONS_2_1.length} bài</span>
+        <span className="book-chip">{textbookTitle}</span>
+        <span className="lesson-count">{lessons.length} bài</span>
       </div>
       <div className="lesson-list">
-        {LESSONS_2_1.map((l) => (
+        {lessons.map((l) => (
           <button
             key={l.no}
             className={`lesson-row ${l.status}`}
@@ -1716,22 +1911,22 @@ function LessonsView({ onBack, onSelect }) {
 /*  CHỌN BÀI HỌC trước khi luyện — dùng chung cho Nghe chép chính tả &  */
 /*  Shadowing (tài liệu yêu cầu cả 2 đều hiển thị danh sách bài trước). */
 /* ------------------------------------------------------------------ */
-function ActivityLessonSelectView({ title, icon: Icon, color, onBack, onSelect }) {
+function ActivityLessonSelectView({ title, icon: Icon, color, onBack, onSelect, lessons = LESSONS_2_1, textbookTitle = "세종한국어 회화 익힘책 2-1", backLabel = "Trang chủ" }) {
   return (
     <section className="card page">
       <div className="card-title-row">
         <div className="card-title"><Icon size={19} color={color} /> {title} · Chọn bài học</div>
-        <button className="link-btn" onClick={onBack}>← Về trang chủ</button>
+        <button className="link-btn" onClick={onBack}><ChevronLeft size={15} /> {backLabel}</button>
       </div>
       <p className="page-note" style={{ background: "none", padding: 0, color: "#8B85AB" }}>
         Chọn bài học bạn muốn luyện — nội dung sẽ lấy đúng theo bài đó.
       </p>
       <div className="lesson-book-tag">
-        <span className="book-chip">세종한국어 회화 익힘책 2-1</span>
-        <span className="lesson-count">{LESSONS_2_1.length} bài</span>
+        <span className="book-chip">{textbookTitle}</span>
+        <span className="lesson-count">{lessons.length} bài</span>
       </div>
       <div className="lesson-list">
-        {LESSONS_2_1.map((l) => (
+        {lessons.map((l) => (
           <button
             key={l.no}
             className={`lesson-row ${l.status}`}
@@ -1928,6 +2123,7 @@ function ShadowingView({ lesson, onBack }) {
   const [helpPanel, setHelpPanel] = useState(null); // null | "break" | "pron" | "tips"
   const [audioTime, setAudioTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
+  const [recordingElapsed, setRecordingElapsed] = useState(0);
   const [recordedUrls, setRecordedUrls] = useState({}); // { [idx]: blob url } — bản ghi âm THẬT của người dùng để nghe lại
   const [micBlocked, setMicBlocked] = useState(false); // getUserMedia bị chặn (thường do khung xem trước) — chỉ ảnh hưởng phần ghi âm để nghe lại, không chặn chấm điểm AI
   const recognitionRef = useRef(null);
@@ -1937,10 +2133,19 @@ function ShadowingView({ lesson, onBack }) {
   const recordedChunksRef = useRef([]);
   const mediaStreamRef = useRef(null);
   const myRecAudioRef = useRef(null);
+  const recordingStartedAtRef = useRef(0);
+  const recordingIntervalRef = useRef(null);
+  const recordingTimeoutRef = useRef(null);
+  const recognizedTextRef = useRef("");
+  const recordingFinishingRef = useRef(false);
 
   const line = SHADOW_LINES[idx];
   const total = SHADOW_LINES.length;
   const result = results[idx];
+  // Cho người học thêm 3 giây so với thời lượng câu mẫu để lấy hơi và kết câu.
+  // Audio chưa tải metadata thì ước lượng theo độ dài câu, tránh giới hạn bằng 0.
+  const estimatedSampleDuration = Math.max(2, line.ko.length / 6);
+  const recordingLimit = Math.max(4, Math.ceil((audioDuration || estimatedSampleDuration) + 3));
 
   const speechSupported =
     typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -1950,9 +2155,18 @@ function ShadowingView({ lesson, onBack }) {
     setStatus("idle");
     setHelpPanel(null);
     setAudioTime(0);
+    setRecordingElapsed(0);
+    clearInterval(recordingIntervalRef.current);
+    clearTimeout(recordingTimeoutRef.current);
+    recordingFinishingRef.current = false;
+    recognizedTextRef.current = "";
   }, [idx]);
 
-  useEffect(() => () => { try { recognitionRef.current?.abort(); } catch (e) {} }, []);
+  useEffect(() => () => {
+    clearInterval(recordingIntervalRef.current);
+    clearTimeout(recordingTimeoutRef.current);
+    try { recognitionRef.current?.abort(); } catch (e) {}
+  }, []);
 
   // Tự động phát khi bật "Tự động phát" và mỗi khi chuyển câu
   useEffect(() => {
@@ -2033,24 +2247,57 @@ function ShadowingView({ lesson, onBack }) {
     setStatus("done");
   };
 
+  const finishRecording = (reason = "manual") => {
+    if (recordingFinishingRef.current) return;
+    recordingFinishingRef.current = true;
+    clearInterval(recordingIntervalRef.current);
+    clearTimeout(recordingTimeoutRef.current);
+    if (reason === "timeout") setRecordingElapsed(recordingLimit);
+    stopMediaRecording();
+    try { recognitionRef.current?.stop(); } catch (e) {}
+    setStatus("grading");
+
+    // Cho SpeechRecognition một nhịp ngắn để trả nốt phần transcript cuối.
+    window.setTimeout(() => {
+      const said = recognizedTextRef.current.trim();
+      if (!said) {
+        setErrMsg(reason === "timeout"
+          ? "Đã hết thời gian nhưng chưa nhận được giọng nói. Hãy thử lại và nói gần micro hơn nhé."
+          : "Chưa nhận được giọng nói. Hãy thử lại và nói gần micro hơn nhé.");
+        setStatus("error");
+        return;
+      }
+      submitForGrading(said);
+    }, 220);
+  };
+
   const startRecording = () => {
-    if (!speechSupported) { setStatus("unsupported"); return; }
+    if (!speechSupported) { setStatus("unsupported"); return false; }
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const rec = new SR();
     rec.lang = "ko-KR";
-    rec.interimResults = false;
+    rec.interimResults = true;
     rec.maxAlternatives = 1;
-    rec.continuous = false;
+    rec.continuous = true;
 
     setErrMsg("");
+    setRecordingElapsed(0);
+    recognizedTextRef.current = "";
+    recordingFinishingRef.current = false;
     setStatus("recording");
 
     rec.onresult = (e) => {
-      const said = e.results?.[0]?.[0]?.transcript || "";
-      stopMediaRecording(); // nhận diện giọng nói xong (có thể tự dừng, không cần người dùng bấm lại) — dừng luôn bản ghi âm thật để không bị treo
-      submitForGrading(said);
+      let said = "";
+      for (let i = 0; i < e.results.length; i += 1) {
+        said += `${e.results[i]?.[0]?.transcript || ""} `;
+      }
+      recognizedTextRef.current = said.trim();
     };
     rec.onerror = (e) => {
+      if (recordingFinishingRef.current || e.error === "aborted") return;
+      recordingFinishingRef.current = true;
+      clearInterval(recordingIntervalRef.current);
+      clearTimeout(recordingTimeoutRef.current);
       stopMediaRecording();
       const map = {
         "not-allowed": "Trình duyệt/khung xem trước này chưa cấp quyền micro cho ứng dụng — không phải do bạn thao tác sai. Thử mở app ở môi trường triển khai thật (ngoài khung xem trước) để dùng mic.",
@@ -2061,23 +2308,37 @@ function ShadowingView({ lesson, onBack }) {
       setErrMsg(map[e.error] || "Có lỗi khi nhận diện giọng nói, thử lại nhé.");
       setStatus("error");
     };
-    rec.onend = () => { stopMediaRecording(); setStatus((s) => (s === "recording" ? "idle" : s)); };
+    rec.onend = () => {
+      // Một số trình duyệt tự kết thúc phiên nhận diện khi người dùng ngừng nói.
+      // Khi đó vẫn hoàn tất và chấm phần đã ghi thay vì làm mất bản ghi.
+      if (!recordingFinishingRef.current) finishRecording("browser");
+    };
 
     recognitionRef.current = rec;
-    try { rec.start(); } catch (err) { setErrMsg("Không thể khởi động micro."); setStatus("error"); }
+    try {
+      rec.start();
+      recordingStartedAtRef.current = Date.now();
+      recordingIntervalRef.current = window.setInterval(() => {
+        const elapsed = Math.min(recordingLimit, (Date.now() - recordingStartedAtRef.current) / 1000);
+        setRecordingElapsed(elapsed);
+      }, 100);
+      recordingTimeoutRef.current = window.setTimeout(() => finishRecording("timeout"), recordingLimit * 1000);
+      return true;
+    } catch (err) {
+      setErrMsg("Không thể khởi động micro.");
+      setStatus("error");
+      return false;
+    }
   };
-
-  const stopRecording = () => { try { recognitionRef.current?.stop(); } catch (e) {} };
 
   /* Nút mic dùng chung cho cả bắt đầu, dừng+chấm điểm, VÀ ghi âm lại —
      bấm khi đang ghi thì dừng (tự động chấm điểm), bấm khi đã có kết quả
      thì xoá kết quả cũ và ghi âm lại từ đầu, không cần nút riêng. */
   const handleMicClick = () => {
-    if (status === "recording") { stopRecording(); stopMediaRecording(); return; }
+    if (status === "recording") { finishRecording("manual"); return; }
     if (result) setResults((r) => { const n = { ...r }; delete n[idx]; return n; });
     setErrMsg("");
-    startRecording();
-    startMediaRecording();
+    if (startRecording()) startMediaRecording();
   };
 
   const goPrev = () => { if (idx > 0) setIdx(idx - 1); };
@@ -2145,10 +2406,10 @@ function ShadowingView({ lesson, onBack }) {
                   <Mic size={26} color="#fff" />
                 )}
               </button>
-              <span className="sw-side-ctrl sw-side-ctrl-spacer" aria-hidden="true">
-                <Volume2 size={20} color="transparent" />
-                <span>Nghe câu</span>
-              </span>
+              <button className="sw-side-ctrl" onClick={playNative} aria-label="Nghe lại câu mẫu">
+                <RotateCcw size={20} color="#7C6FE4" />
+                <span>Nghe lại</span>
+              </button>
             </div>
             <p className="sw-mic-caption">
               {status === "recording"
@@ -2159,7 +2420,9 @@ function ShadowingView({ lesson, onBack }) {
                 ? "Bấm mic để ghi âm lại"
                 : "Nhấn mic rồi nói theo câu trên"}
             </p>
-            <p className="sw-timer">{swFormatTime(audioTime)} / {swFormatTime(audioDuration)}</p>
+            <p className={`sw-timer ${status === "recording" ? "is-recording" : ""} ${status === "recording" && recordingLimit - recordingElapsed <= 2 ? "is-ending" : ""}`}>
+              {swFormatTime(recordingElapsed)} / {swFormatTime(recordingLimit)}
+            </p>
 
             {status === "unsupported" && (
               <div className="sw-unsupported">
@@ -2617,8 +2880,8 @@ function ReviewHubView({ onBack, onPickByLesson, onPickRandom }) {
   );
 }
 
-function ReviewLessonSelectView({ onBack, onNext }) {
-  const [selected, setSelected] = useState(() => new Set([LESSONS_2_1[0].no]));
+function ReviewLessonSelectView({ onBack, onNext, lessons = LESSONS_2_1 }) {
+  const [selected, setSelected] = useState(() => new Set(lessons[0] ? [lessons[0].no] : []));
   const toggle = (no, locked) => {
     if (locked) return;
     setSelected((s) => {
@@ -2637,7 +2900,7 @@ function ReviewLessonSelectView({ onBack, onNext }) {
         Tick chọn những bài học bạn muốn đưa vào phạm vi ôn tập (chọn được nhiều bài cùng lúc).
       </p>
       <div className="lesson-list">
-        {LESSONS_2_1.map((l) => {
+        {lessons.map((l) => {
           const locked = l.status === "locked";
           const checked = selected.has(l.no);
           return (
@@ -2694,7 +2957,7 @@ function ReviewIntroView({ lesson, mode, selectedLessons, onBack, onStart }) {
   };
 
   return (
-    <section className="rv-page">
+    <section className="rv-page rv-review-setup">
       <div className="rv-hero">
         <button className="fc2-back" onClick={onBack} aria-label="Quay lại"><ChevronLeft size={20} /></button>
         <div className="rv-hero-body">
@@ -3441,12 +3704,14 @@ function LessonDetailView({ lesson, onBack, onStartActivity }) {
       </div>
 
       <button className="ai-bonus-card" onClick={() => onStartActivity("aiquiz")}>
-        <span className="ai-bonus-ico">🤖</span>
+        <span className="ai-bonus-ico"><Bot size={25} /><Sparkles className="ai-bonus-spark" size={13} /></span>
         <div className="ai-bonus-body">
-          <b>AI tự tạo câu hỏi</b>
-          <span>Luyện tập nhanh với câu hỏi AI sáng tạo ngay lúc bạn bấm — luôn mới mỗi lần</span>
+          <span className="ai-bonus-kicker"><Sparkles size={12} /> LUYỆN TẬP VỚI AI</span>
+          <b>AI tự tạo bộ câu hỏi mới</b>
+          <span>Câu hỏi được tạo theo đúng từ vựng và ngữ pháp của Bài 1, thay đổi ở mỗi lượt luyện.</span>
+          <span className="ai-bonus-meta"><i>Không lặp đề</i><i>Đúng phạm vi bài</i><i>Không tính điểm hạng</i></span>
         </div>
-        <ChevronRight size={18} color="#7C6FE4" />
+        <span className="ai-bonus-cta">Tạo câu hỏi <ChevronRight size={17} /></span>
       </button>
     </section>
   );
@@ -3537,7 +3802,9 @@ function MiniBear() {
 /*  Khớp đúng chu kỳ "1 ngày–3 ngày–7 ngày" đã ghi ở mẹo trang chủ,     */
 /*  mở rộng thêm 2 hộp xa hơn cho từ đã thuộc kỹ (14 ngày, 30 ngày)     */
 /* ------------------------------------------------------------------ */
-const BOX_INTERVAL_DAYS = { 1: 1, 2: 3, 3: 7, 4: 14, 5: 30 };
+// Chu kỳ mặc định theo mục 4.7. Hộp cao hơn tiếp tục ôn mỗi 7 ngày
+// cho tới khi chủ sản phẩm xác nhận một chu kỳ dài hơn.
+const BOX_INTERVAL_DAYS = { 1: 1, 2: 3, 3: 7, 4: 7, 5: 7 };
 
 const RATINGS = [
   { id: "vague", label: "Ôn lại sau", Icon: RotateCcw, color: "#8B85AB" },
@@ -3558,7 +3825,25 @@ const addDays = (n) => {
   return d.toISOString();
 };
 
-const vocabProgressKey = (lesson) => `vocab-progress:2-1:${lesson.no}`;
+const legacyVocabProgressKey = (lesson) => `vocab-progress:2-1:${lesson.no}`;
+const vocabProgressKey = (lesson, userId = null) => userId
+  ? `vocab-progress:${userId}:2-1:${lesson.no}`
+  : legacyVocabProgressKey(lesson);
+const mergeVocabStates = (local = {}, remote = {}) => {
+  const merged = { ...local };
+  Object.entries(remote).forEach(([word, value]) => { merged[word] = { ...(local[word] || {}), ...value }; });
+  return merged;
+};
+
+const playVocabularyAudio = (word) => {
+  if (!word?.audio) return speakKo(word?.word || "");
+  try {
+    const audio = new Audio(word.audio);
+    audio.play().catch(() => speakKo(word.word));
+  } catch (error) {
+    speakKo(word.word);
+  }
+};
 
 /* Dịch loại từ sang tiếng Việt, hiển thị cạnh 품사 gốc */
 const WORD_CLASS_VI = {
@@ -3686,7 +3971,7 @@ function StudyHubView({ onBack, onVocab, onDictation, onShadowing, onReview }) {
     { label: "Ôn tập", desc: "Củng cố kiến thức theo bài hoặc ngẫu nhiên", icon: PencilLine, color: "#4A90E2", bg: "#EEF4FD", onClick: onReview },
   ];
   return (
-    <section className="cg-page">
+    <section className="cg-page wide-page study-wide-page">
       <div className="fc2-topbar">
         <div className="fc2-top-left">
           <button className="fc2-back" onClick={onBack} aria-label="Về trang chủ"><ChevronLeft size={20} /></button>
@@ -3713,41 +3998,67 @@ function StudyHubView({ onBack, onVocab, onDictation, onShadowing, onReview }) {
 /*  GIÁO TRÌNH — chọn GIÁO TRÌNH (quyển sách) trước, khác với "Từ vựng  */
 /*  & bài học" (đi thẳng vào nội dung học). Đây là bước chọn SÁCH.     */
 /* ------------------------------------------------------------------ */
-function CurriculumHubView({ onBack, onOpenBook }) {
+function CurriculumHubView({ onBack, onOpenBook, onAddBook, myBooks = [], availableBooks = [], addingBookId, notice }) {
+  const renderBook = (book, mode) => (
+    <article key={book.id} className={`gm-hub-card ${book.hasContent ? "has" : "soon"} ${mode === "discover" ? "discover" : ""}`}>
+      <span className="gm-hub-badge" style={{ color: "#4A90E2", background: "#EEF4FD" }}>GIÁO TRÌNH</span>
+      <b lang="ko">{book.title}</b>
+      {mode === "discover" && (
+        <p className="gm-hub-description">
+          {book.description || book.titleVi || "Giáo trình luyện hội thoại tiếng Hàn theo từng bài học, phù hợp để học và ôn tập hằng ngày."}
+        </p>
+      )}
+      <span className="gm-hub-count">
+        {book.lessonCount ? `${book.lessonCount} bài học` : "Chưa có nội dung"}
+      </span>
+      {mode === "mine" ? (
+        <button className="gm-book-action" disabled={!book.hasContent} onClick={() => onOpenBook(book)}>
+          {book.hasContent ? "Mở giáo trình" : "Đang biên soạn"}<ChevronRight size={15} />
+        </button>
+      ) : (
+        <button className="gm-book-action add" disabled={addingBookId === book.id} onClick={() => onAddBook(book)}>
+          {addingBookId === book.id ? "Đang thêm..." : "Thêm vào giáo trình của tôi"}<Plus size={15} />
+        </button>
+      )}
+    </article>
+  );
   return (
-    <section className="cg-page">
+    <section className="cg-page curriculum-page">
       <div className="fc2-topbar">
         <div className="fc2-top-left">
           <button className="fc2-back" onClick={onBack} aria-label="Về trang chủ"><ChevronLeft size={20} /></button>
           <span className="fc2-title"><BookOpen size={18} color="#4A90E2" /> Giáo trình</span>
         </div>
       </div>
-      <p className="cg-sub" style={{ marginTop: 0 }}>Chọn giáo trình bạn muốn học — mỗi quyển gồm nhiều bài học riêng.</p>
-      <div className="gm-hub-grid">
-        {UPLOADED_BOOKS.map((title) => {
-          const hasContent = title.includes("2-1");
-          return (
-            <button
-              key={title}
-              className={`gm-hub-card ${hasContent ? "has" : "soon"}`}
-              onClick={() => hasContent && onOpenBook()}
-              disabled={!hasContent}
-              title={hasContent ? undefined : "Chưa có nội dung bài học"}
-            >
-              <span className="gm-hub-badge" style={{ color: "#4A90E2", background: "#EEF4FD" }}>GIÁO TRÌNH</span>
-              <b lang="ko">{title}</b>
-              <span className="gm-hub-count">{hasContent ? `${LESSONS_2_1.length} bài học` : "Chưa có nội dung"}</span>
-            </button>
-          );
-        })}
+      {notice && <div className={`catalog-notice ${notice.type}`}>{notice.message}</div>}
+      <div className="curriculum-section-head">
+        <div><h2>Giáo trình của tôi</h2><p>Chỉ hiển thị những giáo trình bạn đã thêm.</p></div>
+        <span>{myBooks.length} giáo trình</span>
       </div>
+      {myBooks.length ? <div className="gm-hub-grid">{myBooks.map((book) => renderBook(book, "mine"))}</div> : (
+        <div className="curriculum-empty">
+          <BookOpen size={28} /><b>Chưa có giáo trình</b>
+          <span>Chọn một giáo trình ở mục Khám phá bên dưới để bắt đầu học.</span>
+          <button type="button" className="curriculum-empty-action" onClick={() => document.getElementById("discover-textbooks")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+            <Plus size={15} /> Thêm giáo trình
+          </button>
+        </div>
+      )}
+      <div className="curriculum-section-head discover-head" id="discover-textbooks">
+        <div><h2>Khám phá giáo trình</h2><p>Các giáo trình đã xuất bản và chưa có trong danh sách của bạn.</p></div>
+        <span>{availableBooks.length} giáo trình</span>
+      </div>
+      {availableBooks.length ? <div className="gm-hub-grid">{availableBooks.map((book) => renderBook(book, "discover"))}</div> : (
+        <div className="curriculum-empty compact"><Sparkles size={24} /><span>Bạn đã thêm tất cả giáo trình hiện có.</span></div>
+      )}
     </section>
   );
 }
 
-function GrammarHubView({ onBack, onOpenBook }) {
+function GrammarHubView({ onBack, onOpenBook, books = null }) {
+  const visibleBooks = books?.length ? books : UPLOADED_BOOKS.map((title) => ({ title, hasContent: title.includes("2-1"), lessonCount: title.includes("2-1") ? LESSONS_2_1.length : 0 }));
   return (
-    <section className="cg-page">
+    <section className="cg-page wide-page">
       <div className="fc2-topbar">
         <div className="fc2-top-left">
           <button className="fc2-back" onClick={onBack} aria-label="Về trang chủ"><ChevronLeft size={20} /></button>
@@ -3756,8 +4067,9 @@ function GrammarHubView({ onBack, onOpenBook }) {
       </div>
       <p className="cg-sub" style={{ marginTop: 0 }}>Ngữ pháp của tất cả các bài được tổng hợp tại đây — chọn giáo trình để bắt đầu.</p>
       <div className="gm-hub-grid">
-        {UPLOADED_BOOKS.map((title) => {
-          const hasContent = title.includes("2-1");
+        {visibleBooks.map((book) => {
+          const title = book.title;
+          const hasContent = book.hasContent;
           return (
             <button
               key={title}
@@ -3769,7 +4081,7 @@ function GrammarHubView({ onBack, onOpenBook }) {
               <span className="gm-hub-badge">NGỮ PHÁP</span>
               <b lang="ko">{title}</b>
               <span className="gm-hub-count">
-                {hasContent ? `7 bài · ${GRAMMAR_SAMPLE.length} mẫu ngữ pháp` : "Chưa có nội dung"}
+                {hasContent ? `${book.lessonCount} bài · ${GRAMMAR_SAMPLE.length} mẫu ngữ pháp` : book.lessonCount ? `${book.lessonCount} bài · Đang biên soạn` : "Chưa có nội dung"}
               </span>
             </button>
           );
@@ -3779,19 +4091,19 @@ function GrammarHubView({ onBack, onOpenBook }) {
   );
 }
 
-function GrammarBookView({ onBack, onSelectLesson }) {
+function GrammarBookView({ onBack, onSelectLesson, lessons = LESSONS_2_1, textbookTitle = "회화 익힘책 2-1" }) {
   return (
-    <section className="cg-page">
+    <section className="cg-page wide-page">
       <div className="fc2-topbar">
         <div className="fc2-top-left">
           <button className="fc2-back" onClick={onBack} aria-label="Về danh sách giáo trình"><ChevronLeft size={20} /></button>
-          <span className="fc2-title" lang="ko"><NotebookPen size={18} color="#3FA95C" /> 회화 익힘책 2-1 — Ngữ pháp</span>
+          <span className="fc2-title" lang="ko"><NotebookPen size={18} color="#3FA95C" /> {textbookTitle} — Ngữ pháp</span>
         </div>
       </div>
       <p className="cg-sub" style={{ marginTop: 0 }}>Chọn bài để xem các mẫu ngữ pháp được tổng hợp trong bài đó.</p>
       <div className="gm-lesson-list">
-        {LESSONS_2_1.map((l, i) => {
-          const hasContent = i === 0; // hiện chỉ Bài 1 có nội dung ngữ pháp
+        {lessons.map((l, i) => {
+          const hasContent = l.status !== "locked" && i === 0; // hiện chỉ Bài 1 có nội dung ngữ pháp
           const count = hasContent ? GRAMMAR_SAMPLE.length : 0;
           return (
             <button
@@ -3819,29 +4131,38 @@ function GrammarBookView({ onBack, onSelectLesson }) {
 /* ------------------------------------------------------------------ */
 /*  DANH SÁCH TỪ VỰNG — mỗi dòng: Từ Hàn - Nghĩa Việt, có Loa + Ngôi sao */
 /* ------------------------------------------------------------------ */
-function VocabListView({ lesson, onBack, onStudy }) {
+function VocabListView({ lesson, userId, onBack, onStudy, vocabulary = VOCAB_SAMPLE }) {
   const [progress, setProgress] = useState({});
   const [loaded, setLoaded] = useState(false);
   const storageKey = vocabProgressKey(lesson);
 
   useEffect(() => {
     let alive = true;
-    window.storage.get(storageKey)
-      .then((res) => { if (alive && res?.value) setProgress(JSON.parse(res.value)); })
-      .catch(() => {})
-      .finally(() => { if (alive) setLoaded(true); });
+    (async () => {
+      let local = {};
+      try { const res = await window.storage.get(storageKey); if (res?.value) local = JSON.parse(res.value); } catch (e) {}
+      const remote = await loadRemoteVocabularyState(lesson.no, userId);
+      const merged = remote ? mergeVocabStates(local, remote) : local;
+      if (alive) setProgress(merged);
+      if (remote) {
+        await window.storage.set(storageKey, JSON.stringify(merged));
+        if (Object.keys(local).length) void saveRemoteVocabularyState(lesson.no, userId, merged);
+      }
+      if (alive) setLoaded(true);
+    })();
     return () => { alive = false; };
-  }, [storageKey]);
+  }, [storageKey, lesson.no, userId]);
 
   const toggleStar = (word) => {
     const cur = progress[word];
     const updated = { ...progress, [word]: { ...cur, starred: !cur?.starred } };
     setProgress(updated);
     window.storage.set(storageKey, JSON.stringify(updated)).catch(() => {});
+    void saveRemoteVocabularyState(lesson.no, userId, updated);
   };
 
   return (
-    <section className="cg-page">
+    <section className="cg-page wide-page">
       <div className="fc2-topbar">
         <div className="fc2-top-left">
           <button className="fc2-back" onClick={onBack} aria-label="Về bài học"><ChevronLeft size={20} /></button>
@@ -3850,7 +4171,7 @@ function VocabListView({ lesson, onBack, onStudy }) {
         <button className="cg-post-btn" onClick={onStudy}><Play size={13} fill="#fff" /> Học bằng Flashcard</button>
       </div>
       <div className="vl-list">
-        {VOCAB_SAMPLE.map((w) => {
+        {vocabulary.map((w) => {
           const starred = !!progress[w.word]?.starred;
           return (
             <div key={w.word} className="vl-row">
@@ -3858,7 +4179,7 @@ function VocabListView({ lesson, onBack, onStudy }) {
                 <span className="vl-ko" lang="ko">{w.word}</span>
                 <span className="vl-vi">{w.meaningVi}</span>
               </div>
-              <button className="vl-audio" onClick={() => speakKo(w.word)} aria-label={`Nghe phát âm ${w.word}`}>
+              <button className="vl-audio" onClick={() => playVocabularyAudio(w)} aria-label={`Nghe phát âm ${w.word}`}>
                 <Volume2 size={15} color="#7C6FE4" />
               </button>
               <button
@@ -3879,30 +4200,37 @@ function VocabListView({ lesson, onBack, onStudy }) {
 /* ------------------------------------------------------------------ */
 /*  SỔ TAY TỪ VỰNG CÁ NHÂN — tổng hợp mọi từ đã đánh dấu ★, ôn riêng    */
 /* ------------------------------------------------------------------ */
-function VocabNotebookView({ lesson, onBack, onReview }) {
+function VocabNotebookView({ lesson, userId, onBack, onReview, vocabulary = VOCAB_SAMPLE }) {
   const [progress, setProgress] = useState({});
   const [loaded, setLoaded] = useState(false);
   const storageKey = vocabProgressKey(lesson);
 
-  const load = () => {
-    window.storage.get(storageKey)
-      .then((res) => { if (res?.value) setProgress(JSON.parse(res.value)); })
-      .catch(() => {})
-      .finally(() => setLoaded(true));
+  const load = async () => {
+    let local = {};
+    try { const res = await window.storage.get(storageKey); if (res?.value) local = JSON.parse(res.value); } catch (e) {}
+    const remote = await loadRemoteVocabularyState(lesson.no, userId);
+    const merged = remote ? mergeVocabStates(local, remote) : local;
+    setProgress(merged);
+    if (remote) {
+      await window.storage.set(storageKey, JSON.stringify(merged));
+      if (Object.keys(local).length) void saveRemoteVocabularyState(lesson.no, userId, merged);
+    }
+    setLoaded(true);
   };
-  useEffect(() => { load(); }, [storageKey]);
+  useEffect(() => { void load(); }, [storageKey, lesson.no, userId]);
 
-  const starredWords = VOCAB_SAMPLE.filter((w) => progress[w.word]?.starred);
+  const starredWords = vocabulary.filter((w) => progress[w.word]?.starred);
 
   const toggleStar = (word) => {
     const cur = progress[word];
     const updated = { ...progress, [word]: { ...cur, starred: !cur?.starred } };
     setProgress(updated);
     window.storage.set(storageKey, JSON.stringify(updated)).catch(() => {});
+    void saveRemoteVocabularyState(lesson.no, userId, updated);
   };
 
   return (
-    <section className="cg-page">
+    <section className="cg-page wide-page">
       <div className="fc2-topbar">
         <div className="fc2-top-left">
           <button className="fc2-back" onClick={onBack} aria-label="Về trang chủ"><ChevronLeft size={20} /></button>
@@ -3928,7 +4256,7 @@ function VocabNotebookView({ lesson, onBack, onReview }) {
                   <span className="vl-ko" lang="ko">{w.word}</span>
                   <span className="vl-vi">{w.meaningVi}</span>
                 </div>
-                <button className="vl-audio" onClick={() => speakKo(w.word)} aria-label={`Nghe phát âm ${w.word}`}>
+                <button className="vl-audio" onClick={() => playVocabularyAudio(w)} aria-label={`Nghe phát âm ${w.word}`}>
                   <Volume2 size={15} color="#7C6FE4" />
                 </button>
                 <button className="vl-star on" onClick={() => toggleStar(w.word)} aria-label="Bỏ đánh dấu từ khó">
@@ -3946,13 +4274,13 @@ function VocabNotebookView({ lesson, onBack, onReview }) {
 /* ------------------------------------------------------------------ */
 /*  TỪ VỰNG CỦA NGÀY — widget nhỏ trên Trang chủ, đổi mỗi ngày         */
 /* ------------------------------------------------------------------ */
-function WordOfDayWidget({ onOpen }) {
+function WordOfDayWidget({ onOpen, vocabulary = VOCAB_SAMPLE }) {
   const word = useMemo(() => {
     const d = todayStr();
     let seed = 0;
     for (let i = 0; i < d.length; i++) seed = (seed * 31 + d.charCodeAt(i)) >>> 0;
-    return VOCAB_SAMPLE[seed % VOCAB_SAMPLE.length];
-  }, []);
+    return vocabulary[seed % vocabulary.length] || VOCAB_SAMPLE[0];
+  }, [vocabulary]);
   return (
     <div className="wod-card" role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onOpen(); }}>
       <div className="wod-label"><Sparkles size={13} color="#F0912E" /> Từ vựng của ngày</div>
@@ -3960,7 +4288,7 @@ function WordOfDayWidget({ onOpen }) {
         <span className="wod-ko" lang="ko">{word.word}</span>
         <span className="wod-vi">{word.meaningVi}</span>
       </div>
-      <button className="wod-audio" onClick={(e) => { e.stopPropagation(); speakKo(word.word); }} aria-label={`Nghe phát âm ${word.word}`}>
+      <button className="wod-audio" onClick={(e) => { e.stopPropagation(); playVocabularyAudio(word); }} aria-label={`Nghe phát âm ${word.word}`}>
         <Volume2 size={16} color="#fff" />
       </button>
     </div>
@@ -3968,11 +4296,11 @@ function WordOfDayWidget({ onOpen }) {
 }
 
 
-function FlashcardView({ lesson, onBack, onFinish, initialTab, deckWords, deckTitle }) {
+function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords, deckTitle, vocabulary = VOCAB_SAMPLE, includeMastered = false }) {
   const [contentTab, setContentTab] = useState(initialTab || "vocab"); // "vocab" | "grammar"
   const [grammarIdx, setGrammarIdx] = useState(0);
   const [grammarFlipped, setGrammarFlipped] = useState(false);
-  const deck = deckWords && deckWords.length ? deckWords : VOCAB_SAMPLE;
+  const deck = deckWords && deckWords.length ? deckWords : vocabulary;
   // Hàng đợi phiên học: mảng chỉ số vào `deck`. "Chưa thuộc" đẩy từ đó xuống
   // cuối hàng đợi để lặp lại trong CÙNG phiên, cho đến khi được "Đã thuộc".
   const [queue, setQueue] = useState(() => deck.map((_, i) => i));
@@ -3987,7 +4315,7 @@ function FlashcardView({ lesson, onBack, onFinish, initialTab, deckWords, deckTi
   const dragRef = useRef({ active: false, startX: 0 });
   const total = deck.length;
   const card = deck[queue[0]];
-  const storageKey = vocabProgressKey(lesson);
+  const storageKey = vocabProgressKey(lesson, userId);
   const cardProgress = card ? progress[card.word] : null;
   const gram = GRAMMAR_SAMPLE[grammarIdx];
 
@@ -3997,8 +4325,37 @@ function FlashcardView({ lesson, onBack, onFinish, initialTab, deckWords, deckTi
     let alive = true;
     (async () => {
       try {
-        const res = await window.storage.get(storageKey);
-        if (alive && res?.value) setProgress(JSON.parse(res.value));
+        let res = await window.storage.get(storageKey);
+        // Chuyển dữ liệu bản cũ (chưa tách tài khoản) sang tài khoản hiện tại
+        // đúng một lần. Sau khi đã có khóa theo user, các tài khoản không còn
+        // đọc/ghi chung tiến trình Flashcard với nhau.
+        if (!res?.value && userId) {
+          const legacy = await window.storage.get(legacyVocabProgressKey(lesson));
+          const ownerKey = `${legacyVocabProgressKey(lesson)}:migrated-owner`;
+          const owner = await window.storage.get(ownerKey);
+          if (legacy?.value && (!owner?.value || owner.value === userId)) {
+            await window.storage.set(storageKey, legacy.value);
+            await window.storage.set(ownerKey, userId);
+            res = legacy;
+          }
+        }
+        const localSaved = res?.value ? JSON.parse(res.value) : {};
+        const remoteSaved = await loadRemoteVocabularyState(lesson.no, userId);
+        const saved = remoteSaved ? mergeVocabStates(localSaved, remoteSaved) : localSaved;
+        if (remoteSaved) {
+          await window.storage.set(storageKey, JSON.stringify(saved));
+          if (Object.keys(localSaved).length) void saveRemoteVocabularyState(lesson.no, userId, saved);
+        }
+        if (alive && Object.keys(saved).length) {
+          const remaining = deck
+            .map((item, index) => ({ item, index }))
+            .filter(({ item }) => includeMastered || saved[item.word]?.lastRating !== "good")
+            .map(({ index }) => index);
+
+          setProgress(saved);
+          setQueue(remaining);
+          setMasteredCount(deck.length - remaining.length);
+        }
       } catch (e) {
         /* chưa có dữ liệu lưu trước đó — dùng mặc định rỗng */
       } finally {
@@ -4006,7 +4363,7 @@ function FlashcardView({ lesson, onBack, onFinish, initialTab, deckWords, deckTi
       }
     })();
     return () => { alive = false; };
-  }, [storageKey]);
+  }, [storageKey, userId, includeMastered]);
 
   // Mỗi khi chuyển thẻ (kể cả khi cùng 1 từ bị đẩy lại ngay do "Chưa thuộc"
   // và hàng đợi chỉ còn 1 từ): quay về mặt trước + nạp ghi chú đã lưu.
@@ -4021,6 +4378,7 @@ function FlashcardView({ lesson, onBack, onFinish, initialTab, deckWords, deckTi
     setProgress(updated);
     try {
       await window.storage.set(storageKey, JSON.stringify(updated));
+      await saveRemoteVocabularyState(lesson.no, userId, updated);
     } catch (e) {
       /* lưu thất bại — tiến trình vẫn hiển thị tạm trong phiên này */
     }
@@ -4140,7 +4498,12 @@ function FlashcardView({ lesson, onBack, onFinish, initialTab, deckWords, deckTi
               </div>
 
               {/* MẶT SAU */}
-              <div className="fc2-face back">
+              <div
+                className="fc2-face back"
+                onClick={(e) => {
+                  if (!e.target.closest("button, textarea, input, a")) setGrammarFlipped(false);
+                }}
+              >
                 <div className="fc2-back-scroll">
                   <div className="gm-top-row">
                     <div className="gm-box">
@@ -4250,14 +4613,16 @@ function FlashcardView({ lesson, onBack, onFinish, initialTab, deckWords, deckTi
             </button>
             {loaded && cardProgress?.box && <span className="fc2-box-pill">Hộp {cardProgress.box}/5</span>}
 
-            <h2 className="fc2-word" lang="ko">{card.word}</h2>
-            <button
-              className="fc2-audio-round"
-              onClick={(e) => { e.stopPropagation(); speakKo(card.word); }}
-              aria-label="Nghe từ"
-            >
-              <Volume2 size={18} color="#fff" />
-            </button>
+            <div className="fc2-word-line">
+              <h2 className="fc2-word" lang="ko">{card.word}</h2>
+              <button
+                className="fc2-audio-round"
+                onClick={(e) => { e.stopPropagation(); playVocabularyAudio(card); }}
+                aria-label={`Nghe phát âm ${card.word}`}
+              >
+                <Volume2 size={18} color="#fff" />
+              </button>
+            </div>
 
             <div className="fc2-pill-row">
               <span className="fc2-tag-pill">
@@ -4285,7 +4650,12 @@ function FlashcardView({ lesson, onBack, onFinish, initialTab, deckWords, deckTi
           </div>
 
           {/* ================= MẶT SAU ================= */}
-          <div className="fc2-face back">
+          <div
+            className="fc2-face back"
+            onClick={(e) => {
+              if (!e.target.closest("button, textarea, input, a")) setFlipped(false);
+            }}
+          >
             <button
               className={`fc2-star ${starred ? "on" : ""}`}
               onClick={(e) => { e.stopPropagation(); toggleStar(); }}
@@ -5073,22 +5443,17 @@ function CommunityView({ profile, onBack, onStudyCustomLesson, hideHeader }) {
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
   const [deletingKey, setDeletingKey] = useState(null);
-  // Không có máy chủ xác thực thật nên "quyền admin" chỉ là quy ước đơn giản:
-  // ai đặt Tên hiển thị là "Admin" (không phân biệt hoa/thường) sẽ thấy nút xoá
-  // trên MỌI bài viết trong Bảng tin.
-  const isAdmin = (profile?.displayName || "").trim().toLowerCase() === "admin";
+  const [reportingKey, setReportingKey] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
   const loadPosts = async () => {
     try {
-      const listRes = await window.storage.list("community-post:", true);
-      const keys = listRes?.keys || [];
-      const items = await Promise.all(keys.map(async (k) => {
-        try {
-          const r = await window.storage.get(k, true);
-          return r?.value ? { key: k, ...JSON.parse(r.value) } : null;
-        } catch (e) { return null; }
-      }));
-      setPosts(items.filter(Boolean).sort((a, b) => b.createdAt - a.createdAt));
+      if (!supabase) throw new Error("Supabase chưa được cấu hình");
+      const { data: { session } } = await supabase.auth.getSession();
+      setCurrentUserId(session?.user?.id || null);
+      const { data, error } = await supabase.from("posts").select("id, user_id, content, created_at, comments_locked, profiles!posts_user_id_fkey(display_name)").eq("status", "visible").order("created_at", { ascending: false });
+      if (error) throw error;
+      setPosts((data || []).map((post) => ({ key: post.id, userId: post.user_id, author: post.profiles?.display_name || "Người học", content: post.content, createdAt: new Date(post.created_at).getTime(), likes: 0, commentsLocked: post.comments_locked, source: "supabase" })));
     } catch (e) { setPosts([]); }
   };
 
@@ -5101,10 +5466,12 @@ function CommunityView({ profile, onBack, onStudyCustomLesson, hideHeader }) {
   const submitPost = async () => {
     if (!draft.trim() || posting) return;
     setPosting(true);
-    const key = `community-post:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const post = { author: profile.displayName, content: draft.trim(), createdAt: Date.now(), likes: 0 };
     try {
-      await window.storage.set(key, JSON.stringify(post), true);
+      if (!supabase) throw new Error("Supabase chưa được cấu hình");
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) throw new Error("Phiên đăng nhập đã hết hạn");
+      const { error } = await supabase.from("posts").insert({ user_id: session.user.id, content: draft.trim() });
+      if (error) throw error;
       setDraft("");
       setShowCompose(false);
       await loadPosts();
@@ -5116,7 +5483,6 @@ function CommunityView({ profile, onBack, onStudyCustomLesson, hideHeader }) {
     if (liked[post.key]) return;
     const newLikes = (post.likes || 0) + 1;
     try {
-      await window.storage.set(post.key, JSON.stringify({ author: post.author, content: post.content, createdAt: post.createdAt, likes: newLikes }), true);
       const newLiked = { ...liked, [post.key]: true };
       setLiked(newLiked);
       await window.storage.set("community-liked", JSON.stringify(newLiked));
@@ -5128,35 +5494,40 @@ function CommunityView({ profile, onBack, onStudyCustomLesson, hideHeader }) {
     if (deletingKey) return;
     setDeletingKey(post.key);
     try {
-      await window.storage.delete(post.key, true);
+      if (!supabase) throw new Error("Supabase chưa được cấu hình");
+      const { error } = await supabase.from("posts").delete().eq("id", post.key);
+      if (error) throw error;
       setPosts((ps) => ps.filter((p) => p.key !== post.key));
     } catch (e) {}
     setDeletingKey(null);
   };
 
+  const reportPost = async (post) => {
+    if (reportingKey) return;
+    const reason = window.prompt("Lý do báo cáo bài viết này:");
+    if (!reason?.trim()) return;
+    setReportingKey(post.key);
+    try {
+      if (!supabase) throw new Error("Supabase chưa được cấu hình");
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) throw new Error("Phiên đăng nhập đã hết hạn");
+      const { error } = await supabase.from("content_reports").insert({ reporter_id: session.user.id, post_id: post.key, reason: reason.trim() });
+      if (error) throw error;
+      window.alert("Đã gửi báo cáo đến quản trị viên.");
+    } catch (e) { window.alert(e?.message || "Không thể gửi báo cáo."); }
+    setReportingKey(null);
+  };
+
   return (
-    <section className="cg-page">
+    <section className="cg-page community-page community-wide-page">
       {!hideHeader ? (
         <div className="fc2-topbar">
           <div className="fc2-top-left">
             <button className="fc2-back" onClick={onBack} aria-label="Về trang chủ"><ChevronLeft size={20} /></button>
             <span className="fc2-title"><MessageCircle size={18} color="#7C6FE4" /> Cộng đồng</span>
           </div>
-          {tab === "feed" && (
-            <button className="cg-new-btn" onClick={() => setShowCompose((s) => !s)}>
-              <Plus size={15} /> Đăng bài mới
-            </button>
-          )}
         </div>
-      ) : (
-        tab === "feed" && (
-          <div className="fc2-topbar" style={{ justifyContent: "flex-end" }}>
-            <button className="cg-new-btn" onClick={() => setShowCompose((s) => !s)}>
-              <Plus size={15} /> Đăng bài mới
-            </button>
-          </div>
-        )
-      )}
+      ) : null}
 
       <div className="cg-tabs">
         <button className={`cg-tab ${tab === "feed" ? "on" : ""}`} onClick={() => setTab("feed")}>💬 Bảng tin</button>
@@ -5167,16 +5538,35 @@ function CommunityView({ profile, onBack, onStudyCustomLesson, hideHeader }) {
         <>
           <p className="cg-sub">Nơi mọi người học chia sẻ câu hay, mẹo nhớ, hay trải nghiệm học tập — mọi người dùng app đều thấy chung một bảng tin.</p>
 
-          {showCompose && (
+          {!showCompose ? (
+            <div className="cg-thread-starter">
+              <span className="cg-post-avatar">{(profile?.displayName || "?")[0].toUpperCase()}</span>
+              <button className="cg-thread-prompt" onClick={() => setShowCompose(true)}>
+                <b>{profile?.displayName || "Bạn"}</b>
+                <span>Bạn đang nghĩ gì?</span>
+              </button>
+              <button className="cg-new-btn" onClick={() => setShowCompose(true)}>
+                <Plus size={15} /> Đăng bài
+              </button>
+            </div>
+          ) : (
             <div className="cg-compose">
-              <textarea
-                className="cg-compose-input"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="Chia sẻ một câu tiếng Hàn hay, mẹo nhớ từ vựng, hay trải nghiệm học tập của bạn..."
-                rows={3}
-              />
+              <div className="cg-compose-main">
+                <span className="cg-post-avatar">{(profile?.displayName || "?")[0].toUpperCase()}</span>
+                <div className="cg-compose-body">
+                  <div className="cg-compose-author">{profile?.displayName || "Bạn"}</div>
+                  <textarea
+                    autoFocus
+                    className="cg-compose-input"
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    placeholder="Chia sẻ một câu tiếng Hàn, mẹo học hay trải nghiệm của bạn..."
+                    rows={4}
+                  />
+                </div>
+              </div>
               <div className="cg-compose-actions">
+                <span className="cg-compose-spacer" />
                 <button className="cg-cancel-btn" onClick={() => { setShowCompose(false); setDraft(""); }}>Huỷ</button>
                 <button className="cg-post-btn" onClick={submitPost} disabled={!draft.trim() || posting}>
                   {posting ? "Đang đăng..." : "Đăng bài"}
@@ -5202,22 +5592,24 @@ function CommunityView({ profile, onBack, onStudyCustomLesson, hideHeader }) {
                       <b>{p.author}</b>
                       <span className="cg-post-time">{timeAgo(p.createdAt)}</span>
                     </div>
-                    {isAdmin && (
+                    {p.userId === currentUserId && (
                       <button
                         className="cg-post-delete"
                         onClick={() => deletePost(p)}
                         disabled={deletingKey === p.key}
-                        aria-label="Xoá bài (quyền admin)"
-                        title="Xoá bài (quyền admin)"
+                        aria-label="Xoá bài của bạn"
+                        title="Xoá bài của bạn"
                       >
                         <Trash2 size={15} />
                       </button>
                     )}
                   </div>
                   <p className="cg-post-content">{p.content}</p>
-                  <button className={`cg-like-btn ${liked[p.key] ? "on" : ""}`} onClick={() => toggleLike(p)}>
-                    {liked[p.key] ? "❤️" : "🤍"} {p.likes || 0}
-                  </button>
+                  <div className="cg-post-actions">
+                    <button className={`cg-like-btn ${liked[p.key] ? "on" : ""}`} onClick={() => toggleLike(p)}>{liked[p.key] ? "❤️" : "🤍"} {p.likes || 0}</button>
+                    {p.userId !== currentUserId && <button className="cg-report-btn" onClick={() => reportPost(p)} disabled={reportingKey === p.key}><Flag size={13} /> {reportingKey === p.key ? "Đang gửi…" : "Báo cáo"}</button>}
+                    {p.commentsLocked && <span className="cg-comments-locked"><Lock size={12} /> Bình luận đã khóa</span>}
+                  </div>
                 </div>
               ))}
             </div>
@@ -5338,6 +5730,10 @@ function CustomLessonHub({ profile, onStudy }) {
   const [title, setTitle] = useState("");
   const [words, setWords] = useState([{ ko: "", vi: "", img: "", showImg: false }, { ko: "", vi: "", img: "", showImg: false }, { ko: "", vi: "", img: "", showImg: false }]);
   const [quizTypes, setQuizTypes] = useState([]); // "fillblank" | "matching" | "listening"
+  const [attachments, setAttachments] = useState([]);
+  const [wordUploads, setWordUploads] = useState({});
+  const [fileUploading, setFileUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [genStep, setGenStep] = useState(""); // "" | "ai" | "saving"
   const [genError, setGenError] = useState("");
@@ -5392,6 +5788,39 @@ function CustomLessonHub({ profile, onStudy }) {
   const removeWordRow = (i) => setWords((ws) => ws.filter((_, idx) => idx !== i));
   const toggleQuizType = (t) => setQuizTypes((qs) => (qs.includes(t) ? qs.filter((x) => x !== t) : [...qs, t]));
 
+  const uploadWordImage = async (i, file) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return setUploadError("Ảnh từ vựng phải là tệp hình ảnh.");
+    if (file.size > 5 * 1024 * 1024) return setUploadError("Mỗi ảnh từ vựng tối đa 5 MB.");
+    setUploadError("");
+    setWordUploads((state) => ({ ...state, [i]: true }));
+    try {
+      const asset = await uploadCloudinaryAsset(file, "lesson");
+      updateWord(i, "img", asset.url);
+      updateWord(i, "showImg", true);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Không tải được ảnh.");
+    } finally {
+      setWordUploads((state) => ({ ...state, [i]: false }));
+    }
+  };
+
+  const uploadLessonFiles = async (files) => {
+    const selected = Array.from(files || []);
+    if (!selected.length || fileUploading) return;
+    setUploadError("");
+    setFileUploading(true);
+    try {
+      const assets = [];
+      for (const file of selected) assets.push(await uploadCloudinaryAsset(file, "lesson"));
+      setAttachments((current) => [...current, ...assets]);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Không tải được tệp.");
+    } finally {
+      setFileUploading(false);
+    }
+  };
+
   const saveLesson = async () => {
     const validWords = words.filter((w) => w.ko.trim() && w.vi.trim());
     if (!title.trim() || validWords.length < 2 || saving) return;
@@ -5414,7 +5843,7 @@ function CustomLessonHub({ profile, onStudy }) {
     const code = genLessonCode();
     const lesson = {
       code, title: title.trim(), author: profile.displayName, createdAt: Date.now(),
-      words: enrichedWords, quizTypes,
+      words: enrichedWords, quizTypes, attachments,
     };
     try {
       await window.storage.set(`custom-lesson:${code}`, JSON.stringify(lesson), true);
@@ -5422,6 +5851,7 @@ function CustomLessonHub({ profile, onStudy }) {
       setTitle("");
       setWords([{ ko: "", vi: "", img: "", showImg: false }, { ko: "", vi: "", img: "", showImg: false }, { ko: "", vi: "", img: "", showImg: false }]);
       setQuizTypes([]);
+      setAttachments([]);
       await loadLessons();
       // Bài do chính mình tạo tự động có trong "sổ tay của tôi", không cần bấm Lưu thêm.
       await saveToNotebook(code);
@@ -5456,11 +5886,20 @@ function CustomLessonHub({ profile, onStudy }) {
 
       {subTab === "browse" ? (
         <>
-          <div className="cl-find-row">
-            <input className="cl-find-input" value={codeInput} onChange={(e) => setCodeInput(e.target.value.toUpperCase())} placeholder="Nhập mã bạn nhận được (VD: AB3XZ9)" maxLength={6} />
-            <button className="cl-find-btn" onClick={findByCode} disabled={!codeInput.trim() || finding}>{finding ? "Đang tìm..." : "Tìm"}</button>
+          <div className="cl-find-card">
+            <div className="cl-find-copy">
+              <span className="cl-find-icon"><Link2 size={19} /></span>
+              <div>
+                <b>Tham gia bài học bằng mã</b>
+                <span>Nhập mã 6 ký tự được bạn bè hoặc giáo viên chia sẻ.</span>
+              </div>
+            </div>
+            <div className="cl-find-row">
+              <input className="cl-find-input" value={codeInput} onChange={(e) => setCodeInput(e.target.value.toUpperCase())} placeholder="Ví dụ: AB3XZ9" maxLength={6} />
+              <button className="cl-find-btn" onClick={findByCode} disabled={!codeInput.trim() || finding}>{finding ? "Đang tìm..." : "Tìm bài học"}</button>
+            </div>
+            {findErr && <div className="cl-find-err">{findErr}</div>}
           </div>
-          {findErr && <div className="cl-find-err">{findErr}</div>}
 
           {savedLessons === null ? null : savedLessons.length > 0 && (
             <>
@@ -5482,7 +5921,10 @@ function CustomLessonHub({ profile, onStudy }) {
             </>
           )}
 
-          <p className="cg-sub" style={{ marginTop: 4 }}>Hoặc chọn từ các bài học mọi người đã chia sẻ:</p>
+          <div className="cl-section-title">
+            <div><BookOpen size={17} /> <b>Khám phá bài học cộng đồng</b></div>
+            <span>Chọn một bài đã được mọi người chia sẻ để bắt đầu học.</span>
+          </div>
 
           {lessons === null ? (
             <div className="cg-loading"><Sparkles size={18} color="#7C6FE4" /> Đang tải...</div>
@@ -5513,6 +5955,13 @@ function CustomLessonHub({ profile, onStudy }) {
         <ShareCodeBox code={savedCode} onCreateAnother={() => setSavedCode(null)} />
       ) : (
         <div className="cl-create-form">
+          <div className="cl-create-head">
+            <span><Sparkles size={20} /></span>
+            <div>
+              <h3>Tạo bài học của riêng bạn</h3>
+              <p>Thêm từ vựng, chọn dạng kiểm tra và nhận mã để chia sẻ với mọi người.</p>
+            </div>
+          </div>
           <label className="auth-label">Tên bài học</label>
           <input className="auth-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="VD: Từ vựng du lịch của mình" />
 
@@ -5520,6 +5969,7 @@ function CustomLessonHub({ profile, onStudy }) {
           {words.map((w, i) => (
             <div key={i} className="cl-word-block">
               <div className="cl-word-row">
+                <span className="cl-word-number">{i + 1}</span>
                 <input className="cl-word-input" lang="ko" value={w.ko} onChange={(e) => updateWord(i, "ko", e.target.value)} placeholder="Tiếng Hàn" />
                 <input className="cl-word-input" value={w.vi} onChange={(e) => updateWord(i, "vi", e.target.value)} placeholder="Nghĩa tiếng Việt" />
                 {words.length > 2 && (
@@ -5528,7 +5978,7 @@ function CustomLessonHub({ profile, onStudy }) {
               </div>
               {w.showImg ? (
                 <div className="cl-word-img-row">
-                  <ImageIcon size={14} color="#8B85AB" />
+                  {w.img ? <img className="cl-word-img-preview" src={w.img} alt="" /> : <ImageIcon size={14} color="#8B85AB" />}
                   <input
                     className="cl-word-img-input"
                     value={w.img || ""}
@@ -5540,13 +5990,38 @@ function CustomLessonHub({ profile, onStudy }) {
                   </button>
                 </div>
               ) : (
-                <button className="cl-add-img-link" onClick={() => updateWord(i, "showImg", true)}>
-                  <ImageIcon size={12} /> Thêm hình
-                </button>
+                <div className="cl-image-actions">
+                  <label className={`cl-add-img-link ${wordUploads[i] ? "uploading" : ""}`}>
+                    <ImageIcon size={12} /> {wordUploads[i] ? "Đang tải lên..." : "Tải ảnh lên Cloudinary"}
+                    <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={wordUploads[i]} onChange={(e) => uploadWordImage(i, e.target.files?.[0])} />
+                  </label>
+                  <button className="cl-add-img-link" onClick={() => updateWord(i, "showImg", true)}><Link2 size={12} /> Dán URL</button>
+                </div>
               )}
             </div>
           ))}
           <button className="cl-add-word" onClick={addWordRow}><Plus size={13} /> Thêm từ</button>
+
+          <div className="cl-attachments">
+            <div className="cl-attachments-head">
+              <div><b>Tệp đính kèm</b><span>Ảnh, âm thanh, video, PDF hoặc tài liệu · tối đa 20 MB/tệp</span></div>
+              <label className={`cl-upload-file ${fileUploading ? "uploading" : ""}`}>
+                <Plus size={13} /> {fileUploading ? "Đang tải..." : "Thêm tệp"}
+                <input type="file" multiple disabled={fileUploading} onChange={(e) => { uploadLessonFiles(e.target.files); e.target.value = ""; }} />
+              </label>
+            </div>
+            {attachments.length > 0 && (
+              <div className="cl-attachment-list">
+                {attachments.map((file, index) => (
+                  <div className="cl-attachment-item" key={`${file.publicId}-${index}`}>
+                    {file.resourceType === "image" ? <img src={file.url} alt="" /> : <span className="cl-file-icon"><Link2 size={15} /></span>}
+                    <a href={file.url} target="_blank" rel="noreferrer" title={file.name}>{file.name}</a>
+                    <button onClick={() => setAttachments((items) => items.filter((_, i) => i !== index))} aria-label={`Xóa ${file.name}`}><XCircle size={15} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           <label className="auth-label" style={{ marginTop: 8 }}>Thể thức kiểm tra (tuỳ chọn, có thể chọn nhiều)</label>
           <p className="cg-sub" style={{ marginTop: -6, marginBottom: 2 }}>AI sẽ tự soạn câu ví dụ + mẹo ghi nhớ cho từng từ, và tạo sẵn bài kiểm tra theo các thể thức bạn chọn.</p>
@@ -5567,6 +6042,7 @@ function CustomLessonHub({ profile, onStudy }) {
             ))}
           </div>
 
+          {uploadError && <div className="cl-find-err">{uploadError}</div>}
           {genError && <div className="cl-find-err">{genError}</div>}
 
           {(() => {
@@ -5818,14 +6294,29 @@ async function computeRadarStats(lesson, profile) {
 
 // Mục tiêu học trong ngày (phút/ngày) — tự reset khi sang ngày mới.
 async function getDailyGoal() {
+  const remote = await loadRemoteDailyGoal(todayStr());
+  if (remote) {
+    try { await window.storage.set(DAILY_GOAL_KEY, JSON.stringify(remote)); } catch (e) {}
+    return remote;
+  }
   try {
     const r = await window.storage.get(DAILY_GOAL_KEY);
     const g = JSON.parse(r.value);
-    if (g.todayDate !== todayStr()) return { targetMinutes: g.targetMinutes || 15, todayMinutes: 0, todayDate: todayStr() };
-    return { targetMinutes: g.targetMinutes || 15, todayMinutes: g.todayMinutes || 0, todayDate: g.todayDate };
-  } catch (e) { return { targetMinutes: 15, todayMinutes: 0, todayDate: todayStr() }; }
+    if (g.todayDate !== todayStr() || g.trackingVersion !== 2) return { targetMinutes: g.targetMinutes || 15, todayMinutes: 0, todayDate: todayStr(), trackingVersion: 2 };
+    return { targetMinutes: g.targetMinutes || 15, todayMinutes: g.todayMinutes || 0, todayDate: g.todayDate, trackingVersion: 2 };
+  } catch (e) { return { targetMinutes: 15, todayMinutes: 0, todayDate: todayStr(), trackingVersion: 2 }; }
 }
-async function saveDailyGoal(g) { try { await window.storage.set(DAILY_GOAL_KEY, JSON.stringify(g)); } catch (e) {} }
+async function saveDailyGoal(g) {
+  const normalized = g.todayDate === todayStr()
+    ? { ...g, targetMinutes: Number(g.targetMinutes) || 15 }
+    : { ...g, targetMinutes: Number(g.targetMinutes) || 15, todayMinutes: 0, todayDate: todayStr(), trackingVersion: 2 };
+  try {
+    await window.storage.set(DAILY_GOAL_KEY, JSON.stringify(normalized));
+    window.dispatchEvent(new CustomEvent("kstudy:daily-goal-updated", { detail: normalized }));
+    await saveRemoteDailyGoal(normalized);
+    return normalized;
+  } catch (e) { return normalized; }
+}
 
 /* ------------------------------------------------------------------ */
 /*  KẾ HOẠCH HỌC TẬP — ngày mục tiêu hoàn thành giáo trình, lịch học    */
@@ -5840,12 +6331,27 @@ const DEFAULT_STUDY_PLAN = {
   lastReminderShownDate: null,
 };
 async function getStudyPlan() {
+  let local = { ...DEFAULT_STUDY_PLAN };
   try {
     const r = await window.storage.get(STUDY_PLAN_KEY);
-    return { ...DEFAULT_STUDY_PLAN, ...JSON.parse(r.value) };
-  } catch (e) { return { ...DEFAULT_STUDY_PLAN }; }
+    if (r?.value) local = { ...local, ...JSON.parse(r.value) };
+  } catch (e) {}
+  const remote = await loadRemoteStudyPlan();
+  if (!remote) return local;
+  const merged = { ...local, ...remote, lastReminderShownDate: local.lastReminderShownDate };
+  try {
+    localStorage.setItem(CELEBRATION_SOUND_KEY, String(remote.effectSoundEnabled));
+    await window.storage.set(STUDY_PLAN_KEY, JSON.stringify(merged));
+  } catch (e) {}
+  return merged;
 }
-async function saveStudyPlan(plan) { try { await window.storage.set(STUDY_PLAN_KEY, JSON.stringify(plan)); } catch (e) {} }
+async function saveStudyPlan(plan, effectSoundEnabled = isCelebrationSoundEnabled()) {
+  try {
+    await window.storage.set(STUDY_PLAN_KEY, JSON.stringify(plan));
+    localStorage.setItem(CELEBRATION_SOUND_KEY, String(effectSoundEnabled));
+  } catch (e) {}
+  await saveRemoteStudyPlan(plan, effectSoundEnabled);
+}
 
 // Thông báo (chấm đỏ): có bài đăng mới trong Cộng đồng kể từ lần xem gần nhất.
 async function hasNewCommunityActivity() {
@@ -6061,6 +6567,13 @@ function AuthView({ onDone }) {
   );
 }
 
+const ACTIVE_STUDY_VIEWS = new Set([
+  "lesson-detail", "vocab-list", "vocab-notebook", "flashcards", "flashcards-notebook", "flashcards-schedule",
+  "flashcards-grammar", "nguphap-book", "shadowing", "dictation", "review-quiz",
+  "study-custom-lesson", "test-custom-lesson", "aiquiz", "vocab-test-fillblank",
+  "vocab-test-match", "vocab-test-image",
+]);
+
 export default function KoreanStudyDashboard({ authenticatedProfile = null, onSignOut = null }) {
   const [profile, setProfile] = useState(authenticatedProfile || undefined); // undefined=đang tải, null=chưa đăng nhập, object=đã có hồ sơ
   const [active, setActive] = useState("home");
@@ -6077,9 +6590,55 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const [rankTab, setRankTab] = useState("xephang"); // tab mặc định khi mở màn Xếp hạng & Cộng đồng
   const [customLessonData, setCustomLessonData] = useState(null);
   const [reviewDeck, setReviewDeck] = useState(null); // bộ từ tuỳ chỉnh khi ôn từ Sổ tay từ vựng
+  const [vocabBackView, setVocabBackView] = useState("vocab-lessons");
+  const [lessonListBackView, setLessonListBackView] = useState("curriculum-hub");
+  const [lessonDetailBackView, setLessonDetailBackView] = useState("tuvung-bai");
+  const [activitySelectBackView, setActivitySelectBackView] = useState("home");
+  const [reviewHubBackView, setReviewHubBackView] = useState("home");
+  const [learningCatalog, setLearningCatalog] = useState(null);
+  const [addingTextbookId, setAddingTextbookId] = useState(null);
+  const [catalogNotice, setCatalogNotice] = useState(null);
   const goHome = () => { setView("home"); setActive("home"); };
-  const openLesson = (l) => { setLesson(l); setView("lesson-detail"); };
+  const openLesson = (l, backView = "tuvung-bai") => {
+    if (l?.textbookId && l?.id) markLessonStarted(l.textbookId, l.id).catch(() => {});
+    if (l?.textbookId === learningCatalog?.activeTextbook?.id) {
+      setLearningCatalog((current) => current ? { ...current, hasStarted: true, continueLesson: l } : current);
+    }
+    setLesson(l); setLessonDetailBackView(backView); setView("lesson-detail");
+  };
+  const openVocabulary = (l, backView) => { setLesson(l); setVocabBackView(backView); setView("vocab-list"); };
   const immersive = IMMERSIVE_VIEWS.includes(view);
+
+  const prepareLearningCatalog = (catalog) => {
+    if (!catalog) return null;
+    const vocabulary = catalog.vocabulary.map((remoteWord) => {
+      const fallback = VOCAB_SAMPLE.find((word) => word.word === remoteWord.word) || {};
+      return { ...fallback, ...remoteWord, img: remoteWord.img || fallback.img, audio: remoteWord.audio || fallback.audio };
+    });
+    return { ...catalog, vocabulary };
+  };
+
+  const openLearningBook = async (book, backView = "curriculum-hub") => {
+    const catalog = prepareLearningCatalog(await loadLearningCatalog(book.id));
+    if (catalog) setLearningCatalog(catalog);
+    setLessonListBackView(backView);
+    setView("tuvung-bai");
+  };
+
+  const handleAddTextbook = async (book) => {
+    setAddingTextbookId(book.id);
+    setCatalogNotice(null);
+    try {
+      await addUserTextbook(book.id);
+      const catalog = prepareLearningCatalog(await loadLearningCatalog(book.id));
+      if (catalog) setLearningCatalog(catalog);
+      setCatalogNotice({ type: "success", message: `Đã thêm “${book.title}” vào giáo trình của bạn.` });
+    } catch (error) {
+      setCatalogNotice({ type: "error", message: error?.message || "Không thể thêm giáo trình. Vui lòng thử lại." });
+    } finally {
+      setAddingTextbookId(null);
+    }
+  };
 
   useEffect(() => {
     if (authenticatedProfile) {
@@ -6094,18 +6653,27 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     return () => { alive = false; };
   }, [authenticatedProfile]);
 
-  // Đồng hồ tính phút học trong ngày cho "Mục tiêu trong ngày" — cứ mỗi 30s
-  // app còn mở thì cộng thêm 0.5 phút vào mục tiêu hôm nay (tự reset khi
-  // sang ngày mới, xử lý trong getDailyGoal/saveDailyGoal).
   useEffect(() => {
-    if (!profile) return;
+    if (!profile) return undefined;
+    let alive = true;
+    loadLearningCatalog().then((catalog) => {
+      if (alive && catalog) setLearningCatalog(prepareLearningCatalog(catalog));
+    });
+    return () => { alive = false; };
+  }, [profile]);
+
+  // Chỉ tính thời gian ở màn hình học thật và khi tab trình duyệt đang hiển thị.
+  // Trang chủ, menu, cài đặt, cộng đồng, màn chọn bài/kết quả đều không tính.
+  useEffect(() => {
+    if (!profile || !ACTIVE_STUDY_VIEWS.has(view)) return;
     const id = setInterval(async () => {
+      if (document.visibilityState !== "visible") return;
       const g = await getDailyGoal();
       g.todayMinutes = (g.todayMinutes || 0) + 0.5;
       await saveDailyGoal(g);
     }, 30000);
     return () => clearInterval(id);
-  }, [profile]);
+  }, [profile, view]);
 
   if (profile === undefined) {
     return <div className="app"><style>{css}</style><div className="auth-loading"><Sparkles size={22} color="#7C6FE4" /></div></div>;
@@ -6121,32 +6689,57 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
 
   const openNotif = async () => { await markNotifSeen(); setRankTab("congdong"); setView("xephang"); setActive("xephanghub"); };
   const openLeaderboard = () => { setRankTab("xephang"); setView("xephang"); setActive("xephanghub"); };
-  const goDictation = () => setView("dictation-select");
-  const goShadowing = () => setView("shadowing-select");
-  const goReview = () => setView("review-hub");
+  const goDictation = () => { setActivitySelectBackView("home"); setView("dictation-select"); };
+  const goShadowing = () => { setActivitySelectBackView("home"); setView("shadowing-select"); };
+  const goReview = () => { setReviewHubBackView("home"); setView("review-hub"); };
+  const catalogLessons = learningCatalog?.lessons?.length ? learningCatalog.lessons : LESSONS_2_1;
+  const catalogVocabulary = learningCatalog?.vocabulary?.length ? learningCatalog.vocabulary : VOCAB_SAMPLE;
+  const primaryLesson = catalogLessons[0] || LESSONS_2_1[0];
+  const activeTextbookTitle = learningCatalog?.activeTextbook?.title || "세종한국어 회화 익힘책 2-1";
+  const continueTextbook = learningCatalog?.activeTextbook?.isAdded ? learningCatalog.activeTextbook : null;
+  const continueLesson = continueTextbook ? (learningCatalog?.continueLesson || catalogLessons[0]) : null;
 
   return (
     <div className={`app ${immersive ? "no-sidebar" : ""}`}>
       <style>{css}</style>
       {!immersive && (
-        <Sidebar active={active} setActive={setActive} setView={setView} setLesson={setLesson} goHome={goHome} />
+        <Sidebar active={active} setActive={setActive} setView={setView} setLesson={setLesson} goHome={goHome} onSignOut={onSignOut} isAdmin={profile?.role === "admin"} />
       )}
       <main className="main">
         {view === "home" && (
-          <>
+          <div className="dashboard-grid">
             <Header profile={profile} onOpenNotif={openNotif} />
-            <ReminderBanner onGoStudy={() => openLesson(LESSONS_2_1[0])} />
-            <ContinueLearning onGo={() => openLesson(LESSONS_2_1[0])} />
-            <WordOfDayWidget onOpen={() => { setLesson(LESSONS_2_1[0]); setView("vocab-list"); }} />
-            <DailyGoalRing />
-            <QuickAccessMenu onDictation={goDictation} onShadowing={goShadowing} onReview={goReview} />
-            <RankPreviewCard profile={profile} onOpen={openLeaderboard} />
+            <ReminderBanner onGoStudy={() => openLesson(primaryLesson, "home")} />
+            <div className="dashboard-overview">
+              <ContinueLearning
+                textbook={continueTextbook}
+                lesson={continueLesson}
+                hasStarted={learningCatalog?.hasStarted || false}
+                onGo={() => continueLesson
+                  ? openLesson(continueLesson, "home")
+                  : (setCatalogNotice(null), setView("curriculum-hub"), setActive("curriculum"))}
+              />
+              <WordOfDayWidget vocabulary={catalogVocabulary} onOpen={() => openVocabulary(primaryLesson, "home")} />
+              <RecentActivityCard profile={profile} />
+              <DailyGoalRing onChangeGoal={() => { setActive("caidat"); setView("caidat"); }} />
+              <QuickAccessMenu onDictation={goDictation} onShadowing={goShadowing} onReview={goReview} />
+              <RankPreviewCard profile={profile} onOpen={openLeaderboard} />
+            </div>
             <PersonalProgressSection profile={profile} />
             <div className="mid-row">
-              <ReviewSchedule />
-              <MyTextbooks onOpenBook={() => setView("tuvung-bai")} />
+              <ReviewSchedule
+                lesson={primaryLesson}
+                userId={profile.id}
+                vocabulary={catalogVocabulary}
+                onReview={(words) => { setLesson(primaryLesson); setReviewDeck(words); setView("flashcards-schedule"); }}
+              />
+              <MyTextbooks
+                books={learningCatalog?.myTextbooks || []}
+                onOpenBook={(book) => openLearningBook(book, "home")}
+                onAddBook={() => { setCatalogNotice(null); setView("curriculum-hub"); setActive("curriculum"); }}
+              />
             </div>
-          </>
+          </div>
         )}
         {view === "xephang" && (
           <RankingCommunityView
@@ -6160,22 +6753,26 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
         {view === "study-hub" && (
           <StudyHubView
             onBack={goHome}
-            onVocab={() => { setLesson(LESSONS_2_1[0]); setView("vocab-list"); }}
-            onDictation={() => setView("dictation-select")}
-            onShadowing={() => setView("shadowing-select")}
-            onReview={() => setView("review-hub")}
+            onVocab={() => setView("vocab-lessons")}
+            onDictation={() => { setActivitySelectBackView("study-hub"); setView("dictation-select"); }}
+            onShadowing={() => { setActivitySelectBackView("study-hub"); setView("shadowing-select"); }}
+            onReview={() => { setReviewHubBackView("study-hub"); setView("review-hub"); }}
           />
         )}
-        {view === "nguphap-hub" && <GrammarHubView onBack={goHome} onOpenBook={() => setView("nguphap-book")} />}
+        {view === "nguphap-hub" && <GrammarHubView books={learningCatalog?.textbooks} onBack={goHome} onOpenBook={() => setView("nguphap-book")} />}
         {view === "nguphap-book" && (
           <GrammarBookView
+            lessons={catalogLessons}
+            textbookTitle={activeTextbookTitle}
             onBack={() => setView("nguphap-hub")}
-            onSelectLesson={(idx) => { setLesson(LESSONS_2_1[idx]); setView("flashcards-grammar"); }}
+            onSelectLesson={(idx) => { setLesson(catalogLessons[idx]); setView("flashcards-grammar"); }}
           />
         )}
         {view === "flashcards-grammar" && lesson && (
           <FlashcardView
             lesson={lesson}
+            userId={profile.id}
+            vocabulary={catalogVocabulary}
             initialTab="grammar"
             onBack={() => setView("nguphap-book")}
             onFinish={() => setView("nguphap-book")}
@@ -6194,17 +6791,18 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
         {view === "aiquiz" && <AIQuizView onBack={goHome} />}
         {view === "review-hub" && (
           <ReviewHubView
-            onBack={goHome}
+            onBack={() => setView(reviewHubBackView)}
             onPickByLesson={() => { setReviewMode("bylesson"); setReviewSeed(null); setView("review-lesson-select"); }}
-            onPickRandom={() => { setReviewMode("random"); setLesson(LESSONS_2_1[0]); setView("review-intro"); }}
+            onPickRandom={() => { setReviewMode("random"); setLesson(primaryLesson); setView("review-intro"); }}
           />
         )}
         {view === "review-lesson-select" && (
           <ReviewLessonSelectView
+            lessons={catalogLessons}
             onBack={() => setView("review-hub")}
             onNext={(lessonNos) => {
               setReviewSelectedLessons(lessonNos);
-              setLesson(LESSONS_2_1[0]); // hiện chỉ Bài 1 có nội dung thật — dữ liệu/lịch sử ôn tập vẫn lưu theo bài này
+              setLesson(primaryLesson); // hiện chỉ Bài 1 có nội dung thật
               setView("review-intro");
             }}
           />
@@ -6256,27 +6854,40 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
           <ComingSoonView modeId={view.replace("soon-", "")} onBack={goHome} />
         )}
         {view === "caidat" && <SettingsView onBack={goHome} onSignOut={onSignOut} />}
-        {view === "curriculum-hub" && <CurriculumHubView onBack={goHome} onOpenBook={() => setView("tuvung-bai")} />}
-        {view === "tuvung-bai" && <LessonsView onBack={() => setView("curriculum-hub")} onSelect={openLesson} />}
+        {view === "curriculum-hub" && (
+          <CurriculumHubView
+            myBooks={learningCatalog?.myTextbooks || []}
+            availableBooks={learningCatalog?.availableTextbooks || []}
+            addingBookId={addingTextbookId}
+            notice={catalogNotice}
+            onBack={goHome}
+            onOpenBook={(book) => openLearningBook(book, "curriculum-hub")}
+            onAddBook={handleAddTextbook}
+          />
+        )}
+        {view === "tuvung-bai" && <LessonsView lessons={catalogLessons} textbookTitle={activeTextbookTitle} title="Giáo trình · Danh sách bài" backLabel={lessonListBackView === "home" ? "Trang chủ" : "Giáo trình"} onBack={() => setView(lessonListBackView)} onSelect={(selectedLesson) => openLesson(selectedLesson, "tuvung-bai")} />}
+        {view === "vocab-lessons" && <LessonsView lessons={catalogLessons} textbookTitle={activeTextbookTitle} title="Từ vựng · Chọn bài học" backLabel="Từ vựng & bài học" onBack={() => setView("study-hub")} onSelect={(selectedLesson) => openVocabulary(selectedLesson, "study-hub")} />}
         {view === "lesson-detail" && lesson && (
           <LessonDetailView
             lesson={lesson}
-            onBack={() => setView("tuvung-bai")}
+            onBack={() => setView(lessonDetailBackView)}
             onStartActivity={(actId) => {
-              if (actId === "tuvung") setView("vocab-list");
-              if (actId === "shadowing") setView("shadowing");
-              if (actId === "nghechep") setView("dictation");
-              if (actId === "ontap") setView("review-hub");
+              if (actId === "tuvung") { setVocabBackView("lesson-detail"); setView("vocab-list"); }
+              if (actId === "shadowing") { setActivitySelectBackView("lesson-detail"); setView("shadowing"); }
+              if (actId === "nghechep") { setActivitySelectBackView("lesson-detail"); setView("dictation"); }
+              if (actId === "ontap") { setReviewHubBackView("lesson-detail"); setView("review-hub"); }
               if (actId === "aiquiz") setView("aiquiz");
             }}
           />
         )}
         {view === "vocab-list" && lesson && (
-          <VocabListView lesson={lesson} onBack={() => setView("lesson-detail")} onStudy={() => setView("flashcards")} />
+          <VocabListView lesson={lesson} userId={profile.id} vocabulary={catalogVocabulary} onBack={() => setView(vocabBackView)} onStudy={() => setView("flashcards")} />
         )}
         {view === "vocab-notebook" && lesson && (
           <VocabNotebookView
             lesson={lesson}
+            userId={profile.id}
+            vocabulary={catalogVocabulary}
             onBack={goHome}
             onReview={(words) => { setReviewDeck(words); setView("flashcards-notebook"); }}
           />
@@ -6284,15 +6895,31 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
         {view === "flashcards-notebook" && lesson && reviewDeck && (
           <FlashcardView
             lesson={lesson}
+            userId={profile.id}
+            vocabulary={catalogVocabulary}
             deckWords={reviewDeck}
             deckTitle="Sổ tay từ vựng"
             onBack={() => setView("vocab-notebook")}
             onFinish={() => setView("vocab-notebook")}
           />
         )}
+        {view === "flashcards-schedule" && lesson && reviewDeck && (
+          <FlashcardView
+            lesson={lesson}
+            userId={profile.id}
+            vocabulary={catalogVocabulary}
+            deckWords={reviewDeck}
+            deckTitle="Lịch ôn từ vựng"
+            includeMastered
+            onBack={goHome}
+            onFinish={goHome}
+          />
+        )}
         {view === "flashcards" && lesson && (
           <FlashcardView
             lesson={lesson}
+            userId={profile.id}
+            vocabulary={catalogVocabulary}
             onBack={() => setView("vocab-list")}
             onFinish={() => setView("vocab-test-select")}
           />
@@ -6315,10 +6942,13 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
         )}
         {view === "shadowing-select" && (
           <ActivityLessonSelectView
+            lessons={catalogLessons}
+            textbookTitle={activeTextbookTitle}
             title="Shadowing"
             icon={Mic}
             color="#7C6FE4"
-            onBack={goHome}
+            onBack={() => setView(activitySelectBackView)}
+            backLabel={activitySelectBackView === "study-hub" ? "Từ vựng & bài học" : activitySelectBackView === "lesson-detail" ? `Bài ${lesson?.no || 1}` : "Trang chủ"}
             onSelect={(l) => { setLesson(l); setView("shadowing"); }}
           />
         )}
@@ -6327,10 +6957,13 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
         )}
         {view === "dictation-select" && (
           <ActivityLessonSelectView
+            lessons={catalogLessons}
+            textbookTitle={activeTextbookTitle}
             title="Nghe chép chính tả"
             icon={Headphones}
             color="#3FA95C"
-            onBack={goHome}
+            onBack={() => setView(activitySelectBackView)}
+            backLabel={activitySelectBackView === "study-hub" ? "Từ vựng & bài học" : activitySelectBackView === "lesson-detail" ? `Bài ${lesson?.no || 1}` : "Trang chủ"}
             onSelect={(l) => { setLesson(l); setView("dictation"); }}
           />
         )}
@@ -6398,6 +7031,7 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;
 }
 .nav-tile-label{font:700 12px 'Quicksand';color:#4B4470;line-height:1.25}
+.nav-label-mobile{display:none}
 .nav-tile.active .nav-tile-label{color:#fff}
 .nav-tile-soon{position:absolute;top:6px;right:6px;font-size:8px;padding:1px 5px}
 .soon-tag{
@@ -6493,11 +7127,12 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 @keyframes confetti-fall{to{transform:translateY(150px) rotate(340deg);opacity:0}}
 
 /* ---- Menu truy cập nhanh ---- */
-.qa-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.qa-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;width:100%}
 .qa-card{
-  display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 10px;
-  border:none;border-radius:16px;cursor:pointer;font:700 13px 'Quicksand';transition:.15s;
+  min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 10px;
+  border:none;border-radius:16px;cursor:pointer;font:700 13px 'Quicksand';line-height:1.25;text-align:center;transition:.15s;
 }
+.qa-card span{display:flex;align-items:center;justify-content:center;min-height:2.5em;max-width:100%;overflow-wrap:anywhere}
 .qa-card:hover{transform:translateY(-2px)}
 
 /* ---- Kích thích cạnh tranh: thẻ tóm tắt hạng ---- */
@@ -6530,19 +7165,29 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .day{
   border:1.5px solid #EEEBF8;border-radius:15px;background:#FBFAFF;
   padding:11px 7px;display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;
+  font-family:'Quicksand';cursor:pointer;transition:.18s;min-width:0;
 }
+.day:hover{transform:translateY(-2px);border-color:#C9BCF2;box-shadow:0 5px 13px rgba(124,111,228,.1)}
 .day-name{font-size:12px;font-weight:700;color:#6B6590}
 .day-date{font-size:11.5px;font-weight:600;color:#A9A3C6}
 .day-words{font:800 15px 'Baloo 2';color:#2E2A4A;margin-top:2px}
-.day-ico{margin-top:5px;opacity:.85}
+.day-ico{margin-top:5px;opacity:.7;color:#9A8FE0;display:flex}
 .day.today{background:#F1EEFC;border-color:#C9BCF2}
 .day.today .day-name{color:#7C6FE4}
+.day.selected{border-color:#7C6FE4;box-shadow:0 0 0 3px rgba(124,111,228,.11)}
+.day.selected .day-ico{color:#7C6FE4;opacity:1}
+.review-cycle{font-size:11.5px;font-weight:700;color:#9A94B5;background:#F6F4FC;border-radius:99px;padding:6px 10px}
+.review-selected-day{margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 14px;background:#F7F5FE;border:1px solid #E7E1F7;border-radius:14px}
+.review-selected-day>div{display:flex;flex-direction:column;gap:2px;min-width:0}.review-selected-day b{font-size:12.5px;color:#373151}.review-selected-day span{font-size:11.5px;font-weight:600;color:#8B85AB}
 .on-ngay{
-  margin-top:5px;border:none;border-radius:99px;background:#7C6FE4;color:#fff;
-  font:700 11.5px 'Quicksand';padding:5px 11px;cursor:pointer;
+  flex-shrink:0;border:none;border-radius:99px;background:#7C6FE4;color:#fff;
+  font:700 11.5px 'Quicksand';padding:8px 13px;cursor:pointer;display:flex;align-items:center;gap:5px;
   box-shadow:0 3px 8px rgba(124,111,228,.35);
 }
 .on-ngay:hover{background:#6C5FD6}
+.on-ngay:disabled{background:#D8D3EB;color:#8F89A6;box-shadow:none;cursor:default}
+.on-ngay.disabled{background:#D8D3EB;color:#8F89A6;box-shadow:none;cursor:default}
+.review-current-note{font-size:11.5px;font-weight:700;color:#7C6FE4;flex-shrink:0}
 
 .tip{
   margin-top:13px;display:flex;align-items:center;gap:9px;
@@ -6571,6 +7216,20 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .cont-bar > div{flex:1}
 .cont-bar em,.book-bar em{font:700 12.5px 'Quicksand';font-style:normal;color:#8B85AB}
 .cont-plant{flex-shrink:0}
+.progress-plant{overflow:visible;animation:plant-grow-in .5s cubic-bezier(.2,1.25,.4,1) both;filter:drop-shadow(0 5px 5px rgba(68,113,67,.12))}
+.plant-stem{stroke-dasharray:70;stroke-dashoffset:70;animation:plant-stem-grow .55s .08s ease-out forwards}
+.plant-leaf{opacity:0;transform-box:fill-box;transform-origin:center;animation:plant-leaf-open .35s cubic-bezier(.2,1.4,.5,1) forwards}
+.leaf-one{animation-delay:.25s}.leaf-two{animation-delay:.34s}.leaf-three{animation-delay:.42s}.leaf-four{animation-delay:.5s}.leaf-five{animation-delay:.56s}
+.plant-seed{animation:plant-seed-pulse 1.8s ease-in-out infinite}
+.mature-crown{transform-box:fill-box;transform-origin:center bottom;animation:plant-crown-open .6s .28s cubic-bezier(.2,1.2,.4,1) both}
+.mugunghwa-flower{transform-box:fill-box;transform-origin:center;animation:mugunghwa-bloom .55s cubic-bezier(.2,1.5,.4,1) both}
+.flower-one{animation-delay:.52s}.flower-two{animation-delay:.64s}.flower-three{animation-delay:.76s}.flower-four{animation-delay:.88s}
+@keyframes plant-grow-in{from{opacity:.4;transform:translateY(8px) scale(.86)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes plant-stem-grow{to{stroke-dashoffset:0}}
+@keyframes plant-leaf-open{from{opacity:0;transform:scale(.25) rotate(-12deg)}to{opacity:1;transform:scale(1) rotate(0)}}
+@keyframes plant-seed-pulse{50%{transform:translateY(-1px) scale(1.08)}}
+@keyframes plant-crown-open{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:scale(1)}}
+@keyframes mugunghwa-bloom{from{opacity:0;scale:.15;rotate:-25deg}to{opacity:1;scale:1;rotate:0deg}}
 .primary-btn{
   margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px;
   width:100%;padding:13px;border:none;border-radius:14px;
@@ -6578,6 +7237,8 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   box-shadow:0 6px 16px rgba(124,111,228,.35);transition:background .15s;
 }
 .primary-btn:hover{background:#6C5FD6}
+.continue-empty-body{flex:1;min-height:88px;border:1.5px dashed #DCD6F1;border-radius:16px;background:#FBFAFF;color:#8B7BE8;display:flex;align-items:center;justify-content:center;gap:13px;padding:16px}
+.continue-empty-body>div{display:flex;flex-direction:column;gap:3px}.continue-empty-body b{font:650 14px 'Baloo 2';color:#3B3558}.continue-empty-body span{font-size:11.5px;font-weight:500;color:#8B85AB;line-height:1.4}
 
 /* ---------------- My textbooks ---------------- */
 .books-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
@@ -6683,14 +7344,24 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .activity-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
 
 .ai-bonus-card{
-  display:flex;align-items:center;gap:14px;border:1.5px dashed #DCD3F4;border-radius:18px;
-  background:#FBFAFF;padding:16px 20px;cursor:pointer;text-align:left;width:100%;
+  position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:16px;
+  width:100%;margin-top:18px;padding:20px 22px;overflow:hidden;border:1.5px solid #DDD6F8;border-radius:20px;
+  background:linear-gradient(135deg,#F8F6FF 0%,#F0ECFF 58%,#FFF4FA 100%);cursor:pointer;text-align:left;
+  box-shadow:0 7px 22px rgba(92,72,153,.08);transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease;
 }
-.ai-bonus-card:hover{background:#F3F1FC;border-color:#8B7BE8}
-.ai-bonus-ico{font-size:26px;flex-shrink:0}
-.ai-bonus-body{flex:1;display:flex;flex-direction:column;gap:2px}
-.ai-bonus-body b{font:800 14px 'Baloo 2';color:#2E2A4A}
-.ai-bonus-body span{font-size:12px;font-weight:600;color:#8B85AB}
+.my-books-empty{min-height:100px;border:1.5px dashed #D8D2EE;border-radius:17px;background:#FBFAFF;color:#8B85AB;display:flex;align-items:center;justify-content:center;gap:9px;font-size:12.5px;font-weight:600;padding:14px;text-align:center}
+.ai-bonus-card::after{content:"";position:absolute;width:150px;height:150px;right:-65px;top:-82px;border-radius:50%;background:rgba(255,255,255,.48);pointer-events:none}
+.ai-bonus-card:hover{border-color:#9C8DEA;box-shadow:0 12px 28px rgba(92,72,153,.15);transform:translateY(-2px)}
+.ai-bonus-ico{position:relative;z-index:1;display:grid;place-items:center;width:54px;height:54px;flex-shrink:0;border-radius:17px;color:#fff;background:linear-gradient(145deg,#9182EC,#6C5DD8);box-shadow:0 8px 18px rgba(108,93,216,.25)}
+.ai-bonus-spark{position:absolute;right:-4px;top:-5px;padding:2px;border-radius:50%;color:#E5A82E;background:#fff}
+.ai-bonus-body{position:relative;z-index:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.ai-bonus-kicker{display:flex;align-items:center;gap:5px;color:#7667D7!important;font-size:9.5px!important;font-weight:700!important;letter-spacing:.7px}
+.ai-bonus-body b{font:700 16px 'Quicksand';color:#342D54}
+.ai-bonus-body>span:not(.ai-bonus-kicker):not(.ai-bonus-meta){max-width:690px;font-size:12.5px;font-weight:500;color:#797293;line-height:1.5}
+.ai-bonus-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}.ai-bonus-meta i{padding:4px 8px;border:1px solid #E2DCF5;border-radius:99px;color:#756D91;background:rgba(255,255,255,.7);font-size:9.5px;font-weight:600;font-style:normal}
+.ai-bonus-cta{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:5px;min-height:42px;padding:9px 14px;border-radius:12px;color:#fff;background:#7C6FE4;font-size:12px;font-weight:700;white-space:nowrap;box-shadow:0 6px 15px rgba(124,111,228,.25)}
+.ai-bonus-card:hover .ai-bonus-cta{background:#695BD4}.ai-bonus-card:hover .ai-bonus-cta svg{transform:translateX(2px)}.ai-bonus-cta svg{transition:transform .18s ease}
+@media(max-width:650px){.ai-bonus-card{grid-template-columns:auto minmax(0,1fr);padding:17px 15px}.ai-bonus-ico{width:48px;height:48px}.ai-bonus-cta{grid-column:1/-1;width:100%;margin-top:3px}.ai-bonus-meta{display:none}}
 
 .rv-tag-type.ai{background:#F0EEFC;color:#7C6FE4}
 .rv-unsupported-note{
@@ -6754,7 +7425,9 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 }
 
 /* ---------------- Flashcard v2 (Từ vựng & Ngữ pháp) ---------------- */
-.fc2-page{display:flex;flex-direction:column;gap:12px}
+.fc2-page{
+  width:min(100%,1120px);margin:0 auto;display:flex;flex-direction:column;gap:12px;
+}
 .fc2-topbar{
   display:flex;align-items:center;justify-content:space-between;gap:16px;
   background:#fff;border-radius:20px;padding:12px 18px;box-shadow:0 4px 20px rgba(124,111,228,.08);
@@ -6883,15 +7556,15 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 }
 
 /* --- cơ chế lật thẻ 3D --- */
-.fc2-flip-outer{perspective:1800px}
+.fc2-flip-outer{width:min(100%,920px);margin:0 auto;perspective:1800px}
 .fc2-flip-inner{
-  position:relative;width:100%;height:660px;
+  position:relative;width:100%;height:clamp(500px,calc(100svh - 285px),590px);
   transform-style:preserve-3d;transition:transform .65s cubic-bezier(.4,.15,.2,1);
 }
 .fc2-flip-inner.is-flipped{transform:rotateY(180deg)}
 .fc2-face{
   position:absolute;inset:0;backface-visibility:hidden;border-radius:26px;
-  padding:24px 28px;overflow-y:auto;box-shadow:0 6px 24px rgba(124,111,228,.1);
+  padding:24px 32px;overflow:hidden;box-shadow:0 12px 36px rgba(86,72,171,.12);
 }
 .fc2-face.front{
   background:#fff;border:2px solid #DCD3F4;cursor:pointer;
@@ -6899,49 +7572,76 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 }
 .fc2-face.back{
   background:#fff;border:2px solid #F5D6E0;transform:rotateY(180deg);
-  display:flex;flex-direction:column;
+  display:flex;flex-direction:column;cursor:pointer;
 }
 .fc2-star{
   position:absolute;top:16px;right:16px;border:none;background:transparent;cursor:pointer;
-  padding:6px;border-radius:99px;transition:transform .15s;
+  padding:6px;border-radius:99px;transition:transform .15s,background .2s,box-shadow .2s;z-index:3;
 }
 .fc2-star:hover{transform:scale(1.15)}
+.fc2-face.back > .fc2-star{
+  top:14px;right:52px;background:rgba(255,255,255,.94);box-shadow:0 3px 10px rgba(86,72,171,.1);
+}
+.fc2-face.back > .fc2-star:hover{background:#F3F1FC;box-shadow:0 5px 14px rgba(86,72,171,.16)}
 .fc2-box-pill{
   position:absolute;top:18px;left:18px;background:#F3F1FC;color:#7C6FE4;
   border:1.5px solid #E3DEF4;border-radius:99px;padding:4px 12px;font:700 11.5px 'Quicksand';
 }
 
 /* --- mặt trước --- */
-.fc2-word{margin-top:36px;font:800 42px 'Baloo 2';color:#1F1B36}
+.fc2-word-line{
+  margin-top:26px;display:flex;align-items:center;justify-content:center;gap:12px;max-width:calc(100% - 80px);
+}
+.fc2-word{margin:0;font:800 44px 'Baloo 2';line-height:1.08;color:#1F1B36}
 .fc2-audio-round{
-  margin-top:6px;width:42px;height:42px;border-radius:99px;border:none;background:#7C6FE4;
+  flex:0 0 auto;width:42px;height:42px;border-radius:99px;border:none;background:#7C6FE4;
   display:flex;align-items:center;justify-content:center;cursor:pointer;
   box-shadow:0 4px 12px rgba(124,111,228,.35);
 }
 .fc2-audio-round:hover{background:#6C5FD6}
-.fc2-pill-row{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;justify-content:center}
+.fc2-pill-row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;justify-content:center}
 .fc2-tag-pill{
   display:flex;align-items:center;gap:7px;background:#F3F1FC;color:#3F3A5F;
   border-radius:12px;padding:8px 14px;font:700 14px 'Quicksand';border:1.5px solid #E7E3F6;
 }
 .fc2-tag-pill small{color:#8B85AB;font-weight:600}
 .fc2-tag-pill.pron{background:#fff}
-.fc2-illus-holder{margin:18px 0;display:flex;justify-content:center}
-.fc2-illus-holder .fc-illus{width:190px;min-width:unset}
-.fc2-divider{width:100%;border-top:2px dashed #EFEBFA;margin:6px 0 14px}
+.fc2-illus-holder{
+  width:100%;height:auto;flex:1 1 285px;min-height:150px;max-height:285px;margin:12px 0 8px;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
+}
+.fc2-illus-holder .fc-illus{
+  width:100%;height:100%;min-width:0;min-height:0;display:flex;align-items:center;justify-content:center;
+}
+.fc2-illus-holder .fc-illus-img,
+.fc2-illus-holder .fc-illus svg{
+  display:block;width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain;object-position:center;border-radius:18px;
+}
+.fc2-illus-holder .fc-illus-note{display:none}
+.fc2-divider{width:100%;border-top:2px dashed #EFEBFA;margin:4px 0 10px}
 .fc2-mnemonic{
   background:#FBF6E9;border-radius:13px;padding:12px 16px;font-size:13.5px;font-weight:600;
   color:#7A6A3E;line-height:1.5;max-width:420px;
 }
 .fc2-mnemonic b{color:#5A5380}
 .fc2-flip-hint{
-  margin-top:auto;padding-top:16px;display:flex;align-items:center;gap:6px;
-  border:none;background:transparent;color:#A9A3C6;font:700 12.5px 'Quicksand';cursor:pointer;
+  margin-top:auto;padding:8px 13px;display:flex;align-items:center;justify-content:center;gap:7px;
+  border:1px solid transparent;border-radius:999px;background:transparent;color:#8B85AB;
+  font:700 12.5px 'Quicksand';cursor:pointer;transition:color .2s,background .2s,border-color .2s,transform .2s;
 }
-.fc2-flip-hint:hover{color:#7C6FE4}
+.fc2-flip-hint:hover{color:#6C5FD6;background:#F3F1FC;border-color:#E3DEF4;transform:translateY(-1px)}
+.fc2-flip-hint.back{align-self:center;margin-top:10px;background:#F8F6FE;border-color:#E7E3F6;color:#7165D3}
+.fc2-flip-hint.back:hover{background:#EEEAFB;border-color:#C9BCF2}
 
 /* --- mặt sau --- */
-.fc2-back-scroll{flex:1;overflow-y:auto;padding-top:6px}
+.fc2-back-scroll{
+  flex:1;min-height:0;overflow-y:auto;padding:6px 8px 4px 0;
+  scrollbar-width:thin;scrollbar-color:#B9ADEE transparent;
+}
+.fc2-back-scroll::-webkit-scrollbar{width:7px}
+.fc2-back-scroll::-webkit-scrollbar-track{background:transparent}
+.fc2-back-scroll::-webkit-scrollbar-thumb{background:#C9BCF2;border-radius:99px}
+.fc2-back-scroll::-webkit-scrollbar-thumb:hover{background:#8B7BE8}
 .fc2-meaning{
   position:relative;background:#F1EDFB;border-radius:16px;padding:16px 74px 16px 18px;margin-bottom:16px;
 }
@@ -6988,14 +7688,18 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .fc2-note:focus{outline:none;border-color:#8B7BE8}
 
 /* --- 3 nút đánh giá cuối thẻ --- */
-.fc2-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.fc2-actions{
+  width:min(100%,920px);margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;
+}
 .fc2-act-btn{
   --rc:#8B85AB;
   display:flex;align-items:center;justify-content:center;gap:6px;
   border:1.5px solid var(--rc);color:var(--rc);background:#fff;border-radius:14px;
-  padding:12px 10px;font:700 13.5px 'Quicksand';cursor:pointer;transition:all .15s;
+  min-height:50px;padding:12px 16px;font:700 14px 'Quicksand';cursor:pointer;
+  transition:transform .2s,box-shadow .2s,background .2s,color .2s,border-color .2s;
 }
-.fc2-act-btn:hover{filter:brightness(.97)}
+.fc2-act-btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(69,57,139,.12)}
+.fc2-act-btn:active{transform:translateY(0) scale(.985)}
 .fc2-act-btn.picked{background:var(--rc);color:#fff}
 .fc2-act-btn.primary{
   grid-column:4;background:#7C6FE4;border-color:#7C6FE4;color:#fff;
@@ -7004,12 +7708,17 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .fc2-act-btn.primary:hover{background:#6C5FD6}
 .fc2-act-btn.primary:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
 
-.fc2-actions-2{grid-template-columns:1fr 1fr}
-.fc2-act-btn.known{--rc:#D64545;padding:15px 10px;font-size:14.5px}
-.fc2-act-btn.known.primary{--rc:#3FA95C;background:#3FA95C;border-color:#3FA95C}
+.fc2-actions-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.fc2-actions-2 .fc2-act-btn.primary{grid-column:auto}
+.fc2-act-btn.known{
+  --rc:#D64545;width:100%;min-width:0;min-height:56px;padding:14px 18px;font-size:14.5px;
+  white-space:nowrap;background:#FFF8F8;
+}
+.fc2-act-btn.known svg{flex:0 0 auto}
+.fc2-act-btn.known.primary{--rc:#3FA95C;background:#3FA95C;border-color:#3FA95C;box-shadow:0 6px 16px rgba(63,169,92,.24)}
 .fc2-act-btn.known.primary:hover{background:#379950}
 .fc2-act-btn.known:not(.primary){color:#D64545;border-color:#D64545;background:#fff}
-.fc2-act-btn.known:not(.primary):hover{background:#FDEEEE}
+.fc2-act-btn.known:not(.primary):hover{background:#FDEEEE;box-shadow:0 8px 20px rgba(214,69,69,.13)}
 .fc2-flip-prompt{text-align:center;font-size:13px;font-weight:600;color:#8B85AB;margin-top:4px}
 .fc2-session-done{
   display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;
@@ -7026,16 +7735,43 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   box-shadow:0 8px 24px rgba(0,0,0,.2);z-index:50;
 }
 
-@media (max-width:1020px){
-  .fc2-flip-inner{height:520px}
-}
-@media (max-width:480px){
-  .fc2-flip-inner{height:460px}
-}
 @media (max-width:620px){
-  .fc2-word{font-size:32px}
-  .fc2-actions{grid-template-columns:repeat(2,1fr)}
+  .fc2-page{gap:9px;padding-bottom:calc(74px + env(safe-area-inset-bottom))}
+  .fc2-topbar{padding:10px 12px;border-radius:16px}
+  .fc2-top-mid{order:3;width:100%;min-width:0}
+  .fc2-pill{padding:5px 8px;font-size:11px}
+  .fc2-content-tab{padding:9px 7px}
+  .fc2-flip-inner{height:clamp(430px,calc(100svh - 300px),520px)}
+  .fc2-face{padding:20px 16px;border-radius:20px}
+  .fc2-word-line{margin-top:22px;gap:9px;max-width:calc(100% - 52px)}
+  .fc2-word{font-size:34px}
+  .fc2-audio-round{width:38px;height:38px}
+  .fc2-illus-holder{height:auto;flex-basis:230px;min-height:135px;max-height:230px;margin:9px 0 7px}
+  .fc2-mnemonic{padding:9px 12px;font-size:12px}
+  .fc2-actions{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
   .fc2-act-btn.primary{grid-column:span 2}
+  .fc2-actions-2{
+    position:fixed;z-index:30;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));
+    width:auto;padding:8px;border:1px solid rgba(227,222,244,.9);border-radius:18px;
+    background:rgba(255,255,255,.92);box-shadow:0 10px 30px rgba(46,42,74,.18);backdrop-filter:blur(14px);
+  }
+  .fc2-actions-2 .fc2-act-btn{min-width:0;min-height:48px;padding:10px 8px;font-size:13px;border-radius:12px}
+  .fc2-actions-2 .fc2-act-btn.primary{grid-column:auto}
+  .fc2-flip-hint.back{margin-top:6px;padding:7px 11px}
+  .fc2-face.back > .fc2-star{right:38px;top:10px}
+}
+@media (max-width:390px){
+  .fc2-title{font-size:14px}
+  .fc2-pill.xp{display:none}
+  .fc2-flip-inner{height:440px}
+  .fc2-pill-row{gap:6px;margin-top:10px}
+  .fc2-tag-pill{padding:6px 9px;font-size:12px}
+  .fc2-word-line{max-width:calc(100% - 42px)}
+  .fc2-word{font-size:30px}
+  .fc2-audio-round{width:34px;height:34px}
+  .fc2-illus-holder{height:auto;flex-basis:175px;min-height:120px;max-height:175px}
+  .fc2-actions-2{left:6px;right:6px;gap:6px;padding:6px}
+  .fc2-actions-2 .fc2-act-btn{font-size:12px;gap:4px;padding-inline:5px}
 }
 
 /* ---------------- Bài tập từ vựng (qz-) ---------------- */
@@ -7319,7 +8055,10 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   100%{box-shadow:0 0 0 0 rgba(229,86,107,0)}
 }
 .sw-mic-caption{text-align:center;margin-top:14px;font:700 13.5px 'Quicksand';color:#7C6FE4}
-.sw-timer{text-align:center;margin-top:5px;font:700 12.5px 'Quicksand';color:#A9A3C6}
+.sw-timer{text-align:center;margin-top:5px;font:700 12.5px 'Quicksand';color:#A9A3C6;transition:color .2s ease}
+.sw-timer.is-recording{color:#7C6FE4}
+.sw-timer.is-ending{color:#EF5B67;animation:swTimerPulse .65s ease-in-out infinite alternate}
+@keyframes swTimerPulse{to{opacity:.48;transform:scale(1.04)}}
 
 .sw-unsupported{
   margin-top:14px;display:flex;align-items:center;gap:8px;justify-content:center;text-align:center;
@@ -7585,6 +8324,38 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 }
 .rv-types-count b{color:#7C6FE4}
 
+/* Màn cấu hình ôn tập: ưu tiên thứ bậc thị giác và khả năng quét nhanh. */
+.rv-review-setup{max-width:1040px;gap:18px}
+.rv-review-setup .rv-hero{min-height:190px;padding:26px 30px;border:1px solid #e5dffa;background:linear-gradient(135deg,#faf9ff 0%,#f1eeff 52%,#f7f5ff 100%);box-shadow:0 10px 28px rgba(91,72,153,.08)}
+.rv-review-setup .rv-hero-body{text-align:left;padding-left:4px}
+.rv-review-setup .rv-title{margin:1px 0 0;font-size:30px;line-height:1.2}
+.rv-review-setup .rv-sub{max-width:650px;margin:8px 0 0;font-weight:500;line-height:1.65}
+.rv-review-setup .rv-stat-row{justify-content:flex-start;margin-top:16px}
+.rv-review-setup .rv-stat-pill{min-height:34px;padding:7px 13px;border:1px solid #eeeaf7;box-shadow:0 3px 10px rgba(69,53,120,.05);font-weight:600}
+.rv-review-setup .rv-lesson-pill{margin-bottom:9px;font-weight:700}
+.rv-review-setup .rv-hero>svg{width:82px;height:auto;flex:none;opacity:.9}
+.rv-review-setup .rv-diff-card{padding:25px 28px;gap:20px;border:1px solid #e9e4f5;border-radius:24px;box-shadow:0 12px 32px rgba(77,58,135,.08)}
+.rv-review-setup .rv-types-title{margin-bottom:0;font-size:16px;font-weight:700}
+.rv-review-setup .rv-star-row{gap:12px}
+.rv-review-setup .rv-star-btn{min-height:82px;justify-content:center;gap:9px;border-color:#e6e0f3;background:#fff;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease,background .18s ease}
+.rv-review-setup .rv-star-btn:hover{border-color:#a99ceb;transform:translateY(-2px);box-shadow:0 8px 18px rgba(92,72,153,.09)}
+.rv-review-setup .rv-star-btn.on{border-color:#7c6fe4;background:linear-gradient(145deg,#f8f6ff,#efecff);box-shadow:0 0 0 3px rgba(124,111,228,.1),0 9px 20px rgba(91,72,153,.1)}
+.rv-review-setup .rv-star-btn.on .rv-star-label{color:#5547bd}
+.rv-review-setup .rv-star-label{font-size:12px;font-weight:600}
+.rv-review-setup .rv-diff-detail{display:grid;grid-template-columns:150px minmax(0,1fr);align-items:start;gap:16px;padding:18px 20px;border:1px solid #efebf8;background:#faf9fe}
+.rv-review-setup .rv-diff-qcount{padding-top:3px;font-size:16px;line-height:1.4}
+.rv-review-setup .rv-diff-types{gap:8px}
+.rv-review-setup .rv-diff-type-chip{min-height:30px;padding:6px 11px;font-size:11.5px;font-weight:600}
+.rv-review-setup .rv-start-btn{min-height:52px;border-radius:15px;font-size:15px;transition:transform .18s ease,box-shadow .18s ease,background .18s ease}
+.rv-review-setup .rv-start-btn:hover{transform:translateY(-2px);box-shadow:0 9px 22px rgba(91,75,207,.32)}
+.rv-review-setup .rv-tip{align-self:stretch;border:1px solid #f3e4bd;border-radius:17px;padding:13px 17px;background:#fff9eb;font-weight:500;line-height:1.6}
+.rv-review-setup .rv-types-card{padding:20px 24px;border:1px solid #ebe6f5;box-shadow:0 8px 24px rgba(77,58,135,.06)}
+.rv-review-setup .rv-types-count{text-align:left;margin:8px 0 0;font-weight:500}
+@media(max-width:720px){
+  .rv-review-setup .rv-hero{align-items:flex-start;padding:20px}.rv-review-setup .rv-hero-body{padding-left:0}.rv-review-setup .rv-hero>svg{display:none}.rv-review-setup .rv-title{font-size:25px}.rv-review-setup .rv-star-row{grid-template-columns:repeat(2,minmax(0,1fr))}.rv-review-setup .rv-star-btn:last-child{grid-column:1/-1}.rv-review-setup .rv-diff-card{padding:19px 16px}.rv-review-setup .rv-diff-detail{grid-template-columns:1fr;padding:15px}.rv-review-setup .rv-tip{border-radius:15px}
+}
+@media(max-width:420px){.rv-review-setup .rv-star-icons svg{width:13px;height:13px}.rv-review-setup .rv-star-label{font-size:11px}}
+
 /* --- quiz --- */
 .rv-quiz-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .rv-quiz-title{font:800 16px 'Baloo 2';color:#2E2A4A}
@@ -7765,15 +8536,112 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 
 /* ---------------- Cộng đồng ---------------- */
 .cg-page{display:flex;flex-direction:column;gap:16px;max-width:720px;margin:0 auto;width:100%}
+.wide-page{max-width:1400px;gap:18px}
+.wide-page>.fc2-topbar{width:100%;padding:14px 20px}
+.wide-page>.cg-sub{font-size:14px;padding-inline:2px}
+.community-page{max-width:760px}
+.community-wide-page{max-width:1400px}
+.community-wide-page .community-page{max-width:none;margin:0;width:100%}
+.community-wide-page>.cg-tabs{width:100%;padding:5px;border-radius:15px}
+.community-wide-page>.cg-tabs .cg-tab{min-height:44px;font-size:14px}
+.community-wide-page .cg-feed{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+.community-wide-page .cg-post{height:100%;min-width:0;padding:18px 20px;border-radius:18px}
+.community-wide-page .cg-compose{width:100%;padding:20px 22px}
+.community-wide-page .cl-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ranking-page,.leaderboard-page{max-width:1400px}
+.ranking-page>.cg-tabs{width:100%;padding:5px;border-radius:15px}
+.ranking-page>.cg-tabs .cg-tab{min-height:44px;font-size:14px}
+.ranking-page .leaderboard-page{max-width:none;margin:0;width:100%}
+.ranking-page .lb-list,.leaderboard-page>.lb-list{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;width:100%;
+}
+.ranking-page .lb-row,.leaderboard-page>.lb-list .lb-row{
+  min-height:68px;padding:15px 18px;border-radius:16px;box-shadow:0 3px 14px rgba(124,111,228,.06);
+}
+.ranking-page .lb-rank,.leaderboard-page .lb-rank{width:36px;font-size:17px}
+.ranking-page .lb-name,.leaderboard-page .lb-name{font-size:15px}
+.ranking-page .lb-xp,.leaderboard-page .lb-xp{font-size:14px}
+.study-wide-page .study-hub-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.study-wide-page .study-hub-card{min-height:118px;padding:20px 22px}
+.settings-wide-page{max-width:1200px}
+
+@media (max-width:900px){
+  .wide-page{gap:14px}
+  .community-wide-page .cg-feed,.community-wide-page .cl-list{grid-template-columns:1fr;gap:11px}
+  .community-wide-page .cg-post{padding:16px 17px}
+  .ranking-page .lb-list,.leaderboard-page>.lb-list{grid-template-columns:1fr;gap:9px}
+  .ranking-page .lb-row,.leaderboard-page>.lb-list .lb-row{min-height:58px;padding:12px 14px}
+  .study-wide-page .study-hub-grid{grid-template-columns:1fr;gap:11px}
+  .study-wide-page .study-hub-card{min-height:0;padding:16px 18px}
+}
 .cg-new-btn{
   display:flex;align-items:center;gap:6px;border:none;border-radius:99px;background:#7C6FE4;color:#fff;
   padding:10px 18px;font:700 13px 'Quicksand';cursor:pointer;box-shadow:0 5px 14px rgba(124,111,228,.32);
 }
 .cg-new-btn:hover{background:#6C5FD6}
+.cg-thread-starter{
+  width:100%;display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:13px;
+  background:#fff;border:1px solid #ECE7F8;border-radius:18px;padding:15px 18px;
+  box-shadow:0 5px 20px rgba(124,111,228,.08);transition:border-color .2s,box-shadow .2s;
+}
+.cg-thread-starter:hover{border-color:#C9BCF2;box-shadow:0 8px 25px rgba(124,111,228,.13)}
+.cg-thread-starter>.cg-post-avatar{width:42px;height:42px;font-size:15px}
+.cg-thread-prompt{
+  min-width:0;border:none;background:transparent;padding:2px 0;display:flex;flex-direction:column;align-items:flex-start;
+  gap:2px;text-align:left;cursor:text;font-family:'Quicksand';
+}
+.cg-thread-prompt b{font-size:13.5px;color:#2E2A4A}
+.cg-thread-prompt span{font-size:13px;font-weight:600;color:#A09AB9}
+@media (max-width:560px){
+  .cg-thread-starter{grid-template-columns:38px minmax(0,1fr);gap:10px;padding:12px 13px;border-radius:15px}
+  .cg-thread-starter>.cg-post-avatar{width:36px;height:36px;font-size:13px}
+  .cg-thread-starter>.cg-new-btn{grid-column:1/-1;width:100%;justify-content:center;padding:10px 14px}
+  .community-wide-page .cg-compose{padding:14px 13px;border-radius:16px}
+  .cg-compose-main{grid-template-columns:35px minmax(0,1fr);gap:9px}
+  .cg-compose-main>.cg-post-avatar{width:35px;height:35px;font-size:12px}
+  .cg-compose-input{min-height:100px;font-size:13px}
+  .cg-compose-actions{margin-left:0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .cg-compose-spacer{display:none}
+  .cg-compose-actions button{width:100%}
+}
 .cg-sub{font-size:13px;font-weight:600;color:#8B85AB;margin-top:-8px}
 
 /* Ngữ pháp — trang tổng hợp: lưới chọn giáo trình + danh sách bài */
 .gm-hub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.curriculum-page{max-width:1400px;margin:0 auto;width:100%;gap:18px}
+.curriculum-page .fc2-topbar{width:100%;padding:14px 20px}
+.curriculum-page .cg-sub{font-size:14px;padding:0 2px}
+.curriculum-page .gm-hub-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}
+.curriculum-page .gm-hub-card{min-height:132px;padding:20px 22px;border-radius:19px}
+.curriculum-page .gm-hub-card b{font-size:16px;line-height:1.4}
+.curriculum-page .gm-hub-count{font-size:13px}
+.curriculum-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-top:2px;padding:0 2px}
+.curriculum-section-head.discover-head{margin-top:18px;padding-top:20px;border-top:1px solid #EAE5F6}
+.curriculum-section-head h2{margin:0;color:#2E2A4A;font:600 20px 'Baloo 2'}
+.curriculum-section-head p{margin:2px 0 0;color:#8B85AB;font-size:12.5px;font-weight:500}
+.curriculum-section-head>span{white-space:nowrap;color:#7C6FE4;background:#F0EDFC;border-radius:999px;padding:6px 10px;font-size:11.5px;font-weight:650}
+.curriculum-empty{min-height:145px;border:1.5px dashed #DCD6F1;border-radius:19px;background:#FBFAFF;color:#8B85AB;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:22px;text-align:center}
+.curriculum-empty svg{color:#9A8EF0}.curriculum-empty b{font:600 16px 'Baloo 2';color:#514A72}.curriculum-empty span{font-size:12.5px;font-weight:500}
+.curriculum-empty.compact{min-height:88px;flex-direction:row}
+.curriculum-empty-action{margin-top:7px;min-height:38px;border:0;border-radius:11px;background:#7C6FE4;color:#fff;padding:8px 16px;display:flex;align-items:center;justify-content:center;gap:6px;font:650 12.5px 'Quicksand';cursor:pointer;box-shadow:0 5px 14px rgba(124,111,228,.22);transition:.16s}
+.curriculum-empty-action:hover{background:#6C5FD6;transform:translateY(-1px)}
+
+@media (max-width:1320px) and (min-width:861px){
+  .curriculum-page .gm-hub-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (max-width:1040px) and (min-width:681px){
+  .curriculum-page .gm-hub-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:680px){
+  .curriculum-page{gap:13px}
+  .curriculum-page .gm-hub-grid{grid-template-columns:1fr;gap:11px}
+  .curriculum-page .gm-hub-card{min-height:108px;padding:16px 17px}
+  .curriculum-section-head{align-items:flex-start}
+  .curriculum-section-head h2{font-size:18px}
+  .curriculum-section-head p{font-size:11.5px;line-height:1.45}
+  .curriculum-section-head>span{font-size:10.5px;padding:5px 8px}
+  .curriculum-empty{min-height:122px;padding:18px 14px}
+}
 
 /* ---- Từ vựng & bài học: hub gộp ---- */
 .study-hub-grid{display:flex;flex-direction:column;gap:12px}
@@ -7808,13 +8676,22 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .gm-hub-card{
   display:flex;flex-direction:column;align-items:flex-start;gap:6px;
   border:1.5px solid #EFE9FB;border-radius:16px;padding:16px;background:#fff;
-  cursor:pointer;text-align:left;transition:.15s;font-family:'Quicksand';
+  cursor:default;text-align:left;transition:.15s;font-family:'Quicksand';
 }
 .gm-hub-card.has:hover{border-color:#3FA95C;box-shadow:0 4px 14px rgba(63,169,92,.15)}
 .gm-hub-card.soon{opacity:.55;cursor:not-allowed}
+.gm-hub-card.discover.soon{opacity:1;cursor:default}
 .gm-hub-badge{font:800 10px 'Quicksand';letter-spacing:.06em;color:#3FA95C;background:#EBF7EE;border-radius:8px;padding:3px 8px}
 .gm-hub-card b{font:700 15px 'Baloo 2';color:#3B2A55}
 .gm-hub-count{font-size:12.5px;color:#8B85AB;font-weight:600}
+.gm-hub-description{margin:0;color:#77708F;font-size:11.5px;font-weight:500;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:34px}
+.gm-book-action{width:100%;margin-top:auto;min-height:38px;border:1px solid #DCD5F2;border-radius:11px;background:#fff;color:#6558CC;display:flex;align-items:center;justify-content:center;gap:6px;font:650 12.5px 'Quicksand';cursor:pointer;transition:.16s}
+.gm-book-action:hover:not(:disabled){border-color:#8B7BE8;background:#F6F3FF;transform:translateY(-1px)}
+.gm-book-action.add{border-color:#7C6FE4;background:#7C6FE4;color:#fff;box-shadow:0 5px 13px rgba(124,111,228,.2)}
+.gm-book-action.add:hover:not(:disabled){background:#6C5FD6}
+.gm-book-action:disabled{opacity:.55;cursor:not-allowed}
+.catalog-notice{border-radius:13px;padding:11px 14px;font-size:12.5px;font-weight:600}
+.catalog-notice.success{color:#247B46;background:#EAF8EF;border:1px solid #BFE7CC}.catalog-notice.error{color:#B84050;background:#FFF0F2;border:1px solid #F3C4CB}
 
 .gm-lesson-list{display:flex;flex-direction:column;gap:10px}
 .gm-lesson-row{
@@ -7833,10 +8710,16 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .gm-lesson-count{font-size:12px;color:#3FA95C;font-weight:700;flex-shrink:0}
 
 
-.cg-compose{background:#fff;border-radius:18px;padding:16px 18px;box-shadow:0 4px 20px rgba(124,111,228,.1);display:flex;flex-direction:column;gap:10px}
-.cg-compose-input{border:1.5px solid #E3DEF4;border-radius:13px;padding:12px 15px;font:600 14px 'Quicksand';color:#2E2A4A;resize:vertical}
-.cg-compose-input:focus{outline:none;border-color:#8B7BE8}
-.cg-compose-actions{display:flex;justify-content:flex-end;gap:10px}
+.cg-compose{background:#fff;border:1px solid #E9E4F8;border-radius:20px;padding:20px 22px;box-shadow:0 8px 28px rgba(124,111,228,.1);display:flex;flex-direction:column;gap:14px}
+.cg-compose-main{display:grid;grid-template-columns:42px minmax(0,1fr);gap:13px;align-items:start}
+.cg-compose-main>.cg-post-avatar{width:42px;height:42px;font-size:15px}
+.cg-compose-body{min-width:0;display:flex;flex-direction:column}
+.cg-compose-author{font:800 14px 'Quicksand';color:#2E2A4A;padding:2px 2px 5px}
+.cg-compose-input{width:100%;min-height:112px;border:0;background:#fff!important;color:#2E2A4A!important;-webkit-text-fill-color:#2E2A4A;padding:6px 2px 10px;font:600 14px/1.65 'Quicksand';resize:none;caret-color:#7C6FE4;color-scheme:light}
+.cg-compose-input::placeholder{color:#AAA3C2!important;-webkit-text-fill-color:#AAA3C2;opacity:1}
+.cg-compose-input:focus{outline:none}
+.cg-compose-actions{display:flex;align-items:center;gap:9px;border-top:1px solid #F0EDF8;padding-top:13px;margin-left:55px}
+.cg-compose-spacer{flex:1}
 .cg-cancel-btn{border:1.5px solid #E3DEF4;background:#fff;color:#8B85AB;border-radius:12px;padding:9px 16px;font:700 13px 'Quicksand';cursor:pointer}
 .cg-post-btn{border:none;background:#7C6FE4;color:#fff;border-radius:12px;padding:9px 18px;font:700 13px 'Quicksand';cursor:pointer}
 .cg-post-btn:disabled{opacity:.5;cursor:not-allowed}
@@ -7846,33 +8729,38 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 
 /* ---- Cài đặt: Kế hoạch học tập ---- */
 .settings-card{
-  background:#fff;border-radius:20px;padding:22px 24px;box-shadow:0 4px 20px rgba(124,111,228,.08);
-  display:flex;flex-direction:column;gap:16px;max-width:640px;
+  width:100%;max-width:none;background:#fff;border:1px solid #E9E4F8;border-radius:24px;padding:26px;
+  box-shadow:0 8px 30px rgba(124,111,228,.09);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;
 }
-.settings-card-title{display:flex;align-items:center;gap:8px;font:800 17px 'Baloo 2';color:#2E2A4A}
-.settings-hint{font-size:13px;font-weight:600;color:#8B85AB;margin-top:-10px}
-.settings-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-top:1px solid #F3F1FC}
+.settings-card-title{grid-column:1/-1;display:flex;align-items:center;gap:12px;font:800 20px 'Baloo 2';color:#2E2A4A}
+.settings-card-title>span{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#7C6FE4,#9A8EF0);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 15px rgba(124,111,228,.25)}
+.settings-card-title>div{display:flex;flex-direction:column;line-height:1.15}.settings-card-title small{font:600 11.5px 'Quicksand';color:#9A94B5;margin-top:4px}
+.settings-hint{grid-column:1/-1;font-size:13px;font-weight:600;color:#8B85AB;margin:-7px 0 4px 56px}
+.settings-row{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:19px;background:#FBFAFF;border:1px solid #ECE7F8;border-radius:17px;min-width:0}
 .settings-row.column{flex-direction:column;align-items:stretch;gap:10px}
+.settings-schedule-row{grid-column:1/-1}
 .settings-row-label{display:flex;flex-direction:column;gap:2px}
-.settings-row-label b{font:700 14px 'Quicksand';color:#2E2A4A}
-.settings-row-label span{font-size:12px;font-weight:600;color:#8B85AB}
+.settings-row-label b{font:800 14px 'Quicksand';color:#2E2A4A}
+.settings-row-label span{font-size:11.5px;font-weight:600;color:#8B85AB;line-height:1.45}
 .settings-minute-input{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.settings-minute-input input{width:64px;border:1.5px solid #EEEBF8;border-radius:10px;padding:8px 10px;font:700 14px 'Quicksand';color:#2E2A4A;text-align:center}
+.settings-minute-input input{width:76px;min-height:44px;border:1.5px solid #DCD5F2;border-radius:12px;padding:8px 10px;background:#fff!important;color:#2E2A4A!important;-webkit-text-fill-color:#2E2A4A;color-scheme:light;font:800 15px 'Quicksand';text-align:center}
 .settings-minute-input span{font-size:13px;font-weight:600;color:#8B85AB}
 .settings-date-input, .settings-time-input{
-  border:1.5px solid #EEEBF8;border-radius:10px;padding:8px 12px;font:700 13px 'Quicksand';color:#2E2A4A;flex-shrink:0;
+  min-height:44px;border:1.5px solid #DCD5F2;border-radius:12px;padding:8px 12px;background:#fff!important;color:#2E2A4A!important;-webkit-text-fill-color:#2E2A4A;color-scheme:light;font:700 13px 'Quicksand';flex-shrink:0;
 }
+.settings-minute-input input:focus,.settings-date-input:focus,.settings-time-input:focus{outline:none;border-color:#7C6FE4;box-shadow:0 0 0 4px rgba(124,111,228,.1)}
 .settings-projection{
-  display:flex;align-items:center;gap:7px;background:#F0EEFC;color:#5B4FC4;border-radius:12px;
-  padding:9px 14px;font-size:12.5px;font-weight:700;margin-top:-8px;
+  grid-column:1/-1;display:flex;align-items:center;justify-content:center;gap:7px;background:#F0EEFC;color:#5B4FC4;border-radius:13px;
+  padding:11px 14px;font-size:12.5px;font-weight:700;margin-top:-4px;
 }
 .settings-projection.overdue{background:#FCEEEE;color:#B83A3A}
-.settings-week-row{display:flex;gap:7px}
+.settings-week-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:9px}
 .settings-day-btn{
-  flex:1;border:1.5px solid #EEEBF8;background:#fff;color:#8B85AB;border-radius:11px;
-  padding:10px 0;font:700 12.5px 'Quicksand';cursor:pointer;
+  min-height:44px;border:1.5px solid #E3DEF4;background:#fff;color:#8B85AB;border-radius:12px;
+  padding:10px 0;font:800 12.5px 'Quicksand';cursor:pointer;transition:.18s;
 }
-.settings-day-btn.on{background:#7C6FE4;border-color:#7C6FE4;color:#fff}
+.settings-day-btn:hover{border-color:#A99DEC;transform:translateY(-1px)}
+.settings-day-btn.on{background:linear-gradient(135deg,#7C6FE4,#8D80E9);border-color:#7C6FE4;color:#fff;box-shadow:0 5px 12px rgba(124,111,228,.2)}
 .settings-toggle{
   width:46px;height:26px;border-radius:99px;border:none;background:#E0DCF3;position:relative;cursor:pointer;flex-shrink:0;transition:background .15s;
 }
@@ -7882,8 +8770,19 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   transition:transform .15s;box-shadow:0 1px 3px rgba(0,0,0,.2);
 }
 .settings-toggle.on .settings-toggle-knob{transform:translateX(20px)}
-.settings-note{display:flex;align-items:flex-start;gap:7px;font-size:12px;font-weight:600;color:#8B85AB;line-height:1.5;margin:0;flex-wrap:wrap}
-.settings-save-btn{align-self:flex-start;margin-top:4px}
+.settings-note{grid-column:1/-1;display:flex;align-items:flex-start;gap:7px;font-size:12px;font-weight:600;color:#8B85AB;line-height:1.5;margin:0;padding:11px 13px;background:#FFF9EC;border-radius:12px;flex-wrap:wrap}
+.settings-save-btn{grid-column:1/-1;justify-self:end;min-width:210px;min-height:44px;margin-top:2px;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:0 6px 16px rgba(124,111,228,.24)}
+
+@media(max-width:760px){
+  .settings-card{grid-template-columns:1fr;padding:18px 14px;border-radius:18px;gap:12px}
+  .settings-card-title,.settings-hint,.settings-schedule-row,.settings-projection,.settings-note,.settings-save-btn{grid-column:1}
+  .settings-hint{margin:-5px 0 3px}
+  .settings-row{padding:15px;align-items:flex-start;flex-direction:column}
+  .settings-minute-input,.settings-date-input,.settings-time-input{width:100%}
+  .settings-minute-input input{flex:1;width:auto}
+  .settings-week-row{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .settings-save-btn{width:100%;min-width:0;justify-self:stretch}
+}
 
 /* ---- Banner nhắc học (Trang chủ) ---- */
 .reminder-banner{
@@ -7956,43 +8855,126 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 }
 .cg-like-btn.on{color:#E5566B}
 .cg-like-btn:hover{background:#FBFAFF}
+.cg-post-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.cg-post-actions .cg-like-btn{margin-top:0}.cg-report-btn{display:inline-flex;align-items:center;gap:5px;border:0;border-radius:99px;padding:5px 9px;color:#9a7380;background:transparent;font:600 11.5px 'Quicksand';cursor:pointer}.cg-report-btn:hover{color:#c24962;background:#fff0f3}.cg-report-btn:disabled{opacity:.55;cursor:wait}.cg-comments-locked{display:inline-flex;align-items:center;gap:4px;margin-left:auto;color:#9a7b45;font-size:10.5px;font-weight:600}
 
 .cg-tabs{display:flex;gap:8px;background:#F3F1FC;border-radius:13px;padding:4px}
 .cg-tabs.mini{margin-bottom:4px}
 .cg-tab{flex:1;border:none;background:transparent;border-radius:10px;padding:9px;font:700 13px 'Quicksand';color:#8B85AB;cursor:pointer}
 .cg-tab.on{background:#fff;color:#7C6FE4;box-shadow:0 2px 8px rgba(0,0,0,.06)}
 
-.cl-hub{display:flex;flex-direction:column;gap:14px}
-.cl-find-row{display:flex;gap:9px}
-.cl-find-input{flex:1;min-width:0;border:1.5px solid #E3DEF4;border-radius:13px;padding:11px 15px;font:700 14px 'Quicksand';color:#2E2A4A;letter-spacing:1px}
-.cl-find-input:focus{outline:none;border-color:#8B7BE8}
-.cl-find-btn{border:none;background:#7C6FE4;color:#fff;border-radius:13px;padding:0 20px;font:700 13px 'Quicksand';cursor:pointer}
+.cl-hub{display:flex;flex-direction:column;gap:18px;width:100%}
+.cl-hub>.cg-tabs.mini{
+  width:min(100%,680px);align-self:center;margin-bottom:2px;padding:5px;background:#EDE9FA;border:1px solid #E3DEF4;border-radius:15px;
+}
+.cl-hub>.cg-tabs.mini .cg-tab{min-height:42px;font-size:13.5px}
+.cl-find-card{
+  display:grid;grid-template-columns:minmax(260px,.72fr) minmax(360px,1.28fr);align-items:center;gap:22px;
+  padding:20px 22px;background:linear-gradient(135deg,#fff,#FAF9FF);border:1px solid #E9E4F8;border-radius:20px;
+  box-shadow:0 6px 22px rgba(124,111,228,.09);
+}
+.cl-find-copy{display:flex;align-items:center;gap:13px;min-width:0}
+.cl-find-icon{width:44px;height:44px;border-radius:14px;background:#F0EEFC;color:#7C6FE4;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.cl-find-copy>div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.cl-find-copy b{font:800 16px 'Baloo 2';color:#2E2A4A}
+.cl-find-copy span:not(.cl-find-icon){font-size:12.5px;font-weight:600;color:#8B85AB;line-height:1.45}
+.cl-find-row{display:flex;gap:9px;min-width:0}
+.cl-find-input{
+  flex:1;min-width:0;border:1.5px solid #DCD5F2;border-radius:13px;padding:12px 15px;
+  background:#fff!important;color:#2E2A4A!important;caret-color:#7C6FE4;color-scheme:light;
+  font:800 14px 'Quicksand';letter-spacing:1.5px;box-shadow:0 2px 8px rgba(62,48,126,.04);
+}
+.cl-find-input::placeholder{color:#AAA3C2;opacity:1;letter-spacing:.2px;font-weight:600}
+.cl-find-input:focus{outline:none;border-color:#8B7BE8;box-shadow:0 0 0 4px rgba(124,111,228,.12)}
+.cl-find-btn{border:none;background:#7C6FE4;color:#fff;border-radius:13px;padding:0 22px;min-height:46px;font:700 13px 'Quicksand';cursor:pointer;white-space:nowrap;box-shadow:0 5px 14px rgba(124,111,228,.25)}
+.cl-find-btn:hover:not(:disabled){background:#6C5FD6;transform:translateY(-1px)}
 .cl-find-btn:disabled{opacity:.5;cursor:not-allowed}
-.cl-find-err{font-size:12px;font-weight:700;color:#D64545}
+.cl-find-err{grid-column:1/-1;font-size:12px;font-weight:700;color:#D64545;background:#FFF3F3;border:1px solid #F2D1D1;border-radius:10px;padding:9px 12px}
+.cl-section-title{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-top:2px;padding:0 2px}
+.cl-section-title>div{display:flex;align-items:center;gap:7px;color:#7C6FE4}
+.cl-section-title b{font:800 16px 'Baloo 2';color:#2E2A4A}
+.cl-section-title>span{font-size:12px;font-weight:600;color:#A09AB9;text-align:right}
+.cl-hub>.cg-empty{
+  min-height:220px;background:rgba(255,255,255,.72);border:1.5px dashed #DCD5F2;border-radius:20px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;text-align:center;
+}
 
 .cl-list{display:flex;flex-direction:column;gap:10px}
-.cl-item{display:flex;align-items:center;gap:12px;background:#fff;border-radius:15px;padding:14px 16px;box-shadow:0 4px 20px rgba(124,111,228,.08)}
+.cl-item{display:flex;align-items:center;gap:12px;min-height:78px;background:#fff;border:1px solid #ECE7F8;border-radius:16px;padding:15px 17px;box-shadow:0 4px 18px rgba(124,111,228,.07);transition:.18s}
+.cl-item:hover{transform:translateY(-2px);border-color:#C9BCF2;box-shadow:0 8px 22px rgba(124,111,228,.12)}
 .cl-item-body{flex:1;display:flex;flex-direction:column;gap:3px}
 .cl-item-body b{font-size:14px;color:#2E2A4A}
 .cl-item-body span{font-size:11.5px;font-weight:600;color:#A9A3C6}
 .cl-study-btn{flex-shrink:0;border:none;background:#F0EEFC;color:#7C6FE4;border-radius:11px;padding:8px 16px;font:700 12.5px 'Quicksand';cursor:pointer}
 .cl-study-btn:hover{background:#E3DEF4}
 
-.cl-create-form{background:#fff;border-radius:18px;padding:18px 20px;box-shadow:0 4px 20px rgba(124,111,228,.08);display:flex;flex-direction:column}
-.cl-word-row{display:flex;gap:8px;margin-bottom:4px}
-.cl-word-input{flex:1;min-width:0;border:1.5px solid #E3DEF4;border-radius:11px;padding:9px 13px;font:600 13.5px 'Quicksand';color:#2E2A4A}
-.cl-word-input:focus{outline:none;border-color:#8B7BE8}
+@media (max-width:980px){
+  .cl-find-card{grid-template-columns:1fr;gap:15px;padding:18px}
+  .cl-section-title{align-items:flex-start;flex-direction:column;gap:3px}
+  .cl-section-title>span{text-align:left}
+}
+@media (max-width:560px){
+  .cl-hub{gap:13px}
+  .cl-hub>.cg-tabs.mini{width:100%}
+  .cl-hub>.cg-tabs.mini .cg-tab{font-size:12px;padding-inline:6px}
+  .cl-find-card{padding:15px 13px;border-radius:16px}
+  .cl-find-copy{align-items:flex-start}
+  .cl-find-icon{width:38px;height:38px;border-radius:12px}
+  .cl-find-copy b{font-size:14.5px}
+  .cl-find-row{flex-direction:column}
+  .cl-find-input{width:100%;min-height:46px}
+  .cl-find-btn{width:100%;min-height:44px}
+  .cl-item{align-items:flex-start;flex-direction:column;gap:10px;padding:14px}
+  .cl-item-actions{width:100%}
+  .cl-item-actions .cl-study-btn{flex:1}
+}
+
+.cl-create-form{
+  background:#fff;border:1px solid #E9E4F8;border-radius:22px;padding:24px 26px;
+  box-shadow:0 7px 26px rgba(124,111,228,.1);display:flex;flex-direction:column;
+}
+.cl-create-head{display:flex;align-items:center;gap:13px;padding-bottom:18px;margin-bottom:2px;border-bottom:1px solid #EFEBF8}
+.cl-create-head>span{width:46px;height:46px;border-radius:14px;background:#F0EEFC;color:#7C6FE4;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.cl-create-head h3{margin:0;font:800 19px 'Baloo 2';color:#2E2A4A}
+.cl-create-head p{margin:1px 0 0;font-size:12.5px;font-weight:600;color:#8B85AB;line-height:1.45}
+.cl-create-form>.auth-label{font-size:13px;margin-top:17px}
+.cl-create-form>.auth-input,.cl-word-input,.cl-word-img-input{
+  background:#fff!important;color:#2E2A4A!important;caret-color:#7C6FE4;color-scheme:light;
+  -webkit-text-fill-color:#2E2A4A;
+}
+.cl-create-form>.auth-input::placeholder,.cl-word-input::placeholder,.cl-word-img-input::placeholder{-webkit-text-fill-color:#AAA3C2;color:#AAA3C2;opacity:1}
+.cl-create-form>.auth-input{min-height:48px;box-shadow:0 2px 8px rgba(62,48,126,.04)}
+.cl-word-block{margin-bottom:10px;padding:13px;background:#FBFAFF;border:1px solid #ECE7F8;border-radius:15px}
+.cl-word-row{display:grid;grid-template-columns:34px minmax(0,1fr) minmax(0,1fr) auto;align-items:center;gap:9px;margin-bottom:4px}
+.cl-word-number{width:30px;height:30px;border-radius:9px;background:#EDE9FA;color:#7C6FE4;display:flex;align-items:center;justify-content:center;font:800 12px 'Baloo 2'}
+.cl-word-input{width:100%;min-width:0;min-height:43px;border:1.5px solid #E3DEF4;border-radius:11px;padding:9px 13px;font:600 13.5px 'Quicksand';color:#2E2A4A}
+.cl-word-input:focus{outline:none;border-color:#8B7BE8;box-shadow:0 0 0 3px rgba(124,111,228,.1)}
 .cl-word-remove{flex-shrink:0;border:none;background:transparent;color:#D64545;cursor:pointer;display:flex;align-items:center}
-.cl-word-block{margin-bottom:10px}
 .cl-add-img-link{
   border:none;background:transparent;color:#8B85AB;font:700 11.5px 'Quicksand';cursor:pointer;
   display:flex;align-items:center;gap:4px;padding:2px 2px;
 }
 .cl-add-img-link:hover{color:#7C6FE4}
+.cl-add-img-link.uploading{opacity:.65;pointer-events:none}
+.cl-add-img-link input,.cl-upload-file input{display:none}
+.cl-image-actions{display:flex;align-items:center;gap:15px;margin-top:5px;flex-wrap:wrap}
 .cl-word-img-row{display:flex;align-items:center;gap:6px;margin-top:4px}
-.cl-word-img-input{flex:1;min-width:0;border:1.5px dashed #E3DEF4;border-radius:10px;padding:6px 11px;font:600 12.5px 'Quicksand';color:#2E2A4A}
+.cl-word-img-preview{width:38px;height:38px;object-fit:cover;border-radius:9px;border:1px solid #E3DEF4;flex-shrink:0}
+.cl-word-img-input{flex:1;min-width:0;border:1.5px dashed #E3DEF4;border-radius:10px;padding:8px 11px;font:600 12.5px 'Quicksand';color:#2E2A4A}
 .cl-word-img-input:focus{outline:none;border-color:#8B7BE8}
 .cl-word-img-remove{flex-shrink:0;border:none;background:transparent;color:#A9A3C6;cursor:pointer;display:flex}
+
+.cl-attachments{margin-top:10px;padding:15px;background:#FBFAFF;border:1px solid #ECE7F8;border-radius:15px}
+.cl-attachments-head{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.cl-attachments-head>div{display:flex;flex-direction:column;gap:2px}
+.cl-attachments-head b{font-size:13px;color:#2E2A4A}
+.cl-attachments-head span{font-size:11px;font-weight:600;color:#9A94B5}
+.cl-upload-file{display:flex;align-items:center;gap:5px;flex-shrink:0;border:1.5px solid #DCD3F4;background:#fff;color:#7C6FE4;border-radius:10px;padding:7px 12px;font:700 11.5px 'Quicksand';cursor:pointer}
+.cl-upload-file:hover{background:#F4F1FD;border-color:#BFB3ED}.cl-upload-file.uploading{opacity:.6;pointer-events:none}
+.cl-attachment-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
+.cl-attachment-item{display:flex;align-items:center;gap:8px;min-width:0;padding:7px 9px;background:#fff;border:1px solid #EAE5F6;border-radius:10px}
+.cl-attachment-item img,.cl-file-icon{width:30px;height:30px;border-radius:7px;object-fit:cover;background:#F0EEFC;color:#7C6FE4;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.cl-attachment-item a{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#5F587E;font-size:11.5px;font-weight:700;text-decoration:none}
+.cl-attachment-item button{border:0;background:transparent;color:#C96B78;cursor:pointer;padding:2px;display:flex}
 
 .cl-quiz-types{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 2px}
 .cl-quiz-chip{
@@ -8006,6 +8988,16 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   color:#7C6FE4;border-radius:11px;padding:7px 13px;font:700 12px 'Quicksand';cursor:pointer;margin-top:2px;
 }
 .cl-save-btn{margin-top:18px;align-self:stretch;display:flex;align-items:center;justify-content:center;gap:6px}
+
+@media(max-width:560px){
+  .cl-create-form{padding:18px 13px;border-radius:17px}
+  .cl-word-row{grid-template-columns:30px minmax(0,1fr) auto}
+  .cl-word-row .cl-word-input:nth-of-type(2){grid-column:2/3}
+  .cl-word-remove{grid-column:3;grid-row:1/3}
+  .cl-attachments-head{align-items:flex-start;flex-direction:column}
+  .cl-upload-file{width:100%;justify-content:center}
+  .cl-attachment-list{grid-template-columns:1fr}
+}
 .cl-post-btn{
   border:none;background:#7C6FE4;color:#fff;border-radius:12px;padding:10px 20px;
   font:700 13px 'Quicksand';cursor:pointer;
@@ -8115,4 +9107,228 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   color:#A9865A;line-height:1.5;background:#FDF3E7;border-radius:12px;padding:11px 13px;;flex-wrap:wrap}
 .settings-signout-btn{width:100%;margin-top:12px;border:1.5px solid #D65B68;background:#fff;color:#B73E4B;border-radius:12px;padding:11px 16px;font:700 14px 'Quicksand';cursor:pointer}
 .settings-signout-btn:hover{background:#FFF2F3}
+
+/* ---------------- Refined fixed navigation + balanced dashboard ---------------- */
+@media (min-width:861px){
+  .app:not(.no-sidebar){padding-left:226px}
+  .app.no-sidebar{padding-left:16px}
+  .sidebar{
+    position:fixed;z-index:40;left:16px;top:16px;bottom:16px;
+    width:194px;height:auto;padding:16px 12px 14px;border-radius:22px;
+    overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;
+  }
+  .sidebar::-webkit-scrollbar{display:none}
+  .logo-row{padding:0 6px 14px;gap:7px}
+  .logo-badge{width:36px;height:36px;border-radius:10px;font-size:17px}
+  .logo-text{font-size:15px;white-space:nowrap}
+  .logo-row .lucide-sparkles{display:none}
+  .home-pill{margin-bottom:8px;padding:10px 12px;border-radius:12px;font-size:13px}
+  .nav-grid{display:flex;flex-direction:column;gap:6px}
+  .nav-tile{
+    min-height:48px;flex-direction:row;justify-content:flex-start;gap:10px;
+    padding:7px 9px;border-radius:13px;text-align:left;
+  }
+  .nav-tile-ico{width:34px;height:34px;border-radius:10px;flex-shrink:0}
+  .nav-tile-ico svg{width:19px;height:19px}
+  .nav-tile-label{font-size:11.5px;text-align:left}
+  .mascot{padding:5px 0 2px;transform:scale(.72);transform-origin:center bottom;max-height:112px}
+  .gem-btn{padding:9px 11px;border-radius:12px;font-size:13px}
+  .sidebar-signout{
+    display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:7px;
+    padding:9px 11px;border:1.5px solid #F1D7DC;border-radius:12px;background:#FFF7F8;
+    color:#B94B5B;font:700 12.5px 'Quicksand';cursor:pointer;transition:.16s ease;
+  }
+  .sidebar-signout:hover{background:#FDECEF;border-color:#E7AAB4;transform:translateY(-1px)}
+  .sidebar-signout:active{transform:scale(.97)}
+  .main{width:100%;max-width:1440px;margin:0 auto}
+}
+
+.dashboard-grid{
+  display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;
+  width:100%;align-items:start;
+}
+.dashboard-grid>.header{grid-column:1/-1}
+.dashboard-grid>.reminder-banner{grid-column:1/-1}
+.dashboard-grid>.continue{grid-column:span 7}
+.dashboard-grid>.wod-card{grid-column:span 5}
+.dashboard-grid>.goal-card{grid-column:span 5}
+.dashboard-grid>.card:has(.qa-grid){grid-column:span 7}
+.dashboard-grid>.rank-preview-card{grid-column:1/-1}
+.dashboard-grid>.radar-card{grid-column:1/-1}
+.dashboard-grid>.mid-row{grid-column:1/-1}
+.dashboard-grid>.card,.dashboard-grid>.rank-preview-card,.dashboard-grid>.mid-row{min-width:0}
+.dashboard-grid .card{padding:18px 20px;border-radius:20px}
+.dashboard-grid .header{padding:20px 24px;border-radius:20px}
+.dashboard-grid .rank-preview-card{max-width:none}
+.dashboard-grid .qa-card{min-height:92px;padding:14px 9px}
+.dashboard-grid .goal-card{min-height:154px}
+.dashboard-grid .continue{min-height:220px}
+.dashboard-grid .mid-row{grid-template-columns:minmax(0,1.35fr) minmax(340px,.85fr);gap:16px}
+.dashboard-grid .days{gap:7px}
+.dashboard-grid .day{padding:9px 5px}
+.dashboard-grid .books-grid{grid-template-columns:1fr;gap:9px}
+.dashboard-grid .book-card{padding:10px}
+
+.dashboard-grid>.dashboard-overview{grid-column:1/-1;min-width:0}
+.dashboard-overview{
+  display:grid;grid-template-columns:repeat(12,minmax(0,1fr));
+  grid-template-rows:84px 126px 44px 112px;gap:16px;
+}
+.dashboard-overview>.continue{grid-column:1/9;grid-row:1/3;height:100%;min-height:0}
+.dashboard-overview>.wod-card{grid-column:9/13;grid-row:1;height:100%}
+.dashboard-overview>.recent-card{grid-column:9/13;grid-row:2/4;height:100%}
+.dashboard-overview>.goal-card{grid-column:1/5;grid-row:3/5;height:100%;min-height:0}
+.dashboard-overview>.card:has(.qa-grid){grid-column:5/9;grid-row:3/5;height:100%}
+.dashboard-overview>.quick-access-card{display:flex;flex-direction:column;min-height:0}
+.dashboard-overview>.rank-preview-card{grid-column:9/13;grid-row:4;height:100%}
+.dashboard-overview>.card{padding:18px 20px;border-radius:20px}
+.dashboard-overview .continue .card-title-row{margin-bottom:8px}
+.dashboard-overview .continue .cont-body{gap:14px}
+.dashboard-overview .continue .book-3d{width:68px;height:84px}
+.dashboard-overview .continue .primary-btn{margin-top:10px;padding:11px}
+.dashboard-overview .goal-ring-row{gap:12px}
+.dashboard-overview .goal-ring-row svg{width:76px;height:76px;flex-shrink:0}
+.dashboard-overview .goal-msg{font-size:12.5px}
+.dashboard-overview .quick-access-card>.card-title{flex-shrink:0;margin-bottom:10px}
+.dashboard-overview .qa-grid{flex:1;height:auto;min-height:0;gap:9px;align-items:stretch}
+.dashboard-overview .qa-card{height:100%;min-height:0;padding:8px 7px;font-size:11px}
+.dashboard-overview .qa-card svg{width:24px;height:24px;flex-shrink:0}
+.dashboard-overview .wod-card{
+  display:grid;grid-template-columns:minmax(0,1fr) 42px;grid-template-rows:auto 1fr;
+  column-gap:14px;row-gap:5px;padding:14px 18px;border-radius:20px;
+  border:1px solid #E9E4FC;background:linear-gradient(135deg,#F8F6FF,#F0EDFC);
+  box-shadow:0 4px 18px rgba(124,111,228,.08);transition:.18s ease;
+}
+.dashboard-overview .wod-card:hover{transform:translateY(-2px);border-color:#C9BCF2;box-shadow:0 9px 24px rgba(124,111,228,.15)}
+.dashboard-overview .wod-label{grid-column:1;grid-row:1;font-size:11px;letter-spacing:.02em}
+.dashboard-overview .wod-body{grid-column:1;grid-row:2;flex-direction:row;align-items:baseline;gap:9px;line-height:1.1;overflow:hidden}
+.dashboard-overview .wod-ko{font-size:24px;line-height:1;color:#25213F;flex-shrink:0}
+.dashboard-overview .wod-vi{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.dashboard-overview .wod-audio{
+  grid-column:2;grid-row:1/3;align-self:center;justify-self:end;
+  width:42px;height:42px;box-shadow:0 5px 12px rgba(124,111,228,.25);transition:.18s ease;
+}
+.dashboard-overview .wod-audio:hover{transform:scale(1.08);box-shadow:0 8px 16px rgba(124,111,228,.32)}
+.dashboard-overview .rank-preview-card{padding:14px 16px;border-radius:20px}
+.dashboard-overview .rank-preview-body b{font-size:14px;line-height:1.2}
+.dashboard-overview .rank-preview-body span{font-size:11.5px;line-height:1.35}
+
+.recent-card{
+  background:linear-gradient(145deg,#fff 50%,#F8F6FE);border-radius:20px;padding:18px 20px;
+  box-shadow:0 4px 20px rgba(124,111,228,.08);overflow:hidden;
+}
+.recent-card .card-title{margin-bottom:12px;font-size:16px}
+.recent-list{display:flex;flex-direction:column;gap:11px}
+.recent-item{display:flex;align-items:flex-start;gap:9px;min-width:0}
+.recent-dot{width:7px;height:7px;border-radius:50%;margin-top:6px;flex-shrink:0}
+.recent-item.purple .recent-dot{background:#7C6FE4}
+.recent-item.green .recent-dot{background:#25A17A}
+.recent-item>div{display:flex;flex-direction:column;min-width:0}
+.recent-item span{font-size:11px;font-weight:600;color:#A09AB9}
+.recent-item b{font:700 12px/1.3 'Quicksand';color:#4B4470;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+@media (max-width:1180px) and (min-width:861px){
+  .dashboard-grid>.continue,.dashboard-grid>.wod-card{grid-column:1/-1}
+  .dashboard-grid>.goal-card{grid-column:span 5}
+  .dashboard-grid>.card:has(.qa-grid){grid-column:span 7}
+  .dashboard-grid .mid-row{grid-template-columns:1fr}
+  .mascot{display:none}
+}
+
+@media (max-width:1100px) and (min-width:861px){
+  .dashboard-overview{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:auto}
+  .dashboard-overview>.continue{grid-column:1/-1;grid-row:auto;min-height:220px}
+  .dashboard-overview>.wod-card,.dashboard-overview>.recent-card,
+  .dashboard-overview>.goal-card,.dashboard-overview>.card:has(.qa-grid){grid-column:auto;grid-row:auto;height:auto;min-height:150px}
+  .dashboard-overview>.wod-card{min-height:100px}
+  .dashboard-overview>.rank-preview-card{grid-column:1/-1;grid-row:auto;min-height:96px}
+}
+
+@media (max-width:860px){
+  .app{padding:12px 12px 84px;display:block}
+  .main{width:100%;gap:14px}
+  .sidebar{
+    position:fixed;z-index:80;left:8px;right:8px;bottom:8px;top:auto;
+    width:auto;height:64px;padding:6px;display:flex;flex-wrap:nowrap;
+    align-items:stretch;gap:3px;border-radius:18px;
+    box-shadow:0 8px 30px rgba(54,45,110,.2);
+  }
+  .sidebar .logo-row,.sidebar .mascot,.sidebar .gem-btn{display:none}
+  .sidebar .home-pill{
+    flex:1;min-width:0;width:auto;height:52px;margin:0;padding:4px 2px;
+    flex-direction:column;justify-content:center;gap:0;border-radius:12px;
+    font-size:0;text-align:center;
+  }
+  .sidebar .home-pill svg{width:22px;height:22px}
+  .sidebar .nav-grid{display:flex;gap:2px;flex:5;min-width:0}
+  .sidebar .nav-tile{
+    flex:1;min-width:0;height:52px;padding:3px 1px;gap:0;border:0;border-radius:11px;
+    justify-content:center;background:transparent;
+  }
+  .sidebar .home-pill.active,.sidebar .nav-tile.active{
+    background:#7C6FE4;color:#fff;border-color:#7C6FE4;
+    box-shadow:0 5px 14px rgba(124,111,228,.3);
+  }
+  .sidebar .nav-tile.active .nav-tile-ico{background:rgba(255,255,255,.18)!important}
+  .sidebar .nav-tile.active .nav-tile-ico svg{color:#fff!important;stroke:#fff!important}
+  .sidebar .nav-tile.active .nav-tile-label{color:#fff}
+  .sidebar .nav-tile-ico{width:35px;height:35px;border-radius:10px}
+  .sidebar .nav-tile-ico svg{width:21px;height:21px}
+  .sidebar .nav-tile-label,.sidebar .nav-label-desktop,.sidebar .nav-label-mobile{display:none}
+  .sidebar .sidebar-signout{
+    display:flex;width:38px;min-width:38px;height:52px;margin:0;padding:0;border:0;border-radius:11px;
+    align-items:center;justify-content:center;background:#FFF2F4;color:#B94B5B;
+  }
+  .sidebar .sidebar-signout span{display:none}.sidebar .sidebar-signout svg{width:20px;height:20px}
+  .dashboard-grid{display:flex;flex-direction:column;gap:13px}
+  .dashboard-grid>*{width:100%}
+  .dashboard-overview{display:flex;flex-direction:column;gap:13px}
+  .dashboard-overview>*{width:100%;height:auto!important;min-height:0!important}
+  .dashboard-overview>.continue{min-height:220px!important}
+  .dashboard-overview>.recent-card{min-height:150px!important}
+  .dashboard-overview>.goal-card{min-height:150px!important}
+  .dashboard-overview>.quick-access-card{min-height:150px!important}
+  .dashboard-grid .mid-row{display:flex;flex-direction:column;gap:13px}
+}
+
+@media (max-width:560px){
+  .dashboard-grid .header{padding:17px 16px}
+  .dashboard-grid .card{padding:16px}
+  .dashboard-grid .qa-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+  .dashboard-grid .qa-card{min-height:82px;padding:10px 5px;font-size:10px}
+  .dashboard-grid .quick-access-card>.card-title{margin-bottom:12px}
+  .review-cycle{display:none}
+  .review-selected-day{align-items:stretch;flex-direction:column}
+  .review-selected-day .on-ngay{width:100%;justify-content:center}
+  .cl-create-form{padding:17px 13px;border-radius:17px}
+  .cl-create-head{align-items:flex-start;padding-bottom:14px}
+  .cl-create-head>span{width:40px;height:40px}
+  .cl-create-head h3{font-size:16px}
+  .cl-create-head p{font-size:11.5px}
+  .cl-word-block{padding:11px 9px}
+  .cl-word-row{grid-template-columns:30px minmax(0,1fr) auto;gap:7px}
+  .cl-word-row .cl-word-input:nth-of-type(1){grid-column:2}
+  .cl-word-row .cl-word-input:nth-of-type(2){grid-column:2/4;grid-row:2}
+  .cl-word-remove{grid-column:3;grid-row:1}
+  .cl-word-number{width:28px;height:28px}
+  .cl-quiz-types{display:grid;grid-template-columns:1fr}
+  .cl-quiz-chip{justify-content:center}
+}
+
+/* Keep every editable text surface light even when the OS/browser uses a dark
+   form-control color scheme. Semantic correct/wrong fields retain their color. */
+.app input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]),
+.app textarea:not(.ok):not(.wrong),
+.app select{
+  background:#fff!important;
+  color:#2E2A4A!important;
+  -webkit-text-fill-color:#2E2A4A!important;
+  caret-color:#7C6FE4;
+  color-scheme:light;
+}
+.app input::placeholder,.app textarea::placeholder{
+  color:#AAA3C2!important;
+  -webkit-text-fill-color:#AAA3C2!important;
+  opacity:1;
+}
 `;
