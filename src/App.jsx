@@ -13,6 +13,8 @@ import { loadRemoteDailyGoal, loadRemoteStudyPlan, saveRemoteDailyGoal, saveRemo
 import { loadRemoteVocabularyState, loadRemoteVocabularyStateForWords, saveRemoteVocabularyState, saveRemoteVocabularyStateForWords } from "./lib/vocabularyProgress";
 import { addUserTextbook, loadLearningCatalog, markLessonStarted, syncLessonProgress } from "./lib/learningContent";
 import { loadVocabularyReviewSchedule } from "./lib/reviewSchedule";
+import correctSoundUrl from "../Sound Effect/Correct.mp3";
+import completeLessonSoundUrl from "../Sound Effect/Complete_Lesson.mp3";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:3001").replace(/\/$/, "");
 
@@ -1304,29 +1306,27 @@ function ContinueLearning({ onGo, textbook, lesson, hasStarted = false }) {
   );
 }
 
-/* ---- Mục tiêu trong ngày: vòng tròn tiến trình + hiệu ứng chúc mừng ---- */
-function playCelebrationSound() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    [523.25, 659.25, 783.99].forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.type = "sine"; osc.frequency.value = freq;
-      const start = ctx.currentTime + i * 0.09;
-      gain.gain.setValueAtTime(0.001, start);
-      gain.gain.exponentialRampToValueAtTime(0.15, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.35);
-      osc.start(start); osc.stop(start + 0.4);
-    });
-  } catch (e) {}
-}
-
 const CELEBRATION_SOUND_KEY = "kstudy:celebration-sound-enabled";
+const SOUND_VOLUME_KEY = "kstudy:sound-volume";
 function isCelebrationSoundEnabled() {
   try { return localStorage.getItem(CELEBRATION_SOUND_KEY) !== "false"; }
   catch (e) { return true; }
 }
+function getSoundVolume() {
+  try { return Math.max(0, Math.min(1, Number(localStorage.getItem(SOUND_VOLUME_KEY) ?? 0.7))); }
+  catch (e) { return 0.7; }
+}
+function playEffect(url) {
+  if (!isCelebrationSoundEnabled() || getSoundVolume() <= 0) return null;
+  try {
+    const audio = new Audio(url);
+    audio.volume = getSoundVolume();
+    audio.play().catch(() => {});
+    return audio;
+  } catch (e) { return null; }
+}
+function playCorrectSound() { return playEffect(correctSoundUrl); }
+function playCelebrationSound() { return playEffect(completeLessonSoundUrl); }
 
 function ConfettiBurst() {
   const pieces = useMemo(() => Array.from({ length: 18 }, (_, i) => ({
@@ -1362,8 +1362,11 @@ function DailyGoalRing({ onChangeGoal }) {
   useEffect(() => {
     if (!goal) return;
     const done = goal.targetMinutes > 0 && goal.todayMinutes >= goal.targetMinutes;
-    if (done && !celebratedRef.current) {
+    const celebrationKey = `kstudy:daily-goal-celebrated:${goal.todayDate}`;
+    const alreadyCelebrated = localStorage.getItem(celebrationKey) === "true";
+    if (done && !celebratedRef.current && !alreadyCelebrated) {
       celebratedRef.current = true;
+      localStorage.setItem(celebrationKey, "true");
       setShowConfetti(true);
       if (isCelebrationSoundEnabled()) playCelebrationSound();
       setTimeout(() => setShowConfetti(false), 1300);
@@ -1627,6 +1630,7 @@ function SettingsView({ onBack }) {
   const [saved, setSaved] = useState(false);
   const [notifPermNote, setNotifPermNote] = useState("");
   const [celebrationSound, setCelebrationSound] = useState(isCelebrationSoundEnabled);
+  const [soundVolume, setSoundVolume] = useState(getSoundVolume);
 
   useEffect(() => {
     let alive = true;
@@ -1653,6 +1657,7 @@ function SettingsView({ onBack }) {
     setGoal(clampedGoal);
     await saveDailyGoal(clampedGoal);
     await saveStudyPlan(plan, celebrationSound);
+    localStorage.setItem(SOUND_VOLUME_KEY, String(soundVolume));
     if (plan.reminderEnabled && typeof window !== "undefined" && "Notification" in window) {
       try {
         const perm = await Notification.requestPermission();
@@ -1742,12 +1747,33 @@ function SettingsView({ onBack }) {
         )}
         <div className="settings-row settings-sound-row">
           <div className="settings-row-label">
-            <b>Âm thanh chúc mừng</b>
-            <span>Phát âm thanh nhẹ khi hoàn thành mục tiêu trong ngày</span>
+            <b>Âm thanh hiệu ứng</b>
+            <span>Phát khi trả lời đúng, đạt mục tiêu và hoàn thành bài học</span>
           </div>
           <button className={`settings-toggle ${celebrationSound ? "on" : ""}`} onClick={() => setCelebrationSound((enabled) => !enabled)} aria-label="Bật/tắt âm thanh chúc mừng" aria-pressed={celebrationSound}>
             <span className="settings-toggle-knob" />
           </button>
+        </div>
+        <div className={`settings-row settings-volume-row ${celebrationSound ? "" : "disabled"}`}>
+          <div className="settings-row-label">
+            <b>Âm lượng</b>
+            <span>{Math.round(soundVolume * 100)}%</span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={soundVolume}
+            disabled={!celebrationSound}
+            onChange={(event) => {
+              const nextVolume = Number(event.target.value);
+              setSoundVolume(nextVolume);
+              localStorage.setItem(SOUND_VOLUME_KEY, String(nextVolume));
+            }}
+            onPointerUp={() => playEffect(correctSoundUrl)}
+            aria-label="Âm lượng hiệu ứng"
+          />
         </div>
         {plan.reminderEnabled && (
           <p className="settings-note">
@@ -2293,32 +2319,87 @@ function ShadowingView({ lesson, onBack, onFinish }) {
   // Ghi âm THẬT giọng người dùng (khác với nhận diện giọng nói để AI chấm
   // điểm bên dưới) — để họ có thể tự nghe lại và so sánh với giọng mẫu.
   const startMediaRecording = async () => {
+    if (!window.isSecureContext) {
+      setMicBlocked(true);
+      setErrMsg("Micro chỉ hoạt động trên HTTPS hoặc localhost. Hãy mở bản deploy HTTPS của ứng dụng.");
+      setStatus("error");
+      return false;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setMicBlocked(true);
+      setErrMsg("Trình duyệt này chưa hỗ trợ ghi âm. Hãy dùng Chrome hoặc Edge phiên bản mới nhất.");
+      setStatus("unsupported");
+      return false;
+    }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Xin quyền và khởi động recorder xong trước khi bật SpeechRecognition.
+      // Nếu không chờ bước này, recognition có thể kết thúc trong lúc hộp cấp
+      // quyền micro vẫn đang mở, khiến recorder khởi động muộn và không lưu file.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+        },
+      });
       mediaStreamRef.current = stream;
       recordedChunksRef.current = [];
-      const mr = new MediaRecorder(stream);
+      const preferredTypes = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/ogg;codecs=opus",
+      ];
+      const mimeType = preferredTypes.find((type) => MediaRecorder.isTypeSupported?.(type));
+      const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data); };
       mr.onstop = () => {
         const blob = new Blob(recordedChunksRef.current, { type: mr.mimeType || "audio/webm" });
-        const url = URL.createObjectURL(blob);
-        setRecordedUrls((prev) => {
-          if (prev[idx]) URL.revokeObjectURL(prev[idx]);
-          return { ...prev, [idx]: url };
-        });
+        if (blob.size > 0) {
+          const url = URL.createObjectURL(blob);
+          setRecordedUrls((prev) => {
+            if (prev[idx]) URL.revokeObjectURL(prev[idx]);
+            return { ...prev, [idx]: url };
+          });
+        }
         stream.getTracks().forEach((t) => t.stop());
+        if (mediaStreamRef.current === stream) mediaStreamRef.current = null;
+        if (mediaRecorderRef.current === mr) mediaRecorderRef.current = null;
+      };
+      mr.onerror = () => {
+        setErrMsg("Không thể lưu bản ghi âm. Hãy kiểm tra micro rồi thử lại.");
+        setStatus("error");
+        stream.getTracks().forEach((track) => track.stop());
       };
       mediaRecorderRef.current = mr;
-      mr.start();
+      mr.start(250);
       setMicBlocked(false);
+      return true;
     } catch (e) {
-      // getUserMedia bị chặn/từ chối (thường do khung xem trước không cấp quyền
-      // micro) — không chặn phần chấm điểm AI, chỉ là không có bản ghi để nghe lại.
       setMicBlocked(true);
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+      const permissionDenied = e?.name === "NotAllowedError" || e?.name === "SecurityError";
+      const noDevice = e?.name === "NotFoundError" || e?.name === "DevicesNotFoundError";
+      setErrMsg(permissionDenied
+        ? "Ứng dụng chưa được cấp quyền micro. Hãy cho phép Microphone trong cài đặt trang rồi tải lại trang."
+        : noDevice
+          ? "Không tìm thấy micro trên thiết bị. Hãy kết nối micro rồi thử lại."
+          : `Không thể mở micro${e?.message ? `: ${e.message}` : ". Hãy thử lại."}`);
+      setStatus("error");
+      return false;
     }
   };
   const stopMediaRecording = () => {
-    try { if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop(); } catch (e) {}
+    const recorder = mediaRecorderRef.current;
+    try {
+      if (recorder?.state === "recording" || recorder?.state === "paused") recorder.stop();
+    } catch (e) {
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+      mediaRecorderRef.current = null;
+    }
   };
 
   const releaseRecordedAudio = () => {
@@ -2373,6 +2454,7 @@ function ShadowingView({ lesson, onBack, onFinish }) {
       graded = gradeLocally(line.ko, said);
       graded.warning = "Dịch vụ AI đang bận nên kết quả này được chấm dự phòng trên thiết bị.";
     }
+    if (graded.score >= 80 && !(results[idx]?.score >= 80)) playCorrectSound();
     setResults((current) => {
       const next = { ...current, [idx]: { transcript: said, ...graded, gradedAt: new Date().toISOString() } };
       if (graded.score >= 80) {
@@ -2474,12 +2556,15 @@ function ShadowingView({ lesson, onBack, onFinish }) {
   /* Nút mic dùng chung cho cả bắt đầu, dừng+chấm điểm, VÀ ghi âm lại —
      bấm khi đang ghi thì dừng (tự động chấm điểm), bấm khi đã có kết quả
      thì xoá kết quả cũ và ghi âm lại từ đầu, không cần nút riêng. */
-  const handleMicClick = () => {
+  const handleMicClick = async () => {
     if (status === "recording") { finishRecording("manual"); return; }
     if (shadowQuestionDone) return;
     if (result) setResults((r) => { const n = { ...r }; delete n[idx]; return n; });
     setErrMsg("");
-    if (startRecording()) startMediaRecording();
+    setStatus("requesting");
+    const mediaStarted = await startMediaRecording();
+    if (!mediaStarted) return;
+    if (!startRecording()) stopMediaRecording();
   };
 
   const goPrev = () => { if (idx > 0) setIdx(idx - 1); };
@@ -2506,7 +2591,7 @@ function ShadowingView({ lesson, onBack, onFinish }) {
         description="Tất cả câu đã đạt mức chính xác yêu cầu. Bạn có muốn luyện kiểm tra lại không?"
         assessment={finalAssessment}
         loading={assessingFinal}
-        onBack={onFinish || onBack}
+        onBack={isRecheck ? onBack : (onFinish || onBack)}
         onRetry={retryShadowing}
       />
     );
@@ -2561,10 +2646,10 @@ function ShadowingView({ lesson, onBack, onFinish }) {
                 <span>Nghe câu</span>
               </button>
               <button
-                className={`sw-mic-btn ${status === "recording" ? "rec" : ""}`}
+                className={`sw-mic-btn ${status === "recording" ? "rec" : ""} ${status === "requesting" ? "requesting" : ""}`}
                 onClick={handleMicClick}
-                disabled={status === "grading" || shadowQuestionDone}
-                aria-label={status === "recording" ? "Dừng và chấm điểm" : shadowQuestionDone ? "Câu đã hoàn thành" : result ? "Ghi âm lại" : "Bắt đầu ghi âm"}
+                disabled={status === "grading" || status === "requesting" || shadowQuestionDone}
+                aria-label={status === "requesting" ? "Đang xin quyền micro" : status === "recording" ? "Dừng và chấm điểm" : shadowQuestionDone ? "Câu đã hoàn thành" : result ? "Ghi âm lại" : "Bắt đầu ghi âm"}
               >
                 {status === "recording" ? (
                   <Square size={22} color="#fff" fill="#fff" />
@@ -2582,7 +2667,9 @@ function ShadowingView({ lesson, onBack, onFinish }) {
               </button>
             </div>
             <p className="sw-mic-caption">
-              {status === "recording"
+              {status === "requesting"
+                ? "Đang mở micro..."
+                : status === "recording"
                 ? "Đang ghi âm... bấm lại để dừng & chấm điểm"
                 : status === "grading"
                 ? "AI đang chấm điểm..."
@@ -2936,14 +3023,7 @@ Trả lời CHỈ bằng JSON, không markdown, không chữ nào khác:
   "explanation": "<1 câu tiếng Việt giải thích ngắn gọn>"
 }`;
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 500, messages: [{ role: "user", content: aiPrompt }] }),
-    });
-    const data = await res.json();
-    const text = (data.content || []).map((b) => b.text || "").join("").replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(text);
+    const { value: parsed } = await requestAIJson(aiPrompt);
     if (typeof parsed.score !== "number") throw new Error("malformed");
     return parsed;
   } catch (e) {
@@ -3245,7 +3325,7 @@ function ReviewIntroView({ lesson, mode, selectedLessons, onBack, onStart }) {
 }
 
 /* ---------- Màn 2: Làm bài ôn tập ---------- */
-function ReviewQuizView({ lesson, difficulty, mode, seed, onBack, onFinish, onChangeSet }) {
+function ReviewQuizView({ lesson, difficulty, mode, seed, isRecheck = false, onBack, onFinish, onChangeSet }) {
   const [history, setHistory] = useState(null);
   const [pool, setPool] = useState(null);
   const [idx, setIdx] = useState(0);
@@ -3316,9 +3396,11 @@ function ReviewQuizView({ lesson, difficulty, mode, seed, onBack, onFinish, onCh
       const cur = newHistory[a.key] || { wrong: 0, correct: 0, lastSeenAt: 0 };
       newHistory[a.key] = { wrong: cur.wrong + (a.correct ? 0 : 1), correct: cur.correct + (a.correct ? 1 : 0), lastSeenAt: Date.now() };
     });
-    await saveReviewHistory(lesson, newHistory);
-    if (finalReflex && finalReflex.length) await saveReflexAttempts(finalReflex);
-    if (seed) await markStandardExamTaken(difficulty.stars); // đã làm xong đề chuẩn — lần sau ở mức sao này sẽ là đề ngẫu nhiên
+    if (!isRecheck) {
+      await saveReviewHistory(lesson, newHistory);
+      if (finalReflex && finalReflex.length) await saveReflexAttempts(finalReflex);
+      if (seed) await markStandardExamTaken(difficulty.stars);
+    }
     onFinish(finalAnswers, finalWriting, Date.now() - startTimeRef.current, finalReflex || []);
   };
 
@@ -3346,6 +3428,7 @@ function ReviewQuizView({ lesson, difficulty, mode, seed, onBack, onFinish, onCh
     const choose = (opt) => {
       if (picked) return;
       setPicked(opt);
+      if (opt.correct) playCorrectSound();
       setAnswers((a) => [...a, { correct: opt.correct, category: q.category, key: q.key, label: q.label }]);
     };
     const next = () => {
@@ -4570,6 +4653,7 @@ function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords
   const [progress, setProgress] = useState({});   // { [word]: { box, lastRating, dueAt, timesReviewed, starred, note } }
   const [loaded, setLoaded] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
+  const [isRecheck, setIsRecheck] = useState(false);
   const [flipped, setFlipped] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [dragX, setDragX] = useState(0);
@@ -4664,7 +4748,9 @@ function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords
         timesReviewed: (cur?.timesReviewed || 0) + 1,
       },
     };
-    persist(updated);
+    if (ratingId === "good") playCorrectSound();
+    if (isRecheck) setProgress(updated);
+    else persist(updated);
     const wordIdx = queue[0];
     if (ratingId === "good") {
       setMasteredCount((c) => c + 1);
@@ -4855,7 +4941,7 @@ function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords
           <p>Bạn đã học xong toàn bộ {deckTitle ? deckTitle : "bộ thẻ"} trong phiên này. Bạn có muốn kiểm tra lại không?</p>
           <div className="fc2-session-done-actions">
             <button className="fc2-act-btn" onClick={onFinish}><ChevronLeft size={16} /> Về bài học</button>
-            <button className="fc2-act-btn primary" onClick={() => { setQueue(deck.map((_, index) => index)); setMasteredCount(0); setTurn((value) => value + 1); }}>
+            <button className="fc2-act-btn primary" onClick={() => { setIsRecheck(true); setQueue(deck.map((_, index) => index)); setMasteredCount(0); setTurn((value) => value + 1); }}>
               <RotateCcw size={16} /> Kiểm tra lại
             </button>
           </div>
@@ -5154,7 +5240,10 @@ function FillBlankListenView({ onBack }) {
         </div>
 
         {!checked ? (
-          <button className="qz-check-btn purple" onClick={() => setChecked(true)}>Kiểm tra đáp án</button>
+          <button className="qz-check-btn purple" onClick={() => {
+            setChecked(true);
+            if (FILL_BLANK_ITEMS.every((item, index) => (answers[index] || "").trim() === item.word)) playCorrectSound();
+          }}>Kiểm tra đáp án</button>
         ) : (
           <div className="qz-result-row">
             <span className="qz-score">Bạn đúng {score}/{total} câu</span>
@@ -5185,6 +5274,7 @@ function MatchPairsView({ onBack }) {
     if (selected === null || isRightDone(pos)) return;
     const ok = MATCH_ITEMS[selected].meaning === MATCH_ITEMS[order[pos]].meaning;
     if (ok) {
+      playCorrectSound();
       setPairs((p) => ({ ...p, [selected]: pos }));
       setSelected(null);
     } else {
@@ -5261,7 +5351,11 @@ function ChooseImageView({ onBack }) {
   const total = items.length;
   const item = items[idx];
 
-  const pick = (word) => { if (!picked) setPicked(word); };
+  const pick = (word) => {
+    if (picked) return;
+    setPicked(word);
+    if (word === item.answer) playCorrectSound();
+  };
   const next = () => {
     if (idx < total - 1) { setIdx(idx + 1); setPicked(null); }
     else onBack();
@@ -5431,6 +5525,7 @@ function DictationView({ lesson, initialMode = "practice", onBack, onFinish, onG
   const check = () => {
     if (questionLocked) return;
     const ok = normalizeDictation(value) === normalizeDictation(target);
+    if (ok) playCorrectSound();
     const nextWrongCount = ok ? (wrongAttempts[idx] || 0) : (wrongAttempts[idx] || 0) + 1;
     const failed = mode === "test" && !ok && nextWrongCount >= 2;
     const newStatus = { ...status, [idx]: ok ? "correct" : failed ? "failed" : "wrong" };
@@ -5452,7 +5547,12 @@ function DictationView({ lesson, initialMode = "practice", onBack, onFinish, onG
   const diffWords = () => {
     const targetWords = target.replace(/[\p{P}\p{S}]+/gu, " ").split(/\s+/).filter(Boolean);
     const userWords = (checkedValues[idx] || "").replace(/[\p{P}\p{S}]+/gu, " ").trim().split(/\s+/).filter(Boolean);
-    return targetWords.map((w, i) => ({ word: w, correct: normalizeDictation(userWords[i] || "") === normalizeDictation(w) }));
+    return Array.from({ length: Math.max(targetWords.length, userWords.length) }, (_, index) => {
+      const expected = targetWords[index] || "";
+      const entered = userWords[index] || "";
+      const correct = Boolean(expected && entered) && normalizeDictation(entered) === normalizeDictation(expected);
+      return { word: entered || expected, expected, correct, missing: !entered && Boolean(expected) };
+    });
   };
 
   const hint = () => {
@@ -5531,6 +5631,13 @@ function DictationView({ lesson, initialMode = "practice", onBack, onFinish, onG
     setShowCompletion(true);
   };
 
+  const clearCurrentAnswer = () => {
+    if (questionLocked) return;
+    setVal("");
+    setCheckedValues((current) => { const next = { ...current }; delete next[idx]; return next; });
+    setStatus((current) => { const next = { ...current }; delete next[idx]; return next; });
+  };
+
   const retryDictation = () => {
     setShowCompletion(false);
     setIsRecheck(true);
@@ -5553,7 +5660,7 @@ function DictationView({ lesson, initialMode = "practice", onBack, onFinish, onG
         title={mode === "test" ? "Bạn đã hoàn thành Kiểm tra nghe chép!" : "Bạn đã hoàn thành Luyện tập nghe chép!"}
         description={mode === "test" ? "Kết quả đúng đã được lưu vào tiến trình. Bạn có muốn kiểm tra lại không?" : "Lượt luyện tập không tính vào tiến trình. Bạn có muốn luyện lại không?"}
         retryLabel={mode === "test" ? "Kiểm tra lại" : "Luyện lại"}
-        onBack={mode === "test" ? (onFinish || onBack) : onBack}
+        onBack={mode === "test" && !isRecheck ? (onFinish || onBack) : onBack}
         onRetry={retryDictation}
       />
     );
@@ -5664,13 +5771,13 @@ function DictationView({ lesson, initialMode = "practice", onBack, onFinish, onG
           {(st === "wrong" || st === "failed") && (
             <div className="dc-diff-line" lang="ko">
               {diffWords().map((d, i) => (
-                <span key={i} className={`dc-diff-word ${d.correct ? "correct" : "wrong"}`}>{d.word}</span>
+                <span key={i} className={`dc-diff-word ${d.correct ? "correct" : "wrong"} ${d.missing ? "missing" : ""}`} title={!d.correct && d.expected ? `Đúng: ${d.expected}` : undefined}>{d.missing ? `Thiếu: ${d.word}` : d.word}</span>
               ))}
             </div>
           )}
 
           <div className="dc-actions">
-            <button className="dc-act-btn" onClick={() => setVal("")} disabled={questionLocked}><Eraser size={15} /> Xóa</button>
+            <button className="dc-act-btn" onClick={clearCurrentAnswer} disabled={questionLocked || (!value && !checkedValues[idx])}><Eraser size={15} /> Xóa</button>
             <button className="dc-act-btn primary" onClick={check} disabled={!value.trim() || questionLocked}><CheckCircle2 size={15} /> {questionLocked ? "Đã hoàn thành" : "Kiểm tra"}</button>
           </div>
         </div>
@@ -5762,15 +5869,9 @@ Trả lời CHỈ bằng JSON, không markdown, không chữ nào khác:
   "correctIndex": <số nguyên 0-3, vị trí đáp án đúng trong mảng options>,
   "explanation": "<1 câu tiếng Việt giải thích ngắn gọn vì sao đáp án đó đúng>"
 }`;
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 500, messages: [{ role: "user", content: prompt }] }),
-  });
-  const data = await res.json();
-  const text = (data.content || []).map((b) => b.text || "").join("").replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(text);
+  const { value: parsed } = await requestAIJson(prompt);
   if (!parsed.question || !Array.isArray(parsed.options) || parsed.options.length < 2) throw new Error("malformed");
+  parsed.correctIndex = Math.max(0, Math.min(parsed.options.length - 1, Number(parsed.correctIndex) || 0));
   return parsed;
 }
 
@@ -5824,7 +5925,11 @@ function AIQuizView({ onBack }) {
               <button
                 key={i}
                 className={`rv-opt-row ${picked !== null ? (i === q.correctIndex ? "correct" : picked === i ? "wrong" : "") : ""}`}
-                onClick={() => picked === null && setPicked(i)}
+                onClick={() => {
+                  if (picked !== null) return;
+                  setPicked(i);
+                  if (i === q.correctIndex) playCorrectSound();
+                }}
                 disabled={picked !== null}
               >
                 <span className="rv-opt-letter">{String.fromCharCode(65 + i)}</span>
@@ -6557,7 +6662,12 @@ const DAILY_GOAL_KEY = "daily-goal:2-1";     // personal: { targetMinutes, today
 const LAST_NOTIF_SEEN_KEY = "last-notif-seen:2-1"; // personal: { ts }
 const userStatsKey = (name) => `user-stats:${(name || "").toLowerCase()}`; // shared, dùng cho Xếp hạng
 
-function todayStrOf(d) { return d.toISOString().slice(0, 10); }
+function todayStrOf(d) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 function todayStr() { return todayStrOf(new Date()); }
 
 // Ghi nhận "hôm nay có học" vào nhật ký (mỗi ngày chỉ ghi 1 lần) rồi trả về
@@ -6572,6 +6682,13 @@ async function touchStudyLog() {
     try { await window.storage.set(STUDY_LOG_KEY, JSON.stringify({ dates })); } catch (e) {}
   }
   return dates;
+}
+
+async function loadStudyGoalDates() {
+  try {
+    const result = await window.storage.get(STUDY_LOG_KEY);
+    return JSON.parse(result.value).dates || [];
+  } catch (e) { return []; }
 }
 
 // Streak = số ngày liên tiếp có học, tính lùi từ hôm nay. Nếu hôm nay CHƯA
@@ -6598,7 +6715,8 @@ async function computeAndSyncUserStats(profile) {
     const h = JSON.parse(r.value);
     xp += Object.values(h).filter((x) => x.correct > 0).length * 5;
   } catch (e) {}
-  const dates = await touchStudyLog();
+  // Chỉ ngày đã đạt đủ mục tiêu phút mới được tính vào streak.
+  const dates = await loadStudyGoalDates();
   const streak = computeStreak(dates);
   const stats = { displayName: profile.displayName, xp, streak, updatedAt: Date.now() };
   try { await window.storage.set(userStatsKey(profile.displayName), JSON.stringify(stats), true); } catch (e) {}
@@ -6725,6 +6843,9 @@ async function saveDailyGoal(g) {
   try {
     await window.storage.set(DAILY_GOAL_KEY, JSON.stringify(normalized));
     window.dispatchEvent(new CustomEvent("kstudy:daily-goal-updated", { detail: normalized }));
+    if (normalized.targetMinutes > 0 && normalized.todayMinutes >= normalized.targetMinutes) {
+      await touchStudyLog();
+    }
     await saveRemoteDailyGoal(normalized);
     return normalized;
   } catch (e) { return normalized; }
@@ -6850,7 +6971,7 @@ function CustomLessonTestView({ lessonData, onBack }) {
   const choose = (opt) => {
     if (picked) return;
     setPicked(opt);
-    if (opt === q.correct) setScore((s) => s + 1);
+    if (opt === q.correct) { setScore((s) => s + 1); playCorrectSound(); }
   };
   const next = () => {
     if (idx + 1 < questions.length) { setIdx((i) => i + 1); setPicked(null); }
@@ -6999,6 +7120,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const [reviewMode, setReviewMode] = useState("bylesson"); // "bylesson" | "random"
   const [reviewSelectedLessons, setReviewSelectedLessons] = useState([]);
   const [reviewSeed, setReviewSeed] = useState(null); // có giá trị = đang làm "đề thi chuẩn"
+  const [reviewIsRecheck, setReviewIsRecheck] = useState(false);
   const [rankTab, setRankTab] = useState("xephang"); // tab mặc định khi mở màn Xếp hạng & Cộng đồng
   const [customLessonData, setCustomLessonData] = useState(null);
   const [reviewDeck, setReviewDeck] = useState(null); // bộ từ tuỳ chỉnh khi ôn từ Sổ tay từ vựng
@@ -7092,6 +7214,11 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const handleActivityFinish = async (activityId) => {
     if (!lesson) return;
     try {
+      const previousActivities = await loadActivityProgress(lesson, profile?.id);
+      if ((previousActivities[activityId] || 0) >= 100) {
+        setView("lesson-detail");
+        return;
+      }
       await markActivityCompleted(lesson, profile?.id, activityId);
       const activities = await loadActivityProgress(lesson, profile?.id);
       const lessonProgress = Math.round(Object.values(activities).reduce((sum, value) => sum + value, 0) / ACTIVITIES.length);
@@ -7099,9 +7226,9 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
       const lessonDone = ACTIVITIES.every((activity) => (activities[activity.id] || 0) >= 100);
       if (lessonDone) {
         goHome();
-        setLessonCelebration(true);
+        setLessonCelebration({ title: `Bài ${lesson.no}${lesson.title ? ` · ${lesson.title}` : ""}` });
         if (isCelebrationSoundEnabled()) playCelebrationSound();
-        window.setTimeout(() => setLessonCelebration(false), 2600);
+        window.setTimeout(() => setLessonCelebration(false), 4500);
       } else {
         setView("lesson-detail");
       }
@@ -7184,9 +7311,10 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
         <div className="lesson-celebration" role="status" aria-live="polite">
           <ConfettiBurst />
           <div className="lesson-celebration-card">
-            <span>🎉</span>
-            <strong>Hoàn thành bài học!</strong>
-            <p>Bạn đã hoàn thành cả 4 kỹ năng.</p>
+            <div className="lesson-celebration-book"><BookOpen size={64} /></div>
+            <span className="lesson-celebration-kicker">TUYỆT VỜI!</span>
+            <strong>Bạn đã hoàn thành bài học</strong>
+            <p>{lessonCelebration.title}</p>
           </div>
         </div>
       )}
@@ -7320,6 +7448,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             onStart={(diff, useSeed) => {
               setReviewDifficulty(diff);
               setReviewSeed(useSeed ? diff.stars * 97 + 13 : null);
+              setReviewIsRecheck(false);
               setView("review-quiz");
             }}
           />
@@ -7330,6 +7459,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             difficulty={reviewDifficulty}
             mode={reviewMode}
             seed={reviewSeed}
+            isRecheck={reviewIsRecheck}
             onBack={() => setView("review-intro")}
             onChangeSet={() => setReviewSeed(null)}
             onFinish={(answers, writing, elapsedMs, reflex) => {
@@ -7349,8 +7479,8 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             elapsedMs={reviewElapsed}
             difficulty={reviewDifficulty}
             mode={reviewMode}
-            onRetry={() => setView("review-quiz")}
-            onChangeSet={reviewMode === "random" ? () => { setReviewSeed(null); setView("review-quiz"); } : undefined}
+            onRetry={() => { setReviewIsRecheck(true); setView("review-quiz"); }}
+            onChangeSet={reviewMode === "random" ? () => { setReviewSeed(null); setReviewIsRecheck(true); setView("review-quiz"); } : undefined}
             onHome={() => reviewMode === "bylesson" ? handleActivityFinish("ontap") : goHome()}
           />
         )}
@@ -7657,11 +7787,15 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .confetti-wrap{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:2}
 .confetti-piece{position:absolute;top:-10px;width:7px;height:11px;opacity:.9;animation:confetti-fall 1.1s ease-in forwards;border-radius:2px}
 @keyframes confetti-fall{to{transform:translateY(150px) rotate(340deg);opacity:0}}
-.lesson-celebration{position:fixed;inset:0;z-index:150;display:grid;place-items:center;pointer-events:none;background:rgba(53,44,102,.12);backdrop-filter:blur(2px)}
+.lesson-celebration{position:fixed;inset:0;z-index:150;display:grid;place-items:center;pointer-events:none;background:rgba(53,44,102,.28);backdrop-filter:blur(5px);animation:lesson-overlay 4.5s ease both}
 .lesson-celebration .confetti-wrap{position:fixed}.lesson-celebration .confetti-piece{width:10px;height:16px;animation-duration:2.15s}
-.lesson-celebration-card{position:relative;z-index:3;min-width:300px;padding:26px 32px;text-align:center;border:1px solid #E5E0FA;border-radius:24px;background:#fff;box-shadow:0 22px 60px rgba(69,54,145,.22);animation:lesson-celebration-in .35s cubic-bezier(.2,.9,.3,1.2)}
-.lesson-celebration-card>span{display:block;font-size:42px;margin-bottom:5px}.lesson-celebration-card strong{display:block;font:700 25px 'Baloo 2','Quicksand',sans-serif;color:#282044}.lesson-celebration-card p{margin-top:2px;color:#8177A7;font-size:14px}
+.lesson-celebration-card{position:relative;z-index:3;width:min(440px,calc(100vw - 36px));padding:34px 34px 30px;text-align:center;border:1px solid rgba(255,255,255,.7);border-radius:30px;background:linear-gradient(145deg,#fff,#F5F1FF);box-shadow:0 30px 90px rgba(50,35,130,.34),0 0 55px rgba(164,143,255,.5);animation:lesson-celebration-in .5s cubic-bezier(.2,.9,.3,1.2)}
+.lesson-celebration-book{width:112px;height:112px;margin:0 auto 15px;border-radius:50%;display:grid;place-items:center;color:#fff;background:linear-gradient(145deg,#9B8CF4,#6D5DDA);box-shadow:0 0 0 13px rgba(139,123,232,.12),0 0 45px rgba(124,111,228,.75);animation:book-glow 1.1s ease-in-out infinite alternate}
+.lesson-celebration-kicker{display:block;margin-bottom:5px;color:#7C6FE4;font-size:12px;font-weight:800;letter-spacing:.16em}.lesson-celebration-card strong{display:block;font:700 28px 'Baloo 2','Quicksand',sans-serif;color:#282044}.lesson-celebration-card p{margin-top:5px;color:#8177A7;font-size:15px;font-weight:700}
 @keyframes lesson-celebration-in{from{opacity:0;transform:translateY(14px) scale(.9)}to{opacity:1;transform:none}}
+@keyframes book-glow{to{transform:translateY(-5px) scale(1.04);box-shadow:0 0 0 17px rgba(139,123,232,.1),0 0 70px rgba(124,111,228,.95)}}
+@keyframes lesson-overlay{0%{opacity:0}8%,88%{opacity:1}100%{opacity:0}}
+.settings-volume-row input[type="range"]{width:min(260px,45%);accent-color:#7C6FE4;cursor:pointer}.settings-volume-row.disabled{opacity:.55}.settings-volume-row input:disabled{cursor:not-allowed}
 
 /* ---- Menu truy cập nhanh ---- */
 .qa-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;width:100%}
