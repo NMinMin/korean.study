@@ -2741,7 +2741,7 @@ function ShadowingView({ lesson, userId, lines = SHADOW_LINES, onBack, onFinish 
       graded = gradeLocally(line.ko, said);
       graded.warning = "Dịch vụ AI đang bận nên kết quả này được chấm dự phòng trên thiết bị.";
     }
-    const gradedResult = { transcript: said, ...graded, gradedAt: new Date().toISOString() };
+    const gradedResult = { transcript: said, ...graded, recordingDuration: recordingElapsed, gradedAt: new Date().toISOString() };
     const nextResults = { ...results, [idx]: gradedResult };
     if (graded.score >= 80 && !(results[idx]?.score >= 80)) playCorrectSound();
     else if (graded.score < 80) playIncorrectSound();
@@ -2986,8 +2986,8 @@ function ShadowingView({ lesson, userId, lines = SHADOW_LINES, onBack, onFinish 
                   <Mic size={26} color="#fff" />
                 )}
               </button>
-              <button className="sw-side-ctrl" onClick={playNative} aria-label="Nghe lại câu mẫu">
-                <RotateCcw size={20} color="#7C6FE4" />
+              <button className="sw-side-ctrl" onClick={playMyRecording} disabled={!recordedUrls[idx]} aria-label={recordedUrls[idx] ? "Nghe lại bản ghi của tôi" : "Chưa có bản ghi của tôi"}>
+                <Mic size={20} color="#7C6FE4" />
                 <span>Nghe lại</span>
               </button>
             </div>
@@ -3022,11 +3022,11 @@ function ShadowingView({ lesson, userId, lines = SHADOW_LINES, onBack, onFinish 
               <div className="sw-result">
                 <div className="sw-result-head"><Sparkles size={14} color="#7C6FE4" /> Kết quả mới nhất</div>
                 <div className="sw-result-row">
-                  <button className="sw-result-play" onClick={playNative} aria-label="Nghe lại câu mẫu">
+                  <button className="sw-result-play" onClick={playMyRecording} disabled={!recordedUrls[idx]} aria-label="Nghe lại bản ghi của tôi">
                     <Play size={16} fill="#fff" color="#fff" />
                   </button>
                   <div className="sw-result-wave"><SwWaveBars /></div>
-                  <span className="sw-result-time">{swFormatTime(audioDuration)}</span>
+                  <span className="sw-result-time">{swFormatTime(result.recordingDuration || recordingElapsed)}</span>
                   <div className="sw-accuracy">
                     <span>Độ khớp câu</span>
                     <b className={toneForScore(result.score)}>{result.score}%</b>
@@ -9354,6 +9354,7 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   color:#7C6FE4;font:700 12.5px 'Quicksand';cursor:pointer;
 }
 .sw-side-ctrl:disabled{opacity:.4;cursor:not-allowed}
+.sw-result-play:disabled{opacity:.42;cursor:not-allowed;box-shadow:none}
 .sw-mic-btn{
   width:74px;height:74px;border-radius:99px;border:none;background:#7C6FE4;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
