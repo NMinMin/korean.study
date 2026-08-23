@@ -63,6 +63,12 @@ export default function AdminPage() {
   const [community, setCommunity] = useState<CommunityData>({ posts: [], reports: [] })
   const [communityStatus, setCommunityStatus] = useState('all')
 
+  const refreshDashboard = useCallback(async () => {
+    const data = await adminApi<DashboardData>(`/dashboard?days=${range}&refresh=true`)
+    setDashboard(data)
+    return data
+  }, [range])
+
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
@@ -80,13 +86,13 @@ export default function AdminPage() {
   useEffect(() => { void load() }, [load])
 
   useEffect(() => {
-    if (tab !== 'dashboard' || !supabase) return
+    if (!supabase) return
     let timer: ReturnType<typeof setTimeout> | undefined
     const refresh = () => {
       clearTimeout(timer)
       timer = setTimeout(() => {
-        void adminApi<DashboardData>(`/dashboard?days=${range}&refresh=true`).then(setDashboard).catch(() => undefined)
-      }, 650)
+        void refreshDashboard().catch(() => undefined)
+      }, 350)
     }
     const channel = supabase.channel(`admin-dashboard-${range}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_study_stats' }, refresh)
@@ -94,13 +100,14 @@ export default function AdminPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'vocabulary_progress' }, refresh)
       .subscribe()
     return () => { clearTimeout(timer); void supabase.removeChannel(channel) }
-  }, [range, tab])
+  }, [range, refreshDashboard])
 
   const updateStatus = async (kind: 'textbooks' | 'lessons', id: string, status: Status) => {
     try {
       await adminApi(`/${kind}/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) })
       if (kind === 'textbooks') setTextbooks((items) => items.map((item) => item.id === id ? { ...item, status } : item))
       else setLessons((items) => items.map((item) => item.id === id ? { ...item, status } : item))
+      await refreshDashboard()
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể cập nhật.') }
   }
 
@@ -108,6 +115,7 @@ export default function AdminPage() {
     try {
       await adminApi(`/users/${id}/role`, { method: 'PATCH', body: JSON.stringify({ role }) })
       setUsers((items) => items.map((item) => item.id === id ? { ...item, role } : item))
+      await refreshDashboard()
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể cập nhật vai trò.') }
   }
 
@@ -117,6 +125,7 @@ export default function AdminPage() {
     try {
       await adminApi(`/users/${user.id}/lock`, { method: 'PATCH', body: JSON.stringify({ locked }) })
       setUsers((items) => items.map((item) => item.id === user.id ? { ...item, is_locked: locked, locked_at: locked ? new Date().toISOString() : undefined } : item))
+      await refreshDashboard()
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể cập nhật trạng thái tài khoản.') }
   }
 
@@ -140,7 +149,7 @@ export default function AdminPage() {
         ? { slug: draft.slug, titleKo: draft.titleKo, titleVi: draft.titleVi, description: draft.description, sortOrder: Number(draft.sortOrder) || 0, status: draft.status }
         : { textbookId: draft.textbookId, lessonNumber: Number(draft.lessonNumber), titleKo: draft.titleKo, titleVi: draft.titleVi, status: draft.status }
       await adminApi(`/${editor.kind}${editor.id ? `/${editor.id}` : ''}`, { method: editor.id ? 'PATCH' : 'POST', body: JSON.stringify(body) })
-      setEditor(null); await load()
+      setEditor(null); await Promise.all([load(), refreshDashboard()])
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể lưu dữ liệu.') }
     finally { setSaving(false) }
   }
@@ -148,7 +157,7 @@ export default function AdminPage() {
   const deleteItem = async (kind: 'textbooks' | 'lessons', item: Textbook | Lesson) => {
     const label = 'slug' in item ? item.title_ko : `Bài ${item.lesson_number} — ${item.title_ko}`
     if (!window.confirm(`Xóa “${label}”?${kind === 'textbooks' ? ' Toàn bộ bài học thuộc giáo trình này cũng sẽ bị xóa.' : ''}`)) return
-    try { await adminApi(`/${kind}/${item.id}`, { method: 'DELETE' }); await load() }
+    try { await adminApi(`/${kind}/${item.id}`, { method: 'DELETE' }); await Promise.all([load(), refreshDashboard()]) }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể xóa dữ liệu.') }
   }
 

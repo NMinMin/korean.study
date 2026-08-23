@@ -1,5 +1,5 @@
 import type { Session, User } from '@supabase/supabase-js'
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { userStorageKey } from '../lib/storageKeys'
 
@@ -62,60 +62,100 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<AppProfile | null>(null)
   const [loading, setLoading] = useState(true)
+  const authLoadVersion = useRef(0)
+
+  const clearAuthState = useCallback(() => {
+    authLoadVersion.current += 1
+    clearSessionExpiry()
+    setSession(null)
+    setProfile(null)
+  }, [])
+
+  const clearInvalidSession = useCallback(() => {
+    clearAuthState()
+    if (supabase) {
+      window.setTimeout(() => {
+        void supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+      }, 0)
+    }
+  }, [clearAuthState])
 
   const loadProfile = useCallback(async (nextSession: Session | null) => {
+    const requestVersion = ++authLoadVersion.current
     if (nextSession && getOrCreateSessionExpiry() <= Date.now()) {
-      clearSessionExpiry()
-      setSession(null)
-      setProfile(null)
-      if (supabase) window.setTimeout(() => { void supabase.auth.signOut({ scope: 'local' }) }, 0)
+      clearInvalidSession()
+      return
+    }
+    if (!nextSession?.user || !supabase) {
+      clearAuthState()
+      return
+    }
+
+    // getSession() chỉ đọc token trong storage và vẫn có thể trả về token đã bị
+    // thu hồi. Xác minh với Auth server trước khi mount dashboard để tránh một
+    // phiên hỏng tạo hàng loạt request REST 401/403.
+    const { data: verifiedAuth, error: verifyError } = await supabase.auth.getUser()
+    if (requestVersion !== authLoadVersion.current) return
+    if (verifyError || !verifiedAuth.user || verifiedAuth.user.id !== nextSession.user.id) {
+      clearInvalidSession()
+      return
+    }
+
+    const verifiedUser = verifiedAuth.user
+    const fallback = profileFromUser(verifiedUser)
+    const [{ data, error: profileError }, { data: roleData, error: roleError }] = await Promise.all([
+      supabase.from('profiles').select('id, display_name, avatar_url').eq('id', verifiedUser.id).maybeSingle(),
+      supabase.from('user_roles').select('role').eq('user_id', verifiedUser.id).maybeSingle(),
+    ])
+    if (requestVersion !== authLoadVersion.current) return
+    if (profileError?.code === 'PGRST301' || roleError?.code === 'PGRST301' || profileError?.message?.includes('JWT') || roleError?.message?.includes('JWT')) {
+      clearInvalidSession()
       return
     }
     setSession(nextSession)
-    if (!nextSession?.user || !supabase) {
-      setProfile(null)
-      return
-    }
-    const fallback = profileFromUser(nextSession.user)
-    const [{ data }, { data: roleData }] = await Promise.all([
-      supabase.from('profiles').select('id, display_name, avatar_url').eq('id', nextSession.user.id).maybeSingle(),
-      supabase.from('user_roles').select('role').eq('user_id', nextSession.user.id).maybeSingle(),
-    ])
     setProfile(data ? {
       id: data.id,
       displayName: data.display_name,
       avatarUrl: data.avatar_url,
-      email: nextSession.user.email ?? null,
+      email: verifiedUser.email ?? null,
       role: roleData?.role === 'admin' ? 'admin' : 'user',
     } : fallback)
-  }, [])
+  }, [clearAuthState, clearInvalidSession])
 
   useEffect(() => {
     if (!supabase) {
       setLoading(false)
       return
     }
-    supabase.auth.getSession().then(({ data }) => loadProfile(data.session)).finally(() => setLoading(false))
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      void loadProfile(nextSession)
+    supabase.auth.getSession()
+      .then(({ data, error }) => error ? clearInvalidSession() : loadProfile(data.session))
+      .finally(() => setLoading(false))
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === 'SIGNED_OUT') {
+        clearAuthState()
+        return
+      }
+      if (event === 'TOKEN_REFRESHED' && !nextSession) {
+        clearInvalidSession()
+        return
+      }
+      // Supabase khuyến nghị không gọi tiếp API auth ngay bên trong callback.
+      window.setTimeout(() => void loadProfile(nextSession), 0)
     })
     return () => listener.subscription.unsubscribe()
-  }, [loadProfile])
+  }, [clearAuthState, clearInvalidSession, loadProfile])
 
   useEffect(() => {
     if (!session || !supabase) return
-    const checkExpiry = async () => {
+    const checkExpiry = () => {
       if (getOrCreateSessionExpiry() > Date.now()) return
-      clearSessionExpiry()
-      await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
-      setSession(null)
-      setProfile(null)
+      clearInvalidSession()
     }
     const timer = window.setInterval(() => void checkExpiry(), 30_000)
     const onVisibility = () => { if (document.visibilityState === 'visible') void checkExpiry() }
     document.addEventListener('visibilitychange', onVisibility)
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisibility) }
-  }, [session])
+  }, [clearInvalidSession, session])
 
   const value = useMemo<AuthContextValue>(() => ({
     loading,
@@ -161,13 +201,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async signOut() {
       if (!supabase) return
       const signingOutUserId = session?.user.id
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
-      if (signingOutUserId) localStorage.removeItem(`kstudy:${userStorageKey('user-profile', signingOutUserId)}`)
-      localStorage.removeItem('kstudy:session-preference')
-      clearSessionExpiry()
+      try {
+        await supabase.auth.signOut()
+      } finally {
+        clearAuthState()
+        if (signingOutUserId) localStorage.removeItem(`kstudy:${userStorageKey('user-profile', signingOutUserId)}`)
+        localStorage.removeItem('kstudy:session-preference')
+      }
     },
-  }), [loading, profile, session])
+  }), [clearAuthState, loading, profile, session])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

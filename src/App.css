@@ -182,3 +182,33 @@
     border-right-color: var(--border);
   }
 }
+.lb-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding-top: 16px;
+}
+
+.lb-pagination button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid #ddd8f5;
+  border-radius: 12px;
+  background: #fff;
+  color: #6658d9;
+  cursor: pointer;
+}
+
+.lb-pagination button:disabled {
+  opacity: .4;
+  cursor: default;
+}
+
+.lb-pagination span {
+  color: #8b82ad;
+  font-size: 13px;
+}
