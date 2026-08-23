@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, Volume2, Sparkles, CheckCircle2, RotateCcw, AlertTriangle,
-  Lightbulb, XCircle, Check, Link2
+  Lightbulb, XCircle, Check, Link2, Image as ImageIcon
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { requestAIJson } from '../../services/aiService';
