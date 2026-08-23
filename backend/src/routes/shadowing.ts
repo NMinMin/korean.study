@@ -1,21 +1,39 @@
 import multipart from '@fastify/multipart'
-import { v2 as speechV2 } from '@google-cloud/speech'
 import type { FastifyPluginAsync } from 'fastify'
 import { config } from '../config.js'
 import { requireAuth } from '../plugins/auth.js'
 
 const MAX_RECORDING_BYTES = 20 * 1024 * 1024
+const GROQ_TRANSCRIPTIONS_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
+const TRANSCRIPTION_TIMEOUT_MS = 30_000
 
-function createSpeechClient() {
-  if (!config.GOOGLE_CLOUD_PROJECT_ID || !config.GOOGLE_APPLICATION_CREDENTIALS_JSON) return null
-  const credentials = JSON.parse(config.GOOGLE_APPLICATION_CREDENTIALS_JSON) as {
-    client_email?: string
-    private_key?: string
-  }
-  return new speechV2.SpeechClient({
-    projectId: config.GOOGLE_CLOUD_PROJECT_ID,
-    credentials,
+type GroqTranscription = {
+  text?: unknown
+}
+
+async function transcribeWithGroq(content: Buffer, mimetype: string, filename: string) {
+  const form = new FormData()
+  form.append('file', new Blob([new Uint8Array(content)], { type: mimetype }), filename)
+  form.append('model', config.GROQ_SPEECH_MODEL)
+  form.append('language', 'ko')
+  form.append('response_format', 'json')
+  form.append('temperature', '0')
+
+  const response = await fetch(GROQ_TRANSCRIPTIONS_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${config.GROQ_API_KEY}` },
+    body: form,
+    signal: AbortSignal.timeout(TRANSCRIPTION_TIMEOUT_MS),
   })
+  const data = await response.json().catch(() => null) as GroqTranscription | null
+
+  if (!response.ok) {
+    const error = new Error(`Groq transcription failed with HTTP ${response.status}`)
+    Object.assign(error, { statusCode: 502, cause: data })
+    throw error
+  }
+
+  return typeof data?.text === 'string' ? data.text.trim() : ''
 }
 
 export const shadowingRoutes: FastifyPluginAsync = async (app) => {
@@ -24,16 +42,10 @@ export const shadowingRoutes: FastifyPluginAsync = async (app) => {
   })
 
   app.post('/shadowing/transcribe', { preHandler: requireAuth }, async (request, reply) => {
-    let client: speechV2.SpeechClient | null
-    try {
-      client = createSpeechClient()
-    } catch {
-      client = null
-    }
-    if (!client || !config.GOOGLE_CLOUD_PROJECT_ID) {
+    if (!config.GROQ_API_KEY) {
       return reply.code(503).send({
         code: 'SPEECH_NOT_CONFIGURED',
-        message: 'Google Speech-to-Text chưa được cấu hình trên backend.',
+        message: 'Groq Speech-to-Text chưa được cấu hình trên backend.',
         requestId: request.id,
       })
     }
@@ -51,24 +63,12 @@ export const shadowingRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(400).send({ code: 'EMPTY_AUDIO', message: 'File ghi âm không có dữ liệu.', requestId: request.id })
     }
 
-    const [response] = await client.recognize({
-      recognizer: `projects/${config.GOOGLE_CLOUD_PROJECT_ID}/locations/global/recognizers/_`,
-      config: {
-        autoDecodingConfig: {},
-        languageCodes: ['ko-KR'],
-        model: 'short',
-        features: { enableAutomaticPunctuation: true },
-      },
+    const transcript = await transcribeWithGroq(
       content,
-    })
-    const alternatives = (response.results ?? [])
-      .map((result) => result.alternatives?.[0])
-      .filter((alternative): alternative is NonNullable<typeof alternative> => Boolean(alternative?.transcript))
-    const transcript = alternatives.map((alternative) => alternative.transcript).join(' ').trim()
-    const confidence = alternatives.length
-      ? alternatives.reduce((sum, alternative) => sum + Number(alternative.confidence || 0), 0) / alternatives.length
-      : 0
+      part.mimetype,
+      part.filename || 'shadowing.webm',
+    )
 
-    return { transcript, confidence, provider: 'google-cloud-speech-v2' }
+    return { transcript, provider: `groq/${config.GROQ_SPEECH_MODEL}` }
   })
 }

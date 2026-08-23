@@ -35,6 +35,8 @@ export type LearningCatalog = {
   continueLesson?: LearningLesson
   hasStarted: boolean
   vocabulary: LearningVocabulary[]
+  grammar: LearningGrammar[]
+  exercises: LearningExercise[]
 }
 
 export type LearningVocabulary = {
@@ -50,7 +52,31 @@ export type LearningVocabulary = {
   sortOrder: number
 }
 
-const ACTIVE_SLUG = 'sejong-conversation-workbook-2-1'
+export type LearningGrammar = {
+  id: string
+  lessonId: string
+  pattern: string
+  meaningVi: string
+  usageVi?: string | null
+  conjugationVi?: string | null
+  notesVi?: string | null
+  sortOrder: number
+}
+
+export type LearningExercise = {
+  id: string
+  lessonId: string
+  skillType: 'vocabulary_grammar' | 'dictation' | 'shadowing' | 'review'
+  exerciseType: string
+  promptKo?: string | null
+  promptVi?: string | null
+  answer: Record<string, unknown>
+  explanationVi?: string | null
+  mediaUrl?: string | null
+  imageUrl?: string | null
+  audioUrl?: string | null
+  sortOrder: number
+}
 
 export async function loadLearningCatalog(preferredTextbookId?: string): Promise<LearningCatalog | null> {
   if (!supabase) return null
@@ -68,11 +94,21 @@ export async function loadLearningCatalog(preferredTextbookId?: string): Promise
   ])
   if (textbookResult.error || lessonResult.error || membershipResult.error || progressResult.error || !textbookResult.data?.length) return null
 
-  const vocabularyResult = await supabase
-    .from('vocabulary')
-    .select('id, lesson_id, word_ko, meaning_vi, part_of_speech, pronunciation, mnemonic, image_url, audio_url, sort_order')
-    .order('sort_order')
-  if (vocabularyResult.error) return null
+  const [vocabularyResult, grammarResult, exerciseResult] = await Promise.all([
+    supabase
+      .from('vocabulary')
+      .select('id, lesson_id, word_ko, meaning_vi, part_of_speech, pronunciation, mnemonic, image_url, audio_url, sort_order')
+      .order('sort_order'),
+    supabase
+      .from('grammar_patterns')
+      .select('id, lesson_id, structure, meaning_vi, usage_vi, conjugation_vi, notes_vi, sort_order')
+      .order('sort_order'),
+    supabase
+      .from('lesson_exercises')
+      .select('id, lesson_id, skill_type, exercise_type, prompt_ko, prompt_vi, answer, explanation_vi, media_url, image_url, audio_url, sort_order')
+      .order('sort_order'),
+  ])
+  if (vocabularyResult.error || grammarResult.error || exerciseResult.error) return null
   const wordCounts = new Map<string, number>()
   for (const row of vocabularyResult.data ?? []) {
     wordCounts.set(row.lesson_id, (wordCounts.get(row.lesson_id) ?? 0) + 1)
@@ -113,7 +149,8 @@ export async function loadLearningCatalog(preferredTextbookId?: string): Promise
     textbooks.find((book) => book.id === preferredTextbookId)
     ?? textbooks.find((book) => book.id === progressResult.data?.[0]?.textbook_id && book.isAdded)
     ?? myTextbooks.find((book) => book.hasContent)
-    ?? textbooks.find((book) => book.slug === ACTIVE_SLUG)
+    ?? textbooks.find((book) => book.status === 'published' && book.hasContent)
+    ?? textbooks[0]
   if (!activeTextbook) return null
   const lessons: LearningLesson[] = (lessonResult.data ?? [])
     .filter((row) => row.textbook_id === activeTextbook.id)
@@ -148,7 +185,35 @@ export async function loadLearningCatalog(preferredTextbookId?: string): Promise
       audio: row.audio_url,
       sortOrder: row.sort_order,
     }))
-  return { textbooks, myTextbooks, availableTextbooks, lessons, activeTextbook, continueLesson, hasStarted, vocabulary }
+  const grammar: LearningGrammar[] = (grammarResult.data ?? [])
+    .filter((row) => activeLessonIds.has(row.lesson_id))
+    .map((row) => ({
+      id: row.id,
+      lessonId: row.lesson_id,
+      pattern: row.structure,
+      meaningVi: row.meaning_vi,
+      usageVi: row.usage_vi,
+      conjugationVi: row.conjugation_vi,
+      notesVi: row.notes_vi,
+      sortOrder: row.sort_order,
+    }))
+  const exercises: LearningExercise[] = (exerciseResult.data ?? [])
+    .filter((row) => activeLessonIds.has(row.lesson_id))
+    .map((row) => ({
+      id: row.id,
+      lessonId: row.lesson_id,
+      skillType: row.skill_type as LearningExercise['skillType'],
+      exerciseType: row.exercise_type,
+      promptKo: row.prompt_ko,
+      promptVi: row.prompt_vi,
+      answer: (row.answer ?? {}) as Record<string, unknown>,
+      explanationVi: row.explanation_vi,
+      mediaUrl: row.media_url,
+      imageUrl: row.image_url,
+      audioUrl: row.audio_url,
+      sortOrder: row.sort_order,
+    }))
+  return { textbooks, myTextbooks, availableTextbooks, lessons, activeTextbook, continueLesson, hasStarted, vocabulary, grammar, exercises }
 }
 
 export async function addUserTextbook(textbookId: string): Promise<void> {

@@ -23,33 +23,29 @@ type IdentifiedVocabulary = {
   textbookId: string
 }
 
-const DEFAULT_TEXTBOOK_SLUG = 'sejong-conversation-workbook-2-1'
+type LessonIdentity = {
+  id?: string | null
+  textbookId?: string | null
+}
 
-async function vocabularyRows(lessonNumber: number, textbookSlug = DEFAULT_TEXTBOOK_SLUG): Promise<VocabularyRow[]> {
-  if (!supabase) return []
-  const lessonResult = await supabase
-    .from('lessons')
-    .select('id, textbook_id, textbooks!inner(slug)')
-    .eq('lesson_number', lessonNumber)
-    .eq('textbooks.slug', textbookSlug)
-    .maybeSingle()
-  if (lessonResult.error || !lessonResult.data) return []
+async function vocabularyRows(lesson: LessonIdentity): Promise<VocabularyRow[]> {
+  if (!supabase || !lesson.id || !lesson.textbookId) return []
   const { data, error } = await supabase
     .from('vocabulary')
     .select('id, word_ko, lesson_id')
-    .eq('lesson_id', lessonResult.data.id)
+    .eq('lesson_id', lesson.id)
   if (error || !data) return []
   return data.map((row) => ({
     id: row.id,
     word_ko: row.word_ko,
     lesson_id: row.lesson_id,
-    textbook_id: lessonResult.data.textbook_id,
+    textbook_id: lesson.textbookId as string,
   }))
 }
 
-export async function loadRemoteVocabularyState(lessonNumber: number, userId?: string | null): Promise<LocalVocabularyState | null> {
+export async function loadRemoteVocabularyState(lesson: LessonIdentity, userId?: string | null): Promise<LocalVocabularyState | null> {
   if (!supabase || !userId) return null
-  const words = await vocabularyRows(lessonNumber)
+  const words = await vocabularyRows(lesson)
   if (!words.length) return null
   const ids = words.map((word) => word.id)
   const [progress, bookmarks, notes] = await Promise.all([
@@ -80,9 +76,9 @@ export async function loadRemoteVocabularyState(lessonNumber: number, userId?: s
   return state
 }
 
-export async function saveRemoteVocabularyState(lessonNumber: number, userId: string | null | undefined, state: LocalVocabularyState) {
+export async function saveRemoteVocabularyState(lesson: LessonIdentity, userId: string | null | undefined, state: LocalVocabularyState) {
   if (!supabase || !userId) return false
-  const words = await vocabularyRows(lessonNumber)
+  const words = await vocabularyRows(lesson)
   if (!words.length) return false
   const operations: PromiseLike<unknown>[] = []
   for (const word of words) {
