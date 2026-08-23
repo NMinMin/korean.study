@@ -27,3 +27,16 @@ export async function saveRemoteActivityProgress(textbookId: string | undefined,
   if (error) throw error
   return progressPercent
 }
+
+export async function markRemoteActivityCompleted(textbookId: string | undefined, lessonId: string | undefined, activityType: ActivityKind): Promise<void> {
+  if (!supabase || !textbookId || !lessonId) return
+  const { data: auth } = await supabase.auth.getUser()
+  if (!auth.user) return
+  const { data: current } = await supabase.from('activity_progress').select('completed_items').eq('user_id', auth.user.id).eq('lesson_id', lessonId).eq('activity_type', activityType).maybeSingle()
+  const { error } = await supabase.from('activity_progress').upsert({
+    user_id: auth.user.id, textbook_id: textbookId, lesson_id: lessonId, activity_type: activityType,
+    progress_percent: 100, completed_items: current?.completed_items || { completed: true },
+    completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  }, { onConflict: 'user_id,lesson_id,activity_type' })
+  if (error) throw error
+}

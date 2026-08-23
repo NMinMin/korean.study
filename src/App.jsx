@@ -14,12 +14,13 @@ import { loadRemoteVocabularyState, loadRemoteVocabularyStateForWords, saveRemot
 import { addUserTextbook, loadLearningCatalog, markLessonStarted, syncLessonProgress } from "./lib/learningContent";
 import { loadVocabularyReviewSchedule } from "./lib/reviewSchedule";
 import { awardLessonGems, loadShopState, purchasePlant, selectPlant } from "./lib/gemStore";
-import { loadRemoteActivityProgress, saveRemoteActivityProgress } from "./lib/activityProgress";
+import { loadRemoteActivityProgress, markRemoteActivityCompleted, saveRemoteActivityProgress } from "./lib/activityProgress";
 import { lessonProgressKey, userStorageKey, legacyLessonProgressKey, legacyTextbookProgressKey } from "./lib/storageKeys";
 import correctSoundUrl from "../Sound Effect/Correct.mp3";
 import incorrectSoundUrl from "../Sound Effect/Discorrect.mp3";
 import completeLessonSoundUrl from "../Sound Effect/Complete_Lesson.mp3";
 import dashboardCardBackgroundUrl from "../UIUX/backgroundcard.png";
+import dashboardCardMobileBackgroundUrl from "../UIUX/backgroundcard_mobile.png";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:3001").replace(/\/$/, "");
 
@@ -77,9 +78,25 @@ async function uploadCloudinaryAsset(file, kind = "lesson") {
 if (typeof window !== "undefined" && !window.storage) {
   const PREFIX = "kstudy:";       // riêng cho mỗi máy
   const SHARED_PREFIX = "kstudy-shared:"; // "chung" — thực chất vẫn cục bộ trên máy này
+  // Tiến trình là dữ liệu tài khoản, không phải tùy chọn thiết bị. Xóa các bản
+  // cache tiến trình cũ để chúng không thể ghi đè dữ liệu Supabase nữa.
+  try {
+    for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+      const localKey = localStorage.key(index) || "";
+      if (localKey.startsWith(`${PREFIX}progress:`) || localKey.startsWith(`${SHARED_PREFIX}progress:`)) localStorage.removeItem(localKey);
+    }
+  } catch (error) { }
   window.storage = {
     async get(key, shared = false) {
       try {
+        if (key.startsWith("progress:")) {
+          if (!supabase) return null;
+          const { data: auth } = await supabase.auth.getUser();
+          if (!auth.user) return null;
+          const { data, error } = await supabase.from("user_progress_states").select("state_value").eq("user_id", auth.user.id).eq("state_key", key).maybeSingle();
+          if (error || !data) return null;
+          return { key, value: data.state_value, shared: true };
+        }
         const k = (shared ? SHARED_PREFIX : PREFIX) + key;
         const v = localStorage.getItem(k);
         return v === null ? null : { key, value: v, shared };
@@ -87,6 +104,17 @@ if (typeof window !== "undefined" && !window.storage) {
     },
     async set(key, value, shared = false) {
       try {
+        if (key.startsWith("progress:")) {
+          if (!supabase) return null;
+          const { data: auth } = await supabase.auth.getUser();
+          if (!auth.user) return null;
+          const normalizedValue = typeof value === "string" ? value : JSON.stringify(value);
+          const { error } = await supabase.from("user_progress_states").upsert({ user_id: auth.user.id, state_key: key, state_value: normalizedValue, updated_at: new Date().toISOString() }, { onConflict: "user_id,state_key" });
+          if (error) return null;
+          localStorage.removeItem(PREFIX + key);
+          localStorage.removeItem(SHARED_PREFIX + key);
+          return { key, value: normalizedValue, shared: true };
+        }
         const k = (shared ? SHARED_PREFIX : PREFIX) + key;
         localStorage.setItem(k, typeof value === "string" ? value : JSON.stringify(value));
         return { key, value, shared };
@@ -94,6 +122,15 @@ if (typeof window !== "undefined" && !window.storage) {
     },
     async delete(key, shared = false) {
       try {
+        if (key.startsWith("progress:")) {
+          if (!supabase) return null;
+          const { data: auth } = await supabase.auth.getUser();
+          if (!auth.user) return null;
+          await supabase.from("user_progress_states").delete().eq("user_id", auth.user.id).eq("state_key", key);
+          localStorage.removeItem(PREFIX + key);
+          localStorage.removeItem(SHARED_PREFIX + key);
+          return { key, deleted: true, shared: true };
+        }
         const k = (shared ? SHARED_PREFIX : PREFIX) + key;
         localStorage.removeItem(k);
         return { key, deleted: true, shared };
@@ -935,6 +972,19 @@ function BunnyMascot() {
 }
 
 /* Cây tiến độ: phát triển cùng phần trăm hoàn thành giáo trình. */
+function PlantSeedling({ variant }) {
+  if (variant === "sunflower") return <g className="plant-seedling seedling-sunflower"><ellipse cx="45" cy="69" rx="6" ry="3" fill="#73512F" /><path d="M45 69V59" stroke="#5B9B4F" strokeWidth="3" strokeLinecap="round" /><ellipse cx="39" cy="58" rx="7" ry="3.5" fill="#74B765" transform="rotate(25 39 58)" /><ellipse cx="51" cy="58" rx="7" ry="3.5" fill="#65A958" transform="rotate(-25 51 58)" /></g>;
+  if (variant === "cherry") return <g className="plant-seedling seedling-cherry"><ellipse cx="45" cy="69" rx="5" ry="3" fill="#7A5542" /><path d="M45 69Q41 62 46 56" stroke="#77503E" strokeWidth="3" fill="none" strokeLinecap="round" /><circle cx="42" cy="57" r="5" fill="#F3B7CB" /><circle cx="48" cy="55" r="4" fill="#EFA5BF" /></g>;
+  if (variant === "lavender") return <g className="plant-seedling seedling-lavender"><ellipse cx="45" cy="70" rx="7" ry="3" fill="#77614A" /><path d="M42 70Q40 62 39 56M45 70V53M48 70Q50 62 51 57" stroke="#6E9567" strokeWidth="2" fill="none" /><ellipse cx="39" cy="56" rx="3" ry="2" fill="#9D83D2" /><ellipse cx="45" cy="53" rx="3" ry="2" fill="#8066BC" /><ellipse cx="51" cy="57" rx="3" ry="2" fill="#B09BDD" /></g>;
+  if (variant === "bonsai") return <g className="plant-seedling seedling-bonsai"><ellipse cx="45" cy="70" rx="7" ry="3" fill="#76513F" /><path d="M45 70Q36 64 44 55Q50 51 48 47" stroke="#74513B" strokeWidth="4" fill="none" strokeLinecap="round" /><ellipse cx="40" cy="54" rx="8" ry="4" fill="#588758" /><ellipse cx="50" cy="47" rx="7" ry="3.5" fill="#427249" /></g>;
+  if (variant === "succulent") return <g className="plant-seedling seedling-succulent"><ellipse cx="45" cy="69" rx="5" ry="3" fill="#725744" />{[0, 60, 120].map((angle) => <ellipse key={angle} cx="45" cy="61" rx="10" ry="4" fill={angle === 60 ? "#9BC9AE" : "#79B498"} transform={`rotate(${angle} 45 61)`} />)}<circle cx="45" cy="61" r="3" fill="#C2DEC2" /></g>;
+  if (variant === "cactus") return <g className="plant-seedling seedling-cactus"><ellipse cx="45" cy="70" rx="6" ry="3" fill="#806047" /><rect x="40" y="53" width="10" height="18" rx="5" fill="#58A66F" /><path d="M41 60h-5v-5M49 63h5v-5" stroke="#58A66F" strokeWidth="3.5" fill="none" strokeLinecap="round" /><path d="M43 57l-3-2M48 61l3-2M44 66l-3 1" stroke="#E1E8CB" strokeWidth="1" /></g>;
+  if (variant === "bamboo") return <g className="plant-seedling seedling-bamboo"><ellipse cx="45" cy="70" rx="6" ry="3" fill="#6E5B41" /><path d="M42 70V53M49 70V58" stroke="#67AA61" strokeWidth="4" strokeLinecap="round" /><path d="M39 61h6M46 64h6M42 55l-7-5M49 59l7-5" stroke="#3F8148" strokeWidth="1.5" strokeLinecap="round" /><path d="M35 50q6-3 7 5M56 54q-6-2-7 5" fill="#78B971" /></g>;
+  if (variant === "monstera") return <g className="plant-seedling seedling-monstera"><ellipse cx="45" cy="70" rx="6" ry="3" fill="#745943" /><path d="M45 70V59" stroke="#4D9060" strokeWidth="3" /><path d="M45 60C31 54 30 43 38 40C48 39 53 50 45 60Z" fill="#4FA16B" /><path d="M43 57V43M41 50l-5-3M44 52l5-4" stroke="#C9E4C5" strokeWidth="1.2" /></g>;
+  if (variant === "rose") return <g className="plant-seedling seedling-rose"><ellipse cx="45" cy="70" rx="6" ry="3" fill="#77553F" /><path d="M45 70Q41 62 46 52" stroke="#4D915B" strokeWidth="3" fill="none" /><path d="M44 62q-10-7-12 0q6 6 12 3M46 58q9-7 11-1q-5 6-11 4" fill="#5BA464" /><circle cx="46" cy="51" r="5" fill="#D95775" /></g>;
+  return <g className="plant-seedling seedling-mugunghwa"><ellipse cx="45" cy="69" rx="5" ry="3" fill="#8C623F" /><path d="M45 69V58" stroke="#4E9E5F" strokeWidth="3" strokeLinecap="round" /><path d="M45 62Q33 53 30 59Q36 67 45 65M45 59Q55 50 61 55Q57 63 45 63" fill="#65B96F" /><circle cx="46" cy="55" r="3" fill="#F4ABC5" /></g>;
+}
+
 function Plant({ progress = 0, variant = "mugunghwa" }) {
   const pct = Math.max(0, Math.min(100, Math.round(progress)));
   const stage = pct === 100 ? 5 : pct >= 75 ? 4 : pct >= 50 ? 3 : pct >= 25 ? 2 : pct > 0 ? 1 : 0;
@@ -945,7 +995,7 @@ function Plant({ progress = 0, variant = "mugunghwa" }) {
     <span key={stage} className="progress-plant-wrap" tabIndex={0} aria-label={`${stageLabel}, tiến độ ${pct}%`}>
       <svg className={`progress-plant plant-${variant} stage-${stage}`} viewBox="0 0 90 110" width="72" height="88" aria-hidden="true">
         <ellipse cx="45" cy="77" rx="16" ry="5" fill="#7B5136" />
-        {stage === 0 && <ellipse className="plant-seed" cx="45" cy="70" rx="5" ry="3.5" fill="#8C623F" />}
+        {stage === 0 && <PlantSeedling variant={variant} />}
         {variant === "mugunghwa" && stage >= 1 && <path className="plant-stem" d={`M45 73 C44 63 45 ${stage >= 4 ? 29 : stage === 3 ? 38 : stage === 2 ? 49 : 61} 46 ${stage >= 4 ? 22 : stage === 3 ? 34 : stage === 2 ? 46 : 58}`} fill="none" stroke={stage === 5 ? "#397A3F" : "#4E9E5F"} strokeWidth={stage === 5 ? 5 : 3.5} strokeLinecap="round" />}
         {variant === "mugunghwa" && stage >= 1 && <path className="plant-leaf leaf-one" d="M45 62 C35 52 29 54 27 57 C33 65 39 67 45 66 Z" fill="#65B96F" />}
         {variant === "mugunghwa" && stage >= 2 && <path className="plant-leaf leaf-two" d="M45 53 C53 42 62 42 66 46 C60 55 54 58 45 58 Z" fill="#4E9E5F" />}
@@ -1250,7 +1300,10 @@ function Header({ profile, lesson, onOpenNotif }) {
   return (
     <section
       className="header"
-      style={{ "--dashboard-card-background": `url("${dashboardCardBackgroundUrl}")` }}
+      style={{
+        "--dashboard-card-background": `url("${dashboardCardBackgroundUrl}")`,
+        "--dashboard-card-mobile-background": `url("${dashboardCardMobileBackgroundUrl}")`,
+      }}
     >
       <button className="avatar-btn" onClick={onOpenNotif} aria-label="Thông báo">
         <Avatar />
@@ -2274,10 +2327,11 @@ function PlantShopView({ shop, loading, notice, onBack, onBuy, onSelect }) {
             {plant.selected ? (
               <button className="plant-shop-action selected" disabled>✓ Đang sử dụng</button>
             ) : plant.owned ? (
-              <button className="plant-shop-action" disabled={loading} onClick={() => onSelect(plant.id)}>Chọn cây này</button>
+              <button className="plant-shop-action choose" disabled={loading} onClick={() => onSelect(plant.id)}>Đổi sang cây này <ChevronRight size={16} /></button>
             ) : (
               <button className="plant-shop-action buy" disabled={loading || shop.balance < plant.price} onClick={() => onBuy(plant.id)}>
-                <DiamondIcon size={16} /> {plant.price.toLocaleString("vi-VN")}
+                <span className="plant-shop-action-label">Đổi cây</span>
+                <span className="plant-shop-action-price"><DiamondIcon size={16} /> {plant.price.toLocaleString("vi-VN")}</span>
               </button>
             )}
           </article>
@@ -2461,7 +2515,15 @@ async function markActivityCompleted(lesson, userId, activityId) {
   } catch (e) { }
   completed[activityId] = { completedAt: new Date().toISOString() };
   await window.storage.set(key, JSON.stringify(completed));
+  await markRemoteActivityCompleted(lesson?.textbookId, lesson?.id, activityId);
   return completed;
+}
+
+async function isActivityMarkedCompleted(lesson, userId, activityId) {
+  try {
+    const saved = await window.storage.get(activityCompletionKey(lesson, userId));
+    return !!(saved?.value && JSON.parse(saved.value)?.[activityId]);
+  } catch (e) { return false; }
 }
 
 
@@ -4266,6 +4328,27 @@ function ReviewResultView({ answers, writingResults, elapsedMs, difficulty, refl
           ))}
         </div>
 
+        {(strengths.length > 0 || weak.length > 0) && (
+          <div className={`rv-detail-card ${weak.length === 0 || strengths.length === 0 ? "single" : ""}`}>
+            {strengths.length > 0 && (
+              <div className="rv-detail-col ok">
+                <div className="rv-detail-title"><Sparkles size={15} /> Điểm mạnh</div>
+                <div className="rv-detail-items">
+                  {strengths.map((c, i) => (<div key={i} className="rv-detail-item"><CheckCircle2 size={14} /> {c.label}</div>))}
+                </div>
+              </div>
+            )}
+            {weak.length > 0 && (
+              <div className="rv-detail-col warn">
+                <div className="rv-detail-title"><Target size={15} /> Cần ôn thêm</div>
+                <div className="rv-detail-items">
+                  {weak.map((c, i) => (<div key={i} className="rv-detail-item"><Target size={14} /> {c.label}</div>))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="rv-result-msg">
           🐰 {feedback || <span className="rv-feedback-loading">AI đang phân tích bài làm của bạn...</span>}
         </div>
@@ -4281,23 +4364,6 @@ function ReviewResultView({ answers, writingResults, elapsedMs, difficulty, refl
               <div className="rv-writing-review-score">{w.score}/100</div>
             </div>
           ))}
-        </div>
-      )}
-
-      {(strengths.length > 0 || weak.length > 0) && (
-        <div className="rv-detail-card">
-          {strengths.length > 0 && (
-            <div className="rv-detail-col ok">
-              <div className="rv-detail-title">Điểm mạnh</div>
-              {strengths.map((c, i) => (<div key={i} className="rv-detail-item"><CheckCircle2 size={14} color="#3FA95C" /> {c.label}</div>))}
-            </div>
-          )}
-          {weak.length > 0 && (
-            <div className="rv-detail-col warn">
-              <div className="rv-detail-title">Cần ôn thêm</div>
-              {weak.map((c, i) => (<div key={i} className="rv-detail-item"><Target size={14} color="#D64545" /> {c.label}</div>))}
-            </div>
-          )}
         </div>
       )}
 
@@ -4351,15 +4417,15 @@ async function loadActivityProgress(lesson, userId) {
     ]);
     const localState = v?.value ? JSON.parse(v.value) : {};
     const merged = remote ? mergeVocabStates(localState, remote) : localState;
-    if (Object.keys(merged).length) out.tuvung = Math.round((Object.keys(merged).length / VOCAB_SAMPLE.length) * 100);
+    if (Object.keys(merged).length) out.tuvung = Math.max(out.tuvung, Math.round((Object.keys(merged).length / VOCAB_SAMPLE.length) * 100));
   } catch (e) { }
   try {
     const s = await readScopedProgress(shadowProgressKey(lesson, userId), legacyShadowProgressKey(lesson), userId);
-    if (s?.value) out.shadowing = Math.round((Object.keys(JSON.parse(s.value)).length / SHADOW_LINES.length) * 100);
+    if (s?.value) out.shadowing = Math.max(out.shadowing, Math.round((Object.keys(JSON.parse(s.value)).length / SHADOW_LINES.length) * 100));
   } catch (e) { }
   try {
     const d = await readScopedProgress(dictationProgressKey(lesson, userId), legacyDictationProgressKey(lesson), userId);
-    if (d?.value) out.nghechep = Math.round((Object.keys(correctDictationResults(JSON.parse(d.value))).length / SHADOW_LINES.length) * 100);
+    if (d?.value) out.nghechep = Math.max(out.nghechep, Math.round((Object.keys(correctDictationResults(JSON.parse(d.value))).length / SHADOW_LINES.length) * 100));
   } catch (e) { }
   try {
     const r = await readScopedProgress(reviewHistoryKey(lesson, userId), legacyLessonProgressKey("review-history", lesson.no), userId);
@@ -4367,7 +4433,7 @@ async function loadActivityProgress(lesson, userId) {
       const hist = JSON.parse(r.value);
       const totalReviewable = VOCAB_SAMPLE.length + GRAMMAR_SAMPLE.reduce((s, g) => s + g.formula.length, 0) + SHADOW_LINES.length + (SHADOW_LINES.length - 1);
       const mastered = Object.values(hist).filter((h) => h.correct > 0 && h.correct >= h.wrong).length;
-      out.ontap = Math.round((mastered / totalReviewable) * 100);
+      out.ontap = Math.max(out.ontap, Math.round((mastered / totalReviewable) * 100));
     }
   } catch (e) { }
   try {
@@ -7759,7 +7825,10 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     if (!lesson) return;
     try {
       const previousActivities = await loadActivityProgress(lesson, profile?.id);
-      if ((previousActivities[activityId] || 0) >= 100) {
+      if (await isActivityMarkedCompleted(lesson, profile?.id, activityId)) {
+        await markRemoteActivityCompleted(lesson?.textbookId, lesson?.id, activityId);
+        const lessonProgress = Math.round(Object.values(previousActivities).reduce((sum, value) => sum + value, 0) / ACTIVITIES.length);
+        await handleLessonProgressChange(lessonProgress, previousActivities);
         setView("lesson-detail");
         return;
       }
@@ -7805,9 +7874,23 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   useEffect(() => {
     if (!profile) return undefined;
     let alive = true;
-    loadLearningCatalog().then((catalog) => {
-      if (alive && catalog) setLearningCatalog(prepareLearningCatalog(catalog));
-    });
+    (async () => {
+      let catalog = await loadLearningCatalog();
+      if (!catalog || !alive) return;
+      // Chuyển các dấu hoàn thành cũ từ localStorage lên Supabase. Việc này
+      // sửa cả trường hợp đã nhận thưởng nhưng lesson_progress trước đây chưa tăng.
+      for (const item of catalog.lessons || []) {
+        try {
+          const saved = await window.storage.get(activityCompletionKey(item, profile.id));
+          const completed = saved?.value ? JSON.parse(saved.value) : {};
+          for (const activity of ACTIVITIES) {
+            if (completed[activity.id]) await markRemoteActivityCompleted(item.textbookId, item.id, activity.id);
+          }
+        } catch (error) { }
+      }
+      catalog = await loadLearningCatalog(catalog.activeTextbook?.id) || catalog;
+      if (alive) setLearningCatalog(prepareLearningCatalog(catalog));
+    })();
     return () => { alive = false; };
   }, [profile]);
 
@@ -8428,7 +8511,7 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .plant-shop-card{display:grid;grid-template-columns:110px minmax(0,1fr);grid-template-rows:1fr auto;gap:12px 15px;min-height:220px;padding:20px;border:1.5px solid #E7E2F7;border-radius:20px;background:#fff;box-shadow:0 8px 24px rgba(64,52,120,.06);transition:.18s ease}.plant-shop-card:hover{transform:translateY(-2px);border-color:#CFC5F7;box-shadow:0 13px 30px rgba(64,52,120,.11)}.plant-shop-card.selected{border-color:#8B7BE8;background:linear-gradient(145deg,#fff,#F5F2FF)}
 .plant-shop-preview{grid-row:1/3;display:grid;place-items:center;border-radius:17px;background:linear-gradient(145deg,#F2F8EF,#FAF5EF)}.plant-shop-preview .progress-plant{transform:scale(1.18)}.plant-shop-preview .plant-tooltip{display:none}
 .plant-shop-eyebrow{color:#8173E4;font-size:9px;font-weight:800;letter-spacing:.12em}.plant-shop-info h3{margin:3px 0;color:#302B4D;font:700 20px 'Baloo 2'}.plant-shop-info p{margin:0;color:#8B85AB;font-size:12.5px;line-height:1.5}
-.plant-shop-action{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:39px;border:1px solid #CFC6F5;border-radius:11px;background:#fff;color:#6657D8;font:700 12.5px 'Quicksand';cursor:pointer}.plant-shop-action:hover:not(:disabled){background:#F1EDFF}.plant-shop-action.buy{border:none;background:#7C6FE4;color:#fff;box-shadow:0 5px 12px rgba(124,111,228,.25)}.plant-shop-action.selected{border:none;background:#E9F7EE;color:#27834A}.plant-shop-action:disabled{cursor:not-allowed;opacity:.62}
+.plant-shop-action{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:43px;padding:0 14px;border:1px solid #CFC6F5;border-radius:12px;background:#fff;color:#6657D8;font:700 12.5px 'Quicksand';cursor:pointer;transition:transform .16s ease,box-shadow .16s ease,background .16s ease}.plant-shop-action:hover:not(:disabled){transform:translateY(-1px);background:#F1EDFF;box-shadow:0 6px 14px rgba(102,87,216,.14)}.plant-shop-action.choose{justify-content:space-between;padding-left:16px}.plant-shop-action.buy{justify-content:space-between;border:none;background:linear-gradient(135deg,#8173E8,#6E5DDC);color:#fff;box-shadow:0 6px 14px rgba(124,111,228,.28)}.plant-shop-action.buy:hover:not(:disabled){background:linear-gradient(135deg,#7465DE,#5F4FD0);box-shadow:0 8px 18px rgba(98,80,208,.34)}.plant-shop-action-label{font-size:13px}.plant-shop-action-price{display:inline-flex;align-items:center;gap:5px;padding:6px 9px;border-radius:8px;background:rgba(255,255,255,.17);font-size:12px}.plant-shop-action.selected{border:1px solid #BFE6CC;background:#E9F7EE;color:#27834A}.plant-shop-action:disabled{cursor:not-allowed;opacity:.68}
 @media(max-width:1050px){.plant-shop-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.plant-shop-toolbar{align-items:flex-start;flex-direction:column;padding:17px}.shop-balance{width:100%;justify-content:center}.plant-shop-grid{grid-template-columns:1fr}.plant-shop-card{grid-template-columns:96px minmax(0,1fr);padding:15px}.plant-shop-preview .progress-plant{transform:scale(1.05)}}
 
@@ -9850,9 +9933,11 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 
 /* --- results --- */
 .rv-result-card{
-  position:relative;background:linear-gradient(135deg,#F0EEFC,#FDF3E7);border-radius:24px;
-  padding:28px 26px;text-align:center;overflow:hidden;
+  position:relative;background:linear-gradient(145deg,#FBFAFF 0%,#F5F1FF 52%,#FFF9F1 100%);border:1px solid #E8E1FA;border-radius:26px;
+  padding:30px 28px;text-align:center;overflow:hidden;box-shadow:0 14px 38px rgba(82,67,150,.09);
 }
+.rv-result-card::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 12% 5%,rgba(153,135,242,.13),transparent 27%),radial-gradient(circle at 90% 15%,rgba(255,197,111,.13),transparent 25%);pointer-events:none}
+.rv-result-card>*{position:relative;z-index:1}
 .rv-result-trophy{font-size:52px;margin-bottom:6px}
 .rv-result-grade{font:800 20px 'Baloo 2';color:#2E2A4A;margin-bottom:4px}
 .rv-result-score{font:800 44px 'Baloo 2';color:#7C6FE4}
@@ -9870,14 +9955,14 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   color:#5A5380;display:flex;align-items:center;gap:9px;justify-content:center;max-width:460px;margin:0 auto;
 }
 
-.rv-detail-card{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.rv-detail-col{border-radius:16px;padding:16px 18px}
-.rv-detail-col.ok{background:#EBF7EE}
-.rv-detail-col.warn{background:#FCEEEE}
-.rv-detail-title{font:800 13.5px 'Baloo 2';margin-bottom:9px}
-.rv-detail-col.ok .rv-detail-title{color:#2E8148}
-.rv-detail-col.warn .rv-detail-title{color:#B83A3A}
-.rv-detail-item{display:flex;align-items:center;gap:7px;font:700 12.5px 'Quicksand';color:#4B4470;margin-bottom:6px}
+.rv-detail-card{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:600px;margin:4px auto 14px}
+.rv-detail-card.single{grid-template-columns:minmax(0,1fr)}
+.rv-detail-col{display:flex;align-items:center;gap:15px;border:1px solid;border-radius:16px;padding:12px 15px;text-align:left}
+.rv-detail-col.ok{background:rgba(235,247,238,.9);border-color:#CDEBD5;color:#2E8148}
+.rv-detail-col.warn{background:rgba(252,238,238,.9);border-color:#F4D3D3;color:#B83A3A}
+.rv-detail-title{display:flex;align-items:center;gap:6px;flex-shrink:0;font:700 13px 'Baloo 2'}
+.rv-detail-items{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex:1;flex-wrap:wrap}
+.rv-detail-item{display:flex;align-items:center;gap:5px;border-radius:99px;padding:5px 9px;background:rgba(255,255,255,.72);font:600 11.5px 'Quicksand';color:#4B4470;margin:0}
 
 .rv-result-actions{display:flex;gap:12px}
 .rv-retry-btn, .rv-home-btn{
@@ -9928,6 +10013,10 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   .rv-cta-card{flex-direction:column;text-align:center}
   .rv-types-grid{grid-template-columns:repeat(2,1fr)}
   .rv-detail-card{grid-template-columns:1fr}
+  .rv-detail-col{align-items:flex-start;flex-direction:column;gap:7px}
+  .rv-detail-items{justify-content:flex-start;width:100%}
+  .rv-result-card{padding:24px 16px;border-radius:20px}
+  .rv-result-actions{flex-direction:column}
 }
 
 /* ---------------- Coming soon ---------------- */
@@ -10730,7 +10819,7 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 }
 
 @media (max-width:560px){
-  .dashboard-grid .header{padding:17px 16px}
+  .dashboard-grid .header{padding:17px 16px;background-image:linear-gradient(rgba(255,255,255,.76),rgba(255,255,255,.76)),var(--dashboard-card-mobile-background);background-position:center top}
   .dashboard-grid .card{padding:16px}
   .dashboard-grid .qa-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
   .dashboard-grid .qa-card{min-height:82px;padding:10px 5px;font-size:10px}
