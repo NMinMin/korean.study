@@ -23,6 +23,7 @@ export type LearningLesson = {
   words: number
   contentStatus: 'draft' | 'published' | 'locked' | 'no_content'
   status: 'current' | 'locked'
+  progressPercent: number
 }
 
 export type LearningCatalog = {
@@ -125,6 +126,7 @@ export async function loadLearningCatalog(preferredTextbookId?: string): Promise
       words: wordCounts.get(row.id) ?? 0,
       contentStatus: row.status,
       status: row.status === 'published' ? 'current' : 'locked',
+      progressPercent: Number((progressResult.data ?? []).find((progress) => progress.lesson_id === row.id)?.progress_percent || 0),
     }))
   const latestProgress = (progressResult.data ?? []).find((progress) => progress.textbook_id === activeTextbook.id)
   const continueLesson = lessons.find((lesson) => lesson.id === latestProgress?.lesson_id)
@@ -170,6 +172,31 @@ export async function markLessonStarted(textbookId: string, lessonId: string): P
       textbook_id: textbookId,
       lesson_id: lessonId,
       last_activity: 'lesson',
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'user_id,lesson_id' },
+  )
+  if (error) throw error
+}
+
+export async function syncLessonProgress(
+  textbookId: string,
+  lessonId: string,
+  progressPercent: number,
+  lastActivity = 'lesson',
+): Promise<void> {
+  if (!supabase) return
+  const { data } = await supabase.auth.getUser()
+  if (!data.user) return
+  const normalized = Math.max(0, Math.min(100, Math.round(progressPercent)))
+  const { error } = await supabase.from('lesson_progress').upsert(
+    {
+      user_id: data.user.id,
+      textbook_id: textbookId,
+      lesson_id: lessonId,
+      progress_percent: normalized,
+      last_activity: lastActivity,
+      last_position: { progressPercent: normalized },
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'user_id,lesson_id' },

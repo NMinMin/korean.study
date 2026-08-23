@@ -6,12 +6,16 @@ import {
   BookMarked, MessageCircle, Hexagon, Volume2, Square, RotateCcw,
   CheckCircle2, XCircle, AlertTriangle, Link2, Image as ImageIcon,
   Lock, Eraser, Scissors, Smile, Target, Trash2, Copy, Bell, Edit2,
-  LogOut, Flag, Bot,
+  LogOut, Flag, Bot, Coffee,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { loadRemoteDailyGoal, loadRemoteStudyPlan, saveRemoteDailyGoal, saveRemoteStudyPlan } from "./lib/studySettings";
-import { loadRemoteVocabularyState, saveRemoteVocabularyState } from "./lib/vocabularyProgress";
-import { addUserTextbook, loadLearningCatalog, markLessonStarted } from "./lib/learningContent";
+import { loadRemoteVocabularyState, loadRemoteVocabularyStateForWords, saveRemoteVocabularyState, saveRemoteVocabularyStateForWords } from "./lib/vocabularyProgress";
+import { addUserTextbook, loadLearningCatalog, markLessonStarted, syncLessonProgress } from "./lib/learningContent";
+import { loadVocabularyReviewSchedule } from "./lib/reviewSchedule";
+import correctSoundUrl from "../Sound Effect/Correct.mp3";
+import incorrectSoundUrl from "../Sound Effect/Discorrect.mp3";
+import completeLessonSoundUrl from "../Sound Effect/Complete_Lesson.mp3";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:3001").replace(/\/$/, "");
 
@@ -875,8 +879,8 @@ function Plant({ progress = 0 }) {
   const stageLabel = ["Hạt giống", "Nảy mầm", "Cây non", "Đang phát triển", "Cây sum suê", "Cây Mugunghwa nở hoa"][stage];
 
   return (
-    <svg key={stage} className={`progress-plant stage-${stage}`} viewBox="0 0 90 110" width="72" height="88" role="img" aria-label={`${stageLabel}, tiến độ ${pct}%`}>
-      <title>{stageLabel} — tiến độ giáo trình {pct}%</title>
+    <span key={stage} className="progress-plant-wrap" tabIndex={0} aria-label={`${stageLabel}, tiến độ ${pct}%`}>
+    <svg className={`progress-plant stage-${stage}`} viewBox="0 0 90 110" width="72" height="88" aria-hidden="true">
       <ellipse cx="45" cy="77" rx="16" ry="5" fill="#7B5136" />
       {stage === 0 && <ellipse className="plant-seed" cx="45" cy="70" rx="5" ry="3.5" fill="#8C623F" />}
       {stage >= 1 && <path className="plant-stem" d={`M45 73 C44 63 45 ${stage >= 4 ? 29 : stage === 3 ? 38 : stage === 2 ? 49 : 61} 46 ${stage >= 4 ? 22 : stage === 3 ? 34 : stage === 2 ? 46 : 58}`} fill="none" stroke={stage === 5 ? "#397A3F" : "#4E9E5F"} strokeWidth={stage === 5 ? 5 : 3.5} strokeLinecap="round" />}
@@ -929,6 +933,8 @@ function Plant({ progress = 0 }) {
       <path d="M28 78 h34 l-4 26 a6 6 0 0 1-6 5 h-14 a6 6 0 0 1-6-5 Z" fill="#E8B98B" />
       <path d="M26 74 h38 v8 h-38 z" fill="#D9A876" rx="3" />
     </svg>
+    <span className="plant-tooltip" aria-hidden="true"><span className="plant-tooltip-icon">{stage === 5 ? "🌺" : "🌱"}</span><span><b>{stageLabel}</b><small>Tiến độ giáo trình</small></span><strong>{pct}%</strong></span>
+    </span>
   );
 }
 
@@ -937,8 +943,8 @@ function Plant({ progress = 0 }) {
 /* ------------------------------------------------------------------ */
 const NAV_TILES = [
   { id: "giaotrinh", label: "Giáo trình", mobileLabel: "Giáo trình", icon: BookOpen, color: "#4A90E2", bg: "#EEF4FD" },
-  { id: "tuvunghub", label: "Từ vựng & bài học", mobileLabel: "Từ vựng", icon: Type, color: "#3FA95C", bg: "#EBF7EE" },
   { id: "nguphap", label: "Ngữ pháp", mobileLabel: "Ngữ pháp", icon: NotebookPen, color: "#7C6FE4", bg: "#F0EEFC" },
+  { id: "thithu", label: "Thi thử", mobileLabel: "Thi thử", icon: Target, color: "#D15A87", bg: "#FBEAF2" },
   { id: "xephanghub", label: "Xếp hạng", mobileLabel: "Xếp hạng", icon: Trophy, color: "#F0912E", bg: "#FDF3E7" },
   { id: "caidat", label: "Cài đặt", mobileLabel: "Cài đặt", icon: Settings, color: "#8B85AB", bg: "#F3F1FC" },
 ];
@@ -947,8 +953,8 @@ function Sidebar({ active, setActive, setView, setLesson, goHome, onSignOut, isA
   const handleTileClick = (id) => {
     setActive(id);
     if (id === "giaotrinh") setView("curriculum-hub");
-    else if (id === "tuvunghub") setView("study-hub");
     else if (id === "nguphap") setView("nguphap-hub");
+    else if (id === "thithu") setView("mock-exam");
     else if (id === "xephanghub") setView("xephang");
     else if (id === "caidat") setView("caidat");
   };
@@ -980,7 +986,7 @@ function Sidebar({ active, setActive, setView, setLesson, goHome, onSignOut, isA
           );
         })}
         {isAdmin && (
-          <button className="nav-tile admin-nav-button" onClick={() => { window.location.href = "/admin"; }}>
+          <button className="nav-tile admin-nav-button" onClick={() => { window.location.href = `${import.meta.env.BASE_URL}admin`; }}>
             <span className="nav-tile-ico"><Settings size={22} color="#8A5CF6" /></span>
             <span className="nav-tile-label">Quản trị</span>
           </button>
@@ -1095,7 +1101,7 @@ async function computeHomeProgress() {
   try {
     const d = await window.storage.get(dictationProgressKey(lesson));
     if (d?.value) {
-      const parsed = JSON.parse(d.value);
+      const parsed = correctDictationResults(JSON.parse(d.value));
       const n = Object.keys(parsed).length;
       out[1].pct = Math.round((n / SHADOW_LINES.length) * 100);
       out[1].detail = `${n} / ${SHADOW_LINES.length} câu`;
@@ -1206,40 +1212,27 @@ function PersonalProgressSection({ profile }) {
   );
 }
 
-function ReviewSchedule({ lesson, userId, onReview, vocabulary = VOCAB_SAMPLE }) {
+function ReviewSchedule({ userId, onReview }) {
   const [schedule, setSchedule] = useState([]);
   const [selected, setSelected] = useState(0);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      let progress = {};
-      try {
-        const result = await window.storage.get(vocabProgressKey(lesson, userId));
-        if (result?.value) progress = JSON.parse(result.value);
-      } catch (error) {}
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
-      const days = Array.from({ length: 14 }, (_, index) => {
-        const date = new Date(start);
-        date.setDate(start.getDate() + index);
-        const next = new Date(date); next.setDate(date.getDate() + 1);
-        const words = vocabulary.filter((word) => {
-          const dueAt = progress[word.word]?.dueAt;
-          if (!dueAt) return false;
-          const due = new Date(dueAt);
-          return index === 0 ? due < next : due >= date && due < next;
-        });
+      const result = await loadVocabularyReviewSchedule(userId, 14);
+      const days = result.map((item, index) => {
+        const [year, month, day] = item.dateKey.split("-").map(Number);
+        const date = new Date(year, month - 1, day);
         return {
           date,
-          words,
+          words: item.words,
           label: index === 0 ? "Hôm nay" : index === 1 ? "Ngày mai" : date.toLocaleDateString("vi-VN", { weekday: "short" }),
         };
       });
       if (alive) setSchedule(days);
     })();
     return () => { alive = false; };
-  }, [lesson, userId, vocabulary]);
+  }, [userId]);
 
   const picked = schedule[selected];
   return (
@@ -1250,25 +1243,24 @@ function ReviewSchedule({ lesson, userId, onReview, vocabulary = VOCAB_SAMPLE })
       </div>
       <div className="days">
         {schedule.map((d, index) => (
-          <div key={d.date.toISOString()} className={`day ${index === 0 ? "today" : ""} ${selected === index ? "selected" : ""}`} role="button" tabIndex={0} onClick={() => setSelected(index)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelected(index); } }}>
+          <div key={d.date.toISOString()} className={`day ${index === 0 ? "today" : ""} ${selected === index ? "selected" : ""} ${d.words.length ? "has-review" : "rest-day"}`} role="button" tabIndex={0} onClick={() => setSelected(index)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelected(index); } }}>
             <span className="day-name">{d.label}</span>
             <span className="day-date">{d.date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })}</span>
-            <span className="day-words">{d.words.length} từ</span>
-            {index === 0 ? (
+            <span className="day-words">{d.words.length ? `${d.words.length} từ` : "Nghỉ ngơi"}</span>
+            {index === 0 && d.words.length ? (
               <button
-                className={`on-ngay ${d.words.length ? "" : "disabled"}`}
-                disabled={!d.words.length}
+                className="on-ngay"
                 onClick={(event) => { event.stopPropagation(); if (d.words.length) onReview(d.words, d.label); }}
               >
-                {d.words.length ? "Ôn ngay" : "Đã xong"}
+                Ôn ngay
               </button>
-            ) : <span className="day-ico"><BookMarked size={16} /></span>}
+            ) : <span className={`day-ico ${d.words.length ? "" : "rest"}`}>{d.words.length ? <BookMarked size={16} /> : <Coffee size={16} />}</span>}
           </div>
         ))}
       </div>
       {picked && (
         <div className="review-selected-day">
-          <div><b>{picked.label} · {picked.date.toLocaleDateString("vi-VN")}</b><span>{picked.words.length ? `${picked.words.length} từ đang chờ bạn ôn lại` : "Không có từ nào đến hạn trong ngày này"}</span></div>
+          <div><b>{picked.label} · {picked.date.toLocaleDateString("vi-VN")}</b><span>{picked.words.length ? `${picked.words.length} từ đang chờ bạn ôn lại` : "Ngày nghỉ — không có từ nào cần ôn"}</span></div>
           {selected === 0 && picked.words.length > 0 && <span className="review-current-note">Bấm “Ôn ngay” ở ô Hôm nay để bắt đầu</span>}
         </div>
       )}
@@ -1283,7 +1275,7 @@ function ReviewSchedule({ lesson, userId, onReview, vocabulary = VOCAB_SAMPLE })
 }
 
 function ContinueLearning({ onGo, textbook, lesson, hasStarted = false }) {
-  const overallPct = textbook?.progressPercent || 0;
+  const overallPct = lesson?.progressPercent ?? textbook?.progressPercent ?? 0;
   if (!textbook || !lesson) {
     return (
       <section className="card continue continue-empty">
@@ -1315,29 +1307,28 @@ function ContinueLearning({ onGo, textbook, lesson, hasStarted = false }) {
   );
 }
 
-/* ---- Mục tiêu trong ngày: vòng tròn tiến trình + hiệu ứng chúc mừng ---- */
-function playCelebrationSound() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    [523.25, 659.25, 783.99].forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.type = "sine"; osc.frequency.value = freq;
-      const start = ctx.currentTime + i * 0.09;
-      gain.gain.setValueAtTime(0.001, start);
-      gain.gain.exponentialRampToValueAtTime(0.15, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.35);
-      osc.start(start); osc.stop(start + 0.4);
-    });
-  } catch (e) {}
-}
-
 const CELEBRATION_SOUND_KEY = "kstudy:celebration-sound-enabled";
+const SOUND_VOLUME_KEY = "kstudy:sound-volume";
 function isCelebrationSoundEnabled() {
   try { return localStorage.getItem(CELEBRATION_SOUND_KEY) !== "false"; }
   catch (e) { return true; }
 }
+function getSoundVolume() {
+  try { return Math.max(0, Math.min(1, Number(localStorage.getItem(SOUND_VOLUME_KEY) ?? 0.7))); }
+  catch (e) { return 0.7; }
+}
+function playEffect(url) {
+  if (!isCelebrationSoundEnabled() || getSoundVolume() <= 0) return null;
+  try {
+    const audio = new Audio(url);
+    audio.volume = getSoundVolume();
+    audio.play().catch(() => {});
+    return audio;
+  } catch (e) { return null; }
+}
+function playCorrectSound() { return playEffect(correctSoundUrl); }
+function playIncorrectSound() { return playEffect(incorrectSoundUrl); }
+function playCelebrationSound() { return playEffect(completeLessonSoundUrl); }
 
 function ConfettiBurst() {
   const pieces = useMemo(() => Array.from({ length: 18 }, (_, i) => ({
@@ -1373,8 +1364,11 @@ function DailyGoalRing({ onChangeGoal }) {
   useEffect(() => {
     if (!goal) return;
     const done = goal.targetMinutes > 0 && goal.todayMinutes >= goal.targetMinutes;
-    if (done && !celebratedRef.current) {
+    const celebrationKey = `kstudy:daily-goal-celebrated:${goal.todayDate}`;
+    const alreadyCelebrated = localStorage.getItem(celebrationKey) === "true";
+    if (done && !celebratedRef.current && !alreadyCelebrated) {
       celebratedRef.current = true;
+      localStorage.setItem(celebrationKey, "true");
       setShowConfetti(true);
       if (isCelebrationSoundEnabled()) playCelebrationSound();
       setTimeout(() => setShowConfetti(false), 1300);
@@ -1420,7 +1414,7 @@ function QuickAccessMenu({ onDictation, onShadowing, onReview }) {
   const items = [
     { label: "Nghe chép chính tả", icon: Headphones, color: "#3FA95C", bg: "#EBF7EE", onClick: onDictation },
     { label: "Shadowing", icon: Mic, color: "#7C6FE4", bg: "#F0EEFC", onClick: onShadowing },
-    { label: "Ôn tập", icon: BookMarked, color: "#F0912E", bg: "#FDF3E7", onClick: onReview },
+    { label: "Thi thử", icon: Target, color: "#F0912E", bg: "#FDF3E7", onClick: onReview },
   ];
   return (
     <section className="card quick-access-card">
@@ -1638,6 +1632,7 @@ function SettingsView({ onBack }) {
   const [saved, setSaved] = useState(false);
   const [notifPermNote, setNotifPermNote] = useState("");
   const [celebrationSound, setCelebrationSound] = useState(isCelebrationSoundEnabled);
+  const [soundVolume, setSoundVolume] = useState(getSoundVolume);
 
   useEffect(() => {
     let alive = true;
@@ -1664,6 +1659,7 @@ function SettingsView({ onBack }) {
     setGoal(clampedGoal);
     await saveDailyGoal(clampedGoal);
     await saveStudyPlan(plan, celebrationSound);
+    localStorage.setItem(SOUND_VOLUME_KEY, String(soundVolume));
     if (plan.reminderEnabled && typeof window !== "undefined" && "Notification" in window) {
       try {
         const perm = await Notification.requestPermission();
@@ -1753,12 +1749,33 @@ function SettingsView({ onBack }) {
         )}
         <div className="settings-row settings-sound-row">
           <div className="settings-row-label">
-            <b>Âm thanh chúc mừng</b>
-            <span>Phát âm thanh nhẹ khi hoàn thành mục tiêu trong ngày</span>
+            <b>Âm thanh hiệu ứng</b>
+            <span>Phát khi trả lời đúng/sai, đạt mục tiêu và hoàn thành bài học</span>
           </div>
           <button className={`settings-toggle ${celebrationSound ? "on" : ""}`} onClick={() => setCelebrationSound((enabled) => !enabled)} aria-label="Bật/tắt âm thanh chúc mừng" aria-pressed={celebrationSound}>
             <span className="settings-toggle-knob" />
           </button>
+        </div>
+        <div className={`settings-row settings-volume-row ${celebrationSound ? "" : "disabled"}`}>
+          <div className="settings-row-label">
+            <b>Âm lượng</b>
+            <span>{Math.round(soundVolume * 100)}%</span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={soundVolume}
+            disabled={!celebrationSound}
+            onChange={(event) => {
+              const nextVolume = Number(event.target.value);
+              setSoundVolume(nextVolume);
+              localStorage.setItem(SOUND_VOLUME_KEY, String(nextVolume));
+            }}
+            onPointerUp={() => playEffect(correctSoundUrl)}
+            aria-label="Âm lượng hiệu ứng"
+          />
         </div>
         {plan.reminderEnabled && (
           <p className="settings-note">
@@ -1827,8 +1844,10 @@ function ComingSoonView({ modeId, onBack }) {
   return (
     <section className="card page soon-page">
       <div className="card-title-row">
-        <div className="card-title"><Icon size={19} color="#7C6FE4" /> {info.label}</div>
-        <button className="link-btn" onClick={onBack}>← Về trang chủ</button>
+        <div className="page-back-heading">
+          <button className="fc2-back" onClick={onBack} aria-label="Quay lại"><ChevronLeft size={20} /></button>
+          <div className="card-title"><Icon size={19} color="#7C6FE4" /> {info.label}</div>
+        </div>
       </div>
       <div className="soon-body">
         <span className="soon-ico"><Icon size={34} color="#7C6FE4" /></span>
@@ -1845,8 +1864,10 @@ function TopicsView({ onBack }) {
   return (
     <section className="card page">
       <div className="card-title-row">
-        <div className="card-title"><Type size={19} color="#7C6FE4" /> Từ vựng · Theo chủ đề</div>
-        <button className="link-btn" onClick={onBack}>← Về trang chủ</button>
+        <div className="page-back-heading">
+          <button className="fc2-back" onClick={onBack} aria-label="Quay lại"><ChevronLeft size={20} /></button>
+          <div className="card-title"><Type size={19} color="#7C6FE4" /> Từ vựng · Theo chủ đề</div>
+        </div>
       </div>
       <div className="page-note">
         <Lightbulb size={16} color="#E8A93D" fill="#F7D98B" />
@@ -1872,16 +1893,31 @@ function TopicsView({ onBack }) {
 /* ------------------------------------------------------------------ */
 /*  TỪ VỰNG — THEO BÀI (회화 익힘책 2-1, 7 bài)                        */
 /* ------------------------------------------------------------------ */
-function LessonsView({ onBack, onSelect, lessons = LESSONS_2_1, textbookTitle = "세종한국어 회화 익힘책 2-1", title = "Từ vựng · Theo bài", backLabel = "Quay lại" }) {
+function LessonsView({ onBack, onSelect, onChangeTextbook, textbooks = [], activeTextbookId, continueLesson, lessons = LESSONS_2_1, textbookTitle = "세종한국어 회화 익힘책 2-1", title = "Từ vựng · Theo bài", backLabel = "Quay lại" }) {
   return (
     <section className="card page">
       <div className="card-title-row">
-        <div className="card-title"><NotebookPen size={19} color="#7C6FE4" /> {title}</div>
-        <button className="link-btn" onClick={onBack}><ChevronLeft size={15} /> {backLabel}</button>
+        <div className="page-back-heading">
+          <button className="fc2-back" onClick={onBack} aria-label={`Về ${backLabel}`}><ChevronLeft size={20} /></button>
+          <div className="card-title"><NotebookPen size={19} color="#7C6FE4" /> {title}</div>
+        </div>
       </div>
       <div className="lesson-book-tag">
-        <span className="book-chip">{textbookTitle}</span>
+        {textbooks.length > 1 ? (
+          <label className="book-switcher">
+            <BookOpen size={15} aria-hidden="true" />
+            <select
+              value={activeTextbookId || ""}
+              onChange={(event) => onChangeTextbook?.(event.target.value)}
+              aria-label="Chọn giáo trình"
+            >
+              {textbooks.map((book) => <option key={book.id} value={book.id}>{book.title}</option>)}
+            </select>
+            <ChevronDown size={15} aria-hidden="true" />
+          </label>
+        ) : <span className="book-chip">{textbookTitle}</span>}
         <span className="lesson-count">{lessons.length} bài</span>
+        {continueLesson && <span className="current-study-chip">Đang học · Bài {continueLesson.no}</span>}
       </div>
       <div className="lesson-list">
         {lessons.map((l) => (
@@ -1915,8 +1951,10 @@ function ActivityLessonSelectView({ title, icon: Icon, color, onBack, onSelect, 
   return (
     <section className="card page">
       <div className="card-title-row">
-        <div className="card-title"><Icon size={19} color={color} /> {title} · Chọn bài học</div>
-        <button className="link-btn" onClick={onBack}><ChevronLeft size={15} /> {backLabel}</button>
+        <div className="page-back-heading">
+          <button className="fc2-back" onClick={onBack} aria-label={`Về ${backLabel}`}><ChevronLeft size={20} /></button>
+          <div className="card-title"><Icon size={19} color={color} /> {title} · Chọn bài học</div>
+        </div>
       </div>
       <p className="page-note" style={{ background: "none", padding: 0, color: "#8B85AB" }}>
         Chọn bài học bạn muốn luyện — nội dung sẽ lấy đúng theo bài đó.
@@ -1978,17 +2016,92 @@ const feedbackFor = (score, hasSpeech) => {
   return { tone: "bad", msg: "Còn khá khác so với câu gốc — nghe lại mẫu vài lần rồi thử lại nhé." };
 };
 
-const toneForScore = (score) => (score === 100 ? "great" : score >= 70 ? "good" : score >= 40 ? "mid" : "bad");
+const toneForScore = (score) => (score >= 80 ? "good" : score >= 60 ? "mid" : "bad");
 
-/* Chấm điểm chi tiết bằng Claude API — phân tích sâu hơn so khớp từ đơn   */
-/* thuần (phát hiện từ SAI khác từ THIẾU, kèm nhận xét + gợi ý cụ thể).   */
-/* Nếu gọi API lỗi (mất mạng, v.v.) sẽ tự rơi về so khớp cục bộ để không  */
-/* làm gián đoạn trải nghiệm.                                             */
-async function gradeWithAI(target, said, realPron) {
+const AI_GRADER_URL = (import.meta.env.VITE_AI_GRADER_URL || "https://ai-review-paper.vonhacphuoc.workers.dev/").replace(/\/?$/, "/");
+
+function parseAIJson(value) {
+  const clean = String(value || "").replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
+  try { return JSON.parse(clean); } catch (error) {
+    const start = clean.indexOf("{");
+    const end = clean.lastIndexOf("}");
+    if (start >= 0 && end > start) return JSON.parse(clean.slice(start, end + 1));
+    throw error;
+  }
+}
+
+function DictationModeSelectView({ lesson, onBack, onSelect }) {
+  return (
+    <section className="card page dictation-mode-page">
+      <div className="page-back-heading">
+        <button className="fc2-back" onClick={onBack} aria-label="Quay lại"><ChevronLeft size={20} /></button>
+        <div>
+          <div className="card-title"><Headphones size={19} color="#3FA95C" /> Nghe chép chính tả · Bài {lesson.no}</div>
+          <p className="dictation-mode-note">Chọn tuyến học phù hợp. Chỉ kết quả trong tuyến Kiểm tra được lưu vào tiến trình.</p>
+        </div>
+      </div>
+      <div className="dictation-mode-grid">
+        <button className="dictation-mode-card practice" onClick={() => onSelect("practice")}>
+          <span className="dictation-mode-icon"><Headphones size={27} /></span>
+          <strong>Luyện tập</strong>
+          <p>Nghe không giới hạn, dùng gợi ý và luyện từng câu. Không ảnh hưởng tiến trình.</p>
+          <span>Bắt đầu luyện <ChevronRight size={16} /></span>
+        </button>
+        <button className="dictation-mode-card test" onClick={() => onSelect("test")}>
+          <span className="dictation-mode-icon"><Target size={27} /></span>
+          <strong>Kiểm tra</strong>
+          <p>Mỗi câu chỉ được nghe tối đa 2 lần. Câu đúng được lưu để tiếp tục ở lần sau.</p>
+          <span>Vào kiểm tra <ChevronRight size={16} /></span>
+        </button>
+      </div>
+    </section>
+  );
+}
+
+async function requestAIJson(prompt) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 30000);
+  try {
+    const res = await fetch(AI_GRADER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: prompt }),
+      signal: controller.signal,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error?.message || `AI grader HTTP ${res.status}`);
+    return { value: parseAIJson(data.result), model: data.model || "AI grader" };
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+async function transcribeShadowRecording(blob) {
+  if (!supabase) throw new Error("Supabase chưa được cấu hình.");
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error("Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.");
+  const extension = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
+  const form = new FormData();
+  form.append("audio", blob, `shadowing-${Date.now()}.${extension}`);
+  const response = await fetch(`${API_URL}/v1/shadowing/transcribe`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    body: form,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.message || "Không thể nhận dạng bản ghi âm.");
+  return data;
+}
+
+/* Worker AI chấm transcript tiếng Hàn; lỗi mạng sẽ dùng bộ chấm cục bộ. */
+async function gradeWithAI(target, said, realPron, timing = {}) {
   const prompt = `Bạn là giáo viên tiếng Hàn chấm bài luyện nói (shadowing) cho người Việt học tiếng Hàn.
 
 Câu mẫu (đáp án đúng): "${target}"
-${realPron ? `Cách đọc thực tế đúng chuẩn (có biến âm/liên âm): "${realPron}"\n` : ""}Học viên đã nói/gõ lại: "${said}"
+${realPron ? `Cách đọc thực tế đúng chuẩn (có biến âm/liên âm): "${realPron}"\n` : ""}Transcript nhận diện từ giọng học viên: "${said}"
+Thời gian phản xạ: ${Math.round((timing.elapsed || 0) * 10) / 10} giây; giới hạn: ${timing.limit || "không có"} giây.
+
+Chấm dựa trên độ khớp transcript, độ đầy đủ và thời gian phản xạ. Không được khẳng định đã phân tích âm sắc/acoustic vì đầu vào là transcript.
 
 Phân tích và trả lời CHỈ bằng JSON theo đúng cấu trúc sau, không thêm markdown hay chữ nào khác ngoài JSON:
 {
@@ -1998,21 +2111,16 @@ Phân tích và trả lời CHỈ bằng JSON theo đúng cấu trúc sau, khôn
   "tip": "<1-2 câu gợi ý cụ thể để cải thiện, tiếng Việt, giọng khích lệ, nhẹ nhàng. Nếu có thể, liên hệ đúng quy tắc biến âm/liên âm ở cách đọc thực tế phía trên. Nếu lỗi rơi vào các điểm người Việt hay nhầm khi học tiếng Hàn (phụ âm căng ㄲㄸㅃㅆㅉ so với thường/bật hơi, phụ âm cuối 받침 không được đọc bật hơi, độ dài nguyên âm), hãy chỉ rõ đúng điểm đó thay vì nói chung chung.">
 }`;
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1000,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-  const data = await res.json();
-  const raw = (data.content || []).map((b) => b.text || "").join("");
-  const clean = raw.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(clean);
+  const { value: parsed, model } = await requestAIJson(prompt);
   if (typeof parsed.score !== "number" || !Array.isArray(parsed.words)) throw new Error("malformed AI response");
-  return { ...parsed, source: "ai" };
+  const statuses = new Set(["ok", "missing", "wrong"]);
+  return {
+    ...parsed,
+    score: Math.max(0, Math.min(100, Math.round(parsed.score))),
+    words: parsed.words.map((word) => ({ ...word, status: statuses.has(word.status) ? word.status : "wrong" })),
+    source: "worker-ai",
+    model,
+  };
 }
 
 /* Rơi về khi API lỗi — vẫn cho kết quả hữu ích, chỉ đơn giản hơn */
@@ -2048,18 +2156,7 @@ Trả lời CHỈ bằng JSON, không thêm markdown hay chữ nào khác ngoài
   "focus": "<1-2 câu gợi ý cụ thể nên tập trung luyện gì tiếp theo>"
 }`;
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 600,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-  const data = await res.json();
-  const raw = (data.content || []).map((b) => b.text || "").join("");
-  const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+  const { value: parsed } = await requestAIJson(prompt);
   if (!parsed.level || !parsed.summary) throw new Error("malformed ability response");
   return parsed;
 }
@@ -2069,6 +2166,23 @@ Trả lời CHỈ bằng JSON, không thêm markdown hay chữ nào khác ngoài
 /* ------------------------------------------------------------------ */
 const shadowProgressKey = (lesson) => `shadow-progress:2-1:${lesson.no}`;
 const dictationProgressKey = (lesson) => `dictation-progress:2-1:${lesson.no}`;
+const correctDictationResults = (saved = {}) => Object.fromEntries(
+  Object.entries(saved).filter(([, value]) => value === "correct"),
+);
+const activityCompletionKey = (lesson, userId) =>
+  `activity-completion:${userId || "guest"}:${lesson?.textbookId || "2-1"}:${lesson?.id || lesson?.no}`;
+
+async function markActivityCompleted(lesson, userId, activityId) {
+  const key = activityCompletionKey(lesson, userId);
+  let completed = {};
+  try {
+    const saved = await window.storage.get(key);
+    if (saved?.value) completed = JSON.parse(saved.value);
+  } catch (e) {}
+  completed[activityId] = { completedAt: new Date().toISOString() };
+  await window.storage.set(key, JSON.stringify(completed));
+  return completed;
+}
 
 
 /* ------------------------------------------------------------------ */
@@ -2113,7 +2227,7 @@ function SwBunnyEmpty() {
   );
 }
 
-function ShadowingView({ lesson, onBack }) {
+function ShadowingView({ lesson, onBack, onFinish }) {
   const [idx, setIdx] = useState(0);
   const [autoPlay, setAutoPlay] = useState(false);
   const [status, setStatus] = useState("idle"); // idle | recording | grading | done | error | unsupported
@@ -2125,6 +2239,10 @@ function ShadowingView({ lesson, onBack }) {
   const [audioDuration, setAudioDuration] = useState(0);
   const [recordingElapsed, setRecordingElapsed] = useState(0);
   const [recordedUrls, setRecordedUrls] = useState({}); // { [idx]: blob url } — bản ghi âm THẬT của người dùng để nghe lại
+  const [showCompletion, setShowCompletion] = useState(false);
+  const [finalAssessment, setFinalAssessment] = useState(null);
+  const [assessingFinal, setAssessingFinal] = useState(false);
+  const [isRecheck, setIsRecheck] = useState(false);
   const [micBlocked, setMicBlocked] = useState(false); // getUserMedia bị chặn (thường do khung xem trước) — chỉ ảnh hưởng phần ghi âm để nghe lại, không chặn chấm điểm AI
   const recognitionRef = useRef(null);
   const audioRef = useRef(null);
@@ -2132,16 +2250,22 @@ function ShadowingView({ lesson, onBack }) {
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
   const mediaStreamRef = useRef(null);
+  const recordingBlobPromiseRef = useRef(null);
+  const recordingBlobResolveRef = useRef(null);
   const myRecAudioRef = useRef(null);
   const recordingStartedAtRef = useRef(0);
   const recordingIntervalRef = useRef(null);
   const recordingTimeoutRef = useRef(null);
+  const autoAdvanceRef = useRef(null);
   const recognizedTextRef = useRef("");
+  const recognitionBaseTextRef = useRef("");
+  const recognitionRestartTimerRef = useRef(null);
   const recordingFinishingRef = useRef(false);
 
   const line = SHADOW_LINES[idx];
   const total = SHADOW_LINES.length;
   const result = results[idx];
+  const shadowQuestionDone = result?.score >= 80;
   // Cho người học thêm 3 giây so với thời lượng câu mẫu để lấy hơi và kết câu.
   // Audio chưa tải metadata thì ước lượng theo độ dài câu, tránh giới hạn bằng 0.
   const estimatedSampleDuration = Math.max(2, line.ko.length / 6);
@@ -2151,6 +2275,26 @@ function ShadowingView({ lesson, onBack }) {
     typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 
   useEffect(() => {
+    let active = true;
+    window.storage.get(shadowProgressKey(lesson)).then((saved) => {
+      if (!active || !saved?.value) return;
+      try {
+        const restored = Object.fromEntries(
+          Object.entries(JSON.parse(saved.value)).filter(([, item]) => item?.score >= 80),
+        );
+        setResults(restored);
+        setHistory(Object.entries(restored).map(([key, item]) => ({
+          no: SHADOW_LINES[Number(key)]?.no || Number(key) + 1,
+          ko: SHADOW_LINES[Number(key)]?.ko || "",
+          score: item.score,
+        })).reverse().slice(0, 12));
+        if (SHADOW_LINES.every((_, questionIndex) => restored[questionIndex]?.score >= 80)) finishAndAssess(restored);
+      } catch (error) { /* dữ liệu cũ không hợp lệ thì bắt đầu phiên mới */ }
+    });
+    return () => { active = false; };
+  }, [lesson]);
+
+  useEffect(() => {
     setErrMsg("");
     setStatus("idle");
     setHelpPanel(null);
@@ -2158,13 +2302,18 @@ function ShadowingView({ lesson, onBack }) {
     setRecordingElapsed(0);
     clearInterval(recordingIntervalRef.current);
     clearTimeout(recordingTimeoutRef.current);
+    clearTimeout(autoAdvanceRef.current);
+    clearTimeout(recognitionRestartTimerRef.current);
     recordingFinishingRef.current = false;
     recognizedTextRef.current = "";
+    recognitionBaseTextRef.current = "";
   }, [idx]);
 
   useEffect(() => () => {
     clearInterval(recordingIntervalRef.current);
     clearTimeout(recordingTimeoutRef.current);
+    clearTimeout(autoAdvanceRef.current);
+    clearTimeout(recognitionRestartTimerRef.current);
     try { recognitionRef.current?.abort(); } catch (e) {}
   }, []);
 
@@ -2199,32 +2348,130 @@ function ShadowingView({ lesson, onBack }) {
   // Ghi âm THẬT giọng người dùng (khác với nhận diện giọng nói để AI chấm
   // điểm bên dưới) — để họ có thể tự nghe lại và so sánh với giọng mẫu.
   const startMediaRecording = async () => {
+    if (!window.isSecureContext) {
+      setMicBlocked(true);
+      setErrMsg("Micro chỉ hoạt động trên HTTPS hoặc localhost. Hãy mở bản deploy HTTPS của ứng dụng.");
+      setStatus("error");
+      return false;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setMicBlocked(true);
+      setErrMsg("Trình duyệt này chưa hỗ trợ ghi âm. Hãy cập nhật trình duyệt hoặc kiểm tra quyền Microphone.");
+      setStatus("unsupported");
+      return false;
+    }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Xin quyền và khởi động recorder xong trước khi bật SpeechRecognition.
+      // Nếu không chờ bước này, recognition có thể kết thúc trong lúc hộp cấp
+      // quyền micro vẫn đang mở, khiến recorder khởi động muộn và không lưu file.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+        },
+      });
       mediaStreamRef.current = stream;
       recordedChunksRef.current = [];
-      const mr = new MediaRecorder(stream);
+      recordingBlobPromiseRef.current = new Promise((resolve) => { recordingBlobResolveRef.current = resolve; });
+      const preferredTypes = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/ogg;codecs=opus",
+      ];
+      const mimeType = preferredTypes.find((type) => MediaRecorder.isTypeSupported?.(type));
+      const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data); };
       mr.onstop = () => {
         const blob = new Blob(recordedChunksRef.current, { type: mr.mimeType || "audio/webm" });
-        const url = URL.createObjectURL(blob);
-        setRecordedUrls((prev) => {
-          if (prev[idx]) URL.revokeObjectURL(prev[idx]);
-          return { ...prev, [idx]: url };
-        });
+        if (blob.size > 0) {
+          const url = URL.createObjectURL(blob);
+          setRecordedUrls((prev) => {
+            if (prev[idx]) URL.revokeObjectURL(prev[idx]);
+            return { ...prev, [idx]: url };
+          });
+        }
         stream.getTracks().forEach((t) => t.stop());
+        if (mediaStreamRef.current === stream) mediaStreamRef.current = null;
+        if (mediaRecorderRef.current === mr) mediaRecorderRef.current = null;
+        recordingBlobResolveRef.current?.(blob);
+        recordingBlobResolveRef.current = null;
+      };
+      mr.onerror = () => {
+        setErrMsg("Không thể lưu bản ghi âm. Hãy kiểm tra micro rồi thử lại.");
+        setStatus("error");
+        stream.getTracks().forEach((track) => track.stop());
+        recordingBlobResolveRef.current?.(null);
+        recordingBlobResolveRef.current = null;
       };
       mediaRecorderRef.current = mr;
-      mr.start();
+      mr.start(250);
       setMicBlocked(false);
+      return true;
     } catch (e) {
-      // getUserMedia bị chặn/từ chối (thường do khung xem trước không cấp quyền
-      // micro) — không chặn phần chấm điểm AI, chỉ là không có bản ghi để nghe lại.
       setMicBlocked(true);
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+      const permissionDenied = e?.name === "NotAllowedError" || e?.name === "SecurityError";
+      const noDevice = e?.name === "NotFoundError" || e?.name === "DevicesNotFoundError";
+      setErrMsg(permissionDenied
+        ? "Ứng dụng chưa được cấp quyền micro. Hãy cho phép Microphone trong cài đặt trang rồi tải lại trang."
+        : noDevice
+          ? "Không tìm thấy micro trên thiết bị. Hãy kết nối micro rồi thử lại."
+          : `Không thể mở micro${e?.message ? `: ${e.message}` : ". Hãy thử lại."}`);
+      setStatus("error");
+      recordingBlobResolveRef.current?.(null);
+      recordingBlobResolveRef.current = null;
+      return false;
     }
   };
   const stopMediaRecording = () => {
-    try { if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop(); } catch (e) {}
+    const recorder = mediaRecorderRef.current;
+    try {
+      if (recorder?.state === "recording" || recorder?.state === "paused") recorder.stop();
+    } catch (e) {
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+      mediaRecorderRef.current = null;
+      recordingBlobResolveRef.current?.(null);
+      recordingBlobResolveRef.current = null;
+    }
+    return recordingBlobPromiseRef.current || Promise.resolve(null);
+  };
+
+  const releaseRecordedAudio = () => {
+    setRecordedUrls((current) => {
+      Object.values(current).forEach((url) => { try { URL.revokeObjectURL(url); } catch (error) {} });
+      return {};
+    });
+    recordedChunksRef.current = [];
+    try { myRecAudioRef.current?.pause(); } catch (error) {}
+    if (myRecAudioRef.current) myRecAudioRef.current.src = "";
+  };
+
+  const finishAndAssess = async (completedResults) => {
+    setShowCompletion(true);
+    setAssessingFinal(true);
+    setFinalAssessment(null);
+    try {
+      const assessment = await assessAbility(SHADOW_LINES.map((_, questionIndex) => ({
+        rhythmScore: completedResults[questionIndex]?.score || 0,
+        accuracyScore: completedResults[questionIndex]?.score || 0,
+      })));
+      setFinalAssessment(assessment);
+    } catch (error) {
+      const average = Math.round(Object.values(completedResults).reduce((sum, item) => sum + (item.score || 0), 0) / total);
+      setFinalAssessment({
+        level: average >= 90 ? "Khá tốt" : "Đạt yêu cầu",
+        summary: `Bạn đã hoàn thành toàn bộ ${total} câu với điểm trung bình ${average}%.`,
+        focus: "Hãy nghe lại giọng mẫu định kỳ để giữ nhịp và phát âm ổn định.",
+      });
+    } finally {
+      setAssessingFinal(false);
+      releaseRecordedAudio();
+    }
   };
 
   useEffect(() => () => {
@@ -2238,41 +2485,97 @@ function ShadowingView({ lesson, onBack }) {
     setErrMsg("");
     let graded;
     try {
-      graded = await gradeWithAI(line.ko, said, line.realPron);
+      graded = await gradeWithAI(line.ko, said, line.realPron, {
+        elapsed: recordingElapsed,
+        limit: recordingLimit,
+      });
     } catch (e) {
       graded = gradeLocally(line.ko, said);
+      graded.warning = "Dịch vụ AI đang bận nên kết quả này được chấm dự phòng trên thiết bị.";
     }
-    setResults((r) => ({ ...r, [idx]: { transcript: said, ...graded } }));
+    const gradedResult = { transcript: said, ...graded, gradedAt: new Date().toISOString() };
+    const nextResults = { ...results, [idx]: gradedResult };
+    if (graded.score >= 80 && !(results[idx]?.score >= 80)) playCorrectSound();
+    else if (graded.score < 80) playIncorrectSound();
+    setResults((current) => {
+      const next = { ...current, [idx]: gradedResult };
+      if (graded.score >= 80) {
+        const passed = Object.fromEntries(Object.entries(next).filter(([, item]) => item.score >= 80));
+        if (!isRecheck || Object.keys(passed).length === total) {
+          window.storage.set(shadowProgressKey(lesson), JSON.stringify(passed)).catch(() => {});
+        }
+      }
+      return next;
+    });
     setHistory((h) => [{ no: line.no, ko: line.ko, score: graded.score }, ...h].slice(0, 12));
     setStatus("done");
+    if (graded.score >= 80) {
+      clearTimeout(autoAdvanceRef.current);
+      autoAdvanceRef.current = window.setTimeout(() => {
+        if (idx < total - 1) {
+          setIdx(idx + 1);
+        } else if (SHADOW_LINES.every((_, questionIndex) => nextResults[questionIndex]?.score >= 80)) {
+          finishAndAssess(nextResults);
+        }
+      }, 900);
+    }
   };
 
-  const finishRecording = (reason = "manual") => {
+  const finishRecording = async (reason = "manual") => {
     if (recordingFinishingRef.current) return;
     recordingFinishingRef.current = true;
     clearInterval(recordingIntervalRef.current);
     clearTimeout(recordingTimeoutRef.current);
+    clearTimeout(recognitionRestartTimerRef.current);
     if (reason === "timeout") setRecordingElapsed(recordingLimit);
-    stopMediaRecording();
+    const recordingBlobPromise = stopMediaRecording();
     try { recognitionRef.current?.stop(); } catch (e) {}
     setStatus("grading");
 
-    // Cho SpeechRecognition một nhịp ngắn để trả nốt phần transcript cuối.
-    window.setTimeout(() => {
-      const said = recognizedTextRef.current.trim();
-      if (!said) {
-        setErrMsg(reason === "timeout"
-          ? "Đã hết thời gian nhưng chưa nhận được giọng nói. Hãy thử lại và nói gần micro hơn nhé."
-          : "Chưa nhận được giọng nói. Hãy thử lại và nói gần micro hơn nhé.");
-        setStatus("error");
-        return;
+    // Chờ recorder đóng file và SpeechRecognition trả nốt transcript. Bản ghi
+    // luôn được gửi qua backend để Chrome, Edge và Safari có cùng kết quả.
+    await new Promise((resolve) => window.setTimeout(resolve, 220));
+    const recordingBlob = await recordingBlobPromise;
+    let said = recognizedTextRef.current.trim();
+    if (recordingBlob?.size) {
+      try {
+        const cloudResult = await transcribeShadowRecording(recordingBlob);
+        if (cloudResult?.transcript?.trim()) said = cloudResult.transcript.trim();
+      } catch (error) {
+        if (!said) {
+          setErrMsg(error?.message || "Không thể nhận diện bản ghi âm. Hãy thử lại nhé.");
+          setStatus("error");
+          return;
+        }
       }
-      submitForGrading(said);
-    }, 220);
+    }
+    if (!said) {
+      setErrMsg(reason === "timeout"
+        ? "Đã hết thời gian nhưng chưa nhận được giọng nói. Hãy thử lại và nói gần micro hơn nhé."
+        : "Chưa nhận được giọng nói. Hãy thử lại và nói gần micro hơn nhé.");
+      setStatus("error");
+      return;
+    }
+    await submitForGrading(said);
+  };
+
+  const startRecordingClock = () => {
+    setErrMsg("");
+    setRecordingElapsed(0);
+    recognizedTextRef.current = "";
+    recognitionBaseTextRef.current = "";
+    recordingFinishingRef.current = false;
+    setStatus("recording");
+    recordingStartedAtRef.current = Date.now();
+    recordingIntervalRef.current = window.setInterval(() => {
+      const elapsed = Math.min(recordingLimit, (Date.now() - recordingStartedAtRef.current) / 1000);
+      setRecordingElapsed(elapsed);
+    }, 100);
+    recordingTimeoutRef.current = window.setTimeout(() => finishRecording("timeout"), recordingLimit * 1000);
   };
 
   const startRecording = () => {
-    if (!speechSupported) { setStatus("unsupported"); return false; }
+    if (!speechSupported) return false;
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const rec = new SR();
     rec.lang = "ko-KR";
@@ -2280,53 +2583,48 @@ function ShadowingView({ lesson, onBack }) {
     rec.maxAlternatives = 1;
     rec.continuous = true;
 
-    setErrMsg("");
-    setRecordingElapsed(0);
-    recognizedTextRef.current = "";
-    recordingFinishingRef.current = false;
-    setStatus("recording");
-
     rec.onresult = (e) => {
-      let said = "";
+      let sessionText = "";
       for (let i = 0; i < e.results.length; i += 1) {
-        said += `${e.results[i]?.[0]?.transcript || ""} `;
+        sessionText += `${e.results[i]?.[0]?.transcript || ""} `;
       }
-      recognizedTextRef.current = said.trim();
+      recognizedTextRef.current = `${recognitionBaseTextRef.current} ${sessionText}`.trim();
     };
     rec.onerror = (e) => {
       if (recordingFinishingRef.current || e.error === "aborted") return;
-      recordingFinishingRef.current = true;
-      clearInterval(recordingIntervalRef.current);
-      clearTimeout(recordingTimeoutRef.current);
-      stopMediaRecording();
-      const map = {
-        "not-allowed": "Trình duyệt/khung xem trước này chưa cấp quyền micro cho ứng dụng — không phải do bạn thao tác sai. Thử mở app ở môi trường triển khai thật (ngoài khung xem trước) để dùng mic.",
-        "no-speech": "Chưa nghe thấy giọng nói, thử nói to hơn nhé.",
-        "audio-capture": "Không tìm thấy micro trên thiết bị này.",
-        "network": "Khung xem trước này có thể đang chặn kết nối đến máy chủ nhận diện giọng nói — không phải lỗi do bạn.",
-      };
-      setErrMsg(map[e.error] || "Có lỗi khi nhận diện giọng nói, thử lại nhé.");
-      setStatus("error");
+      // Chrome thường phát no-speech khi người học lấy hơi hoặc bắt đầu nói
+      // chậm. Không kết thúc cả bản ghi; onend bên dưới sẽ mở lại nhận diện.
+      if (e.error === "no-speech") return;
+      // Web Speech chỉ là lớp nhận diện nhanh tùy chọn. Nếu trình duyệt không
+      // hỗ trợ hoặc dịch vụ của trình duyệt lỗi, MediaRecorder vẫn tiếp tục và
+      // backend sẽ nhận dạng bản ghi khi người học dừng.
+      rec.onend = null;
+      recognitionRef.current = null;
     };
     rec.onend = () => {
-      // Một số trình duyệt tự kết thúc phiên nhận diện khi người dùng ngừng nói.
-      // Khi đó vẫn hoàn tất và chấm phần đã ghi thay vì làm mất bản ghi.
-      if (!recordingFinishingRef.current) finishRecording("browser");
+      if (recordingFinishingRef.current) return;
+      // Chrome tự đóng SpeechRecognition khi có một khoảng lặng. Recorder vẫn
+      // đang chạy nên nối lại nhận diện cho tới lúc người học bấm dừng hoặc hết
+      // giới hạn, đồng thời giữ phần transcript đã nhận ở phiên trước.
+      recognitionBaseTextRef.current = recognizedTextRef.current.trim();
+      const elapsed = (Date.now() - recordingStartedAtRef.current) / 1000;
+      if (elapsed < recordingLimit - 0.25) {
+        clearTimeout(recognitionRestartTimerRef.current);
+        recognitionRestartTimerRef.current = window.setTimeout(() => {
+          if (recordingFinishingRef.current) return;
+          try { rec.start(); }
+          catch (error) { finishRecording("browser"); }
+        }, 120);
+        return;
+      }
+      finishRecording("timeout");
     };
 
     recognitionRef.current = rec;
     try {
       rec.start();
-      recordingStartedAtRef.current = Date.now();
-      recordingIntervalRef.current = window.setInterval(() => {
-        const elapsed = Math.min(recordingLimit, (Date.now() - recordingStartedAtRef.current) / 1000);
-        setRecordingElapsed(elapsed);
-      }, 100);
-      recordingTimeoutRef.current = window.setTimeout(() => finishRecording("timeout"), recordingLimit * 1000);
       return true;
     } catch (err) {
-      setErrMsg("Không thể khởi động micro.");
-      setStatus("error");
       return false;
     }
   };
@@ -2334,15 +2632,47 @@ function ShadowingView({ lesson, onBack }) {
   /* Nút mic dùng chung cho cả bắt đầu, dừng+chấm điểm, VÀ ghi âm lại —
      bấm khi đang ghi thì dừng (tự động chấm điểm), bấm khi đã có kết quả
      thì xoá kết quả cũ và ghi âm lại từ đầu, không cần nút riêng. */
-  const handleMicClick = () => {
+  const handleMicClick = async () => {
     if (status === "recording") { finishRecording("manual"); return; }
+    if (shadowQuestionDone) return;
     if (result) setResults((r) => { const n = { ...r }; delete n[idx]; return n; });
     setErrMsg("");
-    if (startRecording()) startMediaRecording();
+    setStatus("requesting");
+    const mediaStarted = await startMediaRecording();
+    if (!mediaStarted) return;
+    startRecordingClock();
+    startRecording();
   };
 
   const goPrev = () => { if (idx > 0) setIdx(idx - 1); };
-  const goNext = () => { if (idx < total - 1) setIdx(idx + 1); };
+  const goNext = () => {
+    if (!result || result.score < 80) return;
+    if (idx < total - 1) { setIdx(idx + 1); return; }
+    if (SHADOW_LINES.every((_, questionIndex) => results[questionIndex]?.score >= 80)) finishAndAssess(results);
+  };
+
+  const retryShadowing = () => {
+    setShowCompletion(false);
+    setIsRecheck(true);
+    setFinalAssessment(null);
+    setResults({});
+    setHistory([]);
+    setIdx(0);
+    setStatus("idle");
+  };
+
+  if (showCompletion) {
+    return (
+      <SkillCompletionView
+        title="Bạn đã hoàn thành Shadowing!"
+        description="Tất cả câu đã đạt mức chính xác yêu cầu. Bạn có muốn luyện kiểm tra lại không?"
+        assessment={finalAssessment}
+        loading={assessingFinal}
+        onBack={isRecheck ? onBack : (onFinish || onBack)}
+        onRetry={retryShadowing}
+      />
+    );
+  }
 
   return (
     <section className="sw-page">
@@ -2393,13 +2723,15 @@ function ShadowingView({ lesson, onBack }) {
                 <span>Nghe câu</span>
               </button>
               <button
-                className={`sw-mic-btn ${status === "recording" ? "rec" : ""}`}
+                className={`sw-mic-btn ${status === "recording" ? "rec" : ""} ${status === "requesting" ? "requesting" : ""}`}
                 onClick={handleMicClick}
-                disabled={status === "grading"}
-                aria-label={status === "recording" ? "Dừng và chấm điểm" : result ? "Ghi âm lại" : "Bắt đầu ghi âm"}
+                disabled={status === "grading" || status === "requesting" || shadowQuestionDone}
+                aria-label={status === "requesting" ? "Đang xin quyền micro" : status === "recording" ? "Dừng và chấm điểm" : shadowQuestionDone ? "Câu đã hoàn thành" : result ? "Ghi âm lại" : "Bắt đầu ghi âm"}
               >
                 {status === "recording" ? (
                   <Square size={22} color="#fff" fill="#fff" />
+                ) : shadowQuestionDone ? (
+                  <CheckCircle2 size={25} color="#fff" />
                 ) : result ? (
                   <RotateCcw size={24} color="#fff" />
                 ) : (
@@ -2412,10 +2744,14 @@ function ShadowingView({ lesson, onBack }) {
               </button>
             </div>
             <p className="sw-mic-caption">
-              {status === "recording"
+              {status === "requesting"
+                ? "Đang mở micro..."
+                : status === "recording"
                 ? "Đang ghi âm... bấm lại để dừng & chấm điểm"
                 : status === "grading"
                 ? "AI đang chấm điểm..."
+                : shadowQuestionDone
+                ? "Câu đã hoàn thành — hãy sang câu tiếp theo"
                 : result
                 ? "Bấm mic để ghi âm lại"
                 : "Nhấn mic rồi nói theo câu trên"}
@@ -2444,9 +2780,20 @@ function ShadowingView({ lesson, onBack }) {
                   <div className="sw-result-wave"><SwWaveBars /></div>
                   <span className="sw-result-time">{swFormatTime(audioDuration)}</span>
                   <div className="sw-accuracy">
-                    <span>Accuracy</span>
+                    <span>Độ khớp câu</span>
                     <b className={toneForScore(result.score)}>{result.score}%</b>
                   </div>
+                </div>
+                <div className="sw-ai-feedback">
+                  <div className="sw-ai-meta">
+                    <span className={`sw-ai-badge ${result.source === "worker-ai" ? "" : "fallback"}`}>
+                      <Sparkles size={12} /> {result.source === "worker-ai" ? "AI chấm điểm" : "Chấm dự phòng"}
+                    </span>
+                    {result.source === "worker-ai" && result.model && <span className="sw-ai-model">{result.model}</span>}
+                  </div>
+                  <p><strong>AI nhận diện:</strong> <span lang="ko">{result.transcript}</span></p>
+                  {result.strength && <p><strong>Điểm tốt:</strong> {result.strength}</p>}
+                  {result.warning && <p className="sw-ai-warning">{result.warning}</p>}
                 </div>
                 <div className="sw-compare-row">
                   <button className="sw-compare-btn" onClick={playNative}>
@@ -2457,11 +2804,18 @@ function ShadowingView({ lesson, onBack }) {
                   </button>
                 </div>
                 <div className="sw-word-chips">
-                  {result.words.map((w, i) => (
+                  {(result.words || []).map((w, i) => (
                     <span key={i} className={`sw-chip ${w.status}`}>
                       {w.word} {w.status === "ok" ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
                     </span>
                   ))}
+                </div>
+                <div className={`sw-score-state ${toneForScore(result.score)}`}>
+                  {result.score >= 80
+                    ? <><CheckCircle2 size={15} /> Chính xác — bạn có thể sang câu tiếp theo.</>
+                    : result.score >= 60
+                      ? <><AlertTriangle size={15} /> Gần đúng — nghe lại và ghi âm thêm một lần nhé.</>
+                      : <><XCircle size={15} /> Chưa đúng — đối chiếu các từ màu đỏ rồi thử lại.</>}
                 </div>
                 <p className="sw-tip"><Lightbulb size={14} color="#E8A93D" fill="#F7D98B" /> {result.tip}</p>
               </div>
@@ -2524,13 +2878,18 @@ function ShadowingView({ lesson, onBack }) {
           {SHADOW_LINES.map((l, i) => (
             <button
               key={l.no}
-              className={`fc-dot ${i === idx ? "on" : ""} ${results[i] ? (results[i].score >= 70 ? "rated-good" : "rated-forgot") : ""}`}
+              className={`fc-dot ${i === idx ? "on" : ""} ${results[i] ? (results[i].score >= 80 ? "rated-good" : results[i].score >= 60 ? "rated-vague" : "rated-forgot") : ""}`}
               onClick={() => setIdx(i)}
               aria-label={`Câu ${i + 1}`}
             />
           ))}
         </div>
-        <button className="fc-nav-btn primary" onClick={idx === total - 1 ? onBack : goNext}>
+        <button
+          className="fc-nav-btn primary"
+          disabled={!result || result.score < 80 || status === "grading" || status === "recording"}
+          title={!result || result.score < 80 ? "Hãy ghi âm lại đến khi câu đạt từ 80 điểm" : undefined}
+          onClick={goNext}
+        >
           {idx === total - 1 ? "Hoàn thành" : "Câu tiếp"} <ChevronRight size={18} />
         </button>
       </div>
@@ -2741,14 +3100,7 @@ Trả lời CHỈ bằng JSON, không markdown, không chữ nào khác:
   "explanation": "<1 câu tiếng Việt giải thích ngắn gọn>"
 }`;
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 500, messages: [{ role: "user", content: aiPrompt }] }),
-    });
-    const data = await res.json();
-    const text = (data.content || []).map((b) => b.text || "").join("").replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(text);
+    const { value: parsed } = await requestAIJson(aiPrompt);
     if (typeof parsed.score !== "number") throw new Error("malformed");
     return parsed;
   } catch (e) {
@@ -2759,21 +3111,31 @@ Trả lời CHỈ bằng JSON, không markdown, không chữ nào khác:
 
 async function generateReviewFeedback(wrongLabels) {
   if (!wrongLabels.length) return "Bạn làm rất tốt, không có lỗi nào đáng chú ý trong lượt ôn tập này! 🎉";
-  const prompt = `Bạn là giáo viên tiếng Hàn. Học viên người Việt vừa làm bài ôn tập và trả lời sai các nội dung sau: ${wrongLabels.join(", ")}.
-Viết 1-2 câu nhận xét ngắn gọn, cụ thể, bằng tiếng Việt, giọng khích lệ nhẹ nhàng, gợi ý nên ôn lại nội dung nào trước. Chỉ trả lời đúng đoạn nhận xét, không thêm lời dẫn hay markdown.`;
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 300, messages: [{ role: "user", content: prompt }] }),
-    });
-    const data = await res.json();
-    const text = (data.content || []).map((b) => b.text || "").join("").trim();
-    if (!text) throw new Error("empty");
-    return text;
-  } catch (e) {
-    return `Bạn cần ôn lại thêm: ${wrongLabels.slice(0, 3).join(", ")}.`;
-  }
+  // Nhận xét tổng kết đơn giản không cần AI; tránh gọi dịch vụ ngoài không cần thiết.
+  return `Bạn cần ôn lại thêm: ${wrongLabels.slice(0, 3).join(", ")}. Làm lại các câu này một lượt để ghi nhớ chắc hơn nhé.`;
+}
+
+function SkillCompletionView({ title, description, assessment, loading, onBack, onRetry, retryLabel = "Kiểm tra lại" }) {
+  return (
+    <section className="skill-complete-card">
+      <div className="skill-complete-icon"><CheckCircle2 size={42} /></div>
+      <span className="skill-complete-kicker">HOÀN THÀNH</span>
+      <h2>{title}</h2>
+      <p>{description}</p>
+      {loading && <div className="skill-complete-ai"><Sparkles size={16} /> AI đang tổng hợp nhận xét toàn bài...</div>}
+      {assessment && (
+        <div className="skill-complete-assessment">
+          <div><Sparkles size={16} /><strong>{assessment.level || "Nhận xét AI"}</strong></div>
+          <p>{assessment.summary}</p>
+          {assessment.focus && <small><Lightbulb size={13} /> {assessment.focus}</small>}
+        </div>
+      )}
+      <div className="skill-complete-actions">
+        <button className="fc-nav-btn" onClick={onBack}><ChevronLeft size={17} /> Về bài học</button>
+        <button className="fc-nav-btn primary" onClick={onRetry}><RotateCcw size={17} /> {retryLabel}</button>
+      </div>
+    </section>
+  );
 }
 
 function buildReviewPool() {
@@ -2893,8 +3255,10 @@ function ReviewLessonSelectView({ onBack, onNext, lessons = LESSONS_2_1 }) {
   return (
     <section className="card page">
       <div className="card-title-row">
-        <div className="card-title"><NotebookPen size={19} color="#7C6FE4" /> Ôn tập theo bài · Chọn phạm vi</div>
-        <button className="link-btn" onClick={onBack}>← Quay lại</button>
+        <div className="page-back-heading">
+          <button className="fc2-back" onClick={onBack} aria-label="Quay lại"><ChevronLeft size={20} /></button>
+          <div className="card-title"><NotebookPen size={19} color="#7C6FE4" /> Ôn tập theo bài · Chọn phạm vi</div>
+        </div>
       </div>
       <p className="page-note" style={{ background: "none", padding: 0, color: "#8B85AB" }}>
         Tick chọn những bài học bạn muốn đưa vào phạm vi ôn tập (chọn được nhiều bài cùng lúc).
@@ -2964,13 +3328,13 @@ function ReviewIntroView({ lesson, mode, selectedLessons, onBack, onStart }) {
           {mode === "bylesson" ? (
             <span className="rv-lesson-pill">{selectedLessons?.length || 1} bài đã chọn</span>
           ) : (
-            <span className="rv-lesson-pill">Ôn tập ngẫu nhiên</span>
+            <span className="rv-lesson-pill">Thi thử ngẫu nhiên</span>
           )}
-          <h1 className="rv-title">{mode === "bylesson" ? "Ôn tập theo bài 📘" : "Ôn tập ngẫu nhiên 🎲"}</h1>
+          <h1 className="rv-title">{mode === "bylesson" ? "Ôn tập theo bài 📘" : "Thi thử 🎯"}</h1>
           <p className="rv-sub">
             {mode === "bylesson"
               ? "Chọn độ khó — hệ thống chỉ lấy câu hỏi trong đúng phạm vi bài bạn đã chọn."
-              : "Chọn độ khó — sao càng cao càng ôn nhiều nội dung hơn, tới 5★ là ôn đủ 100% bài học."}
+              : "Đề được lấy ngẫu nhiên từ các bài đã học; sao càng cao thì phạm vi và số dạng câu càng lớn."}
           </p>
           <div className="rv-stat-row">
             {stats.map((s, i) => (
@@ -3023,7 +3387,7 @@ function ReviewIntroView({ lesson, mode, selectedLessons, onBack, onStart }) {
         )}
 
         <button className="rv-start-btn rv-start-btn-full" onClick={startExam}>
-          {mode === "random" && hasStandard === false ? "Làm đề thi chuẩn" : "Bắt đầu ôn tập"} <ChevronRight size={18} />
+          {mode === "random" && hasStandard === false ? "Làm đề thi chuẩn" : mode === "random" ? "Bắt đầu thi thử" : "Bắt đầu ôn bài"} <ChevronRight size={18} />
         </button>
       </div>
 
@@ -3038,7 +3402,7 @@ function ReviewIntroView({ lesson, mode, selectedLessons, onBack, onStart }) {
 }
 
 /* ---------- Màn 2: Làm bài ôn tập ---------- */
-function ReviewQuizView({ lesson, difficulty, mode, seed, onBack, onFinish, onChangeSet }) {
+function ReviewQuizView({ lesson, difficulty, mode, seed, isRecheck = false, onBack, onFinish, onChangeSet }) {
   const [history, setHistory] = useState(null);
   const [pool, setPool] = useState(null);
   const [idx, setIdx] = useState(0);
@@ -3109,9 +3473,11 @@ function ReviewQuizView({ lesson, difficulty, mode, seed, onBack, onFinish, onCh
       const cur = newHistory[a.key] || { wrong: 0, correct: 0, lastSeenAt: 0 };
       newHistory[a.key] = { wrong: cur.wrong + (a.correct ? 0 : 1), correct: cur.correct + (a.correct ? 1 : 0), lastSeenAt: Date.now() };
     });
-    await saveReviewHistory(lesson, newHistory);
-    if (finalReflex && finalReflex.length) await saveReflexAttempts(finalReflex);
-    if (seed) await markStandardExamTaken(difficulty.stars); // đã làm xong đề chuẩn — lần sau ở mức sao này sẽ là đề ngẫu nhiên
+    if (!isRecheck) {
+      await saveReviewHistory(lesson, newHistory);
+      if (finalReflex && finalReflex.length) await saveReflexAttempts(finalReflex);
+      if (seed) await markStandardExamTaken(difficulty.stars);
+    }
     onFinish(finalAnswers, finalWriting, Date.now() - startTimeRef.current, finalReflex || []);
   };
 
@@ -3139,6 +3505,8 @@ function ReviewQuizView({ lesson, difficulty, mode, seed, onBack, onFinish, onCh
     const choose = (opt) => {
       if (picked) return;
       setPicked(opt);
+      if (opt.correct) playCorrectSound();
+      else playIncorrectSound();
       setAnswers((a) => [...a, { correct: opt.correct, category: q.category, key: q.key, label: q.label }]);
     };
     const next = () => {
@@ -3227,6 +3595,8 @@ function ReviewQuizView({ lesson, difficulty, mode, seed, onBack, onFinish, onCh
     if (!wDraft.trim() || wGrading) return;
     setWGrading(true);
     const graded = await gradeWriting(wp, wDraft.trim());
+    if ((graded?.score || 0) >= 80) playCorrectSound();
+    else playIncorrectSound();
     setWResult(graded);
     setWGrading(false);
   };
@@ -3333,6 +3703,8 @@ function ReviewQuizView({ lesson, difficulty, mode, seed, onBack, onFinish, onCh
     setSPhaseState("grading");
     let graded;
     try { graded = await gradeWithAI(sLine.ko, said, sLine.realPron); } catch (e) { graded = gradeLocally(sLine.ko, said); }
+    if ((graded?.score || 0) >= 80) playCorrectSound();
+    else playIncorrectSound();
     const reflexRatio = sReflexSecondsRef.current > 0 ? timeLeftAtDone / sReflexSecondsRef.current : 0;
     const reflexLabel = reflexRatio >= 0.5 ? "Tuyệt vời" : reflexRatio >= 0.25 ? "Khá" : reflexRatio > 0 ? "Kịp giờ" : "Sát giờ";
     setSReflexResults((r) => [...r, { no: sLine.no, score: graded.score, timeLeftAtDone: Math.round(timeLeftAtDone * 10) / 10, reflexLabel, timedOut: false }]);
@@ -3621,11 +3993,20 @@ const ACTIVITIES = [
 /* Tính % tiến độ THẬT cho từng thẻ hoạt động, đọc từ đúng dữ liệu đã lưu   */
 /* qua window.storage — không còn bảng số cố định. "Ôn tập" tính theo tỉ lệ */
 /* nội dung đã ôn "vững" (đúng nhiều hơn sai) trên tổng số mục có thể ôn.   */
-async function loadActivityProgress(lesson) {
+async function loadActivityProgress(lesson, userId) {
   const out = { tuvung: 0, shadowing: 0, nghechep: 0, ontap: 0 };
   try {
-    const v = await window.storage.get(vocabProgressKey(lesson));
-    if (v?.value) out.tuvung = Math.round((Object.keys(JSON.parse(v.value)).length / VOCAB_SAMPLE.length) * 100);
+    const userKey = vocabProgressKey(lesson, userId);
+    const [v, legacy, legacyOwner, remote] = await Promise.all([
+      window.storage.get(userKey),
+      userId ? window.storage.get(vocabProgressKey(lesson)) : Promise.resolve(null),
+      userId ? window.storage.get(`${legacyVocabProgressKey(lesson)}:migrated-owner`) : Promise.resolve(null),
+      userId ? loadRemoteVocabularyState(lesson.no, userId) : Promise.resolve(null),
+    ]);
+    const canUseLegacy = !userId || !legacyOwner?.value || legacyOwner.value === userId;
+    const localState = v?.value ? JSON.parse(v.value) : canUseLegacy && legacy?.value ? JSON.parse(legacy.value) : {};
+    const merged = remote ? mergeVocabStates(localState, remote) : localState;
+    if (Object.keys(merged).length) out.tuvung = Math.round((Object.keys(merged).length / VOCAB_SAMPLE.length) * 100);
   } catch (e) {}
   try {
     const s = await window.storage.get(shadowProgressKey(lesson));
@@ -3633,7 +4014,7 @@ async function loadActivityProgress(lesson) {
   } catch (e) {}
   try {
     const d = await window.storage.get(dictationProgressKey(lesson));
-    if (d?.value) out.nghechep = Math.round((Object.keys(JSON.parse(d.value)).length / SHADOW_LINES.length) * 100);
+    if (d?.value) out.nghechep = Math.round((Object.keys(correctDictationResults(JSON.parse(d.value))).length / SHADOW_LINES.length) * 100);
   } catch (e) {}
   try {
     const r = await window.storage.get(reviewHistoryKey(lesson));
@@ -3644,25 +4025,40 @@ async function loadActivityProgress(lesson) {
       out.ontap = Math.round((mastered / totalReviewable) * 100);
     }
   } catch (e) {}
+  try {
+    const completed = await window.storage.get(activityCompletionKey(lesson, userId));
+    if (completed?.value) {
+      Object.keys(JSON.parse(completed.value)).forEach((activityId) => {
+        if (Object.prototype.hasOwnProperty.call(out, activityId)) out[activityId] = 100;
+      });
+    }
+  } catch (e) {}
   return out;
 }
 
-function LessonDetailView({ lesson, onBack, onStartActivity }) {
+function LessonDetailView({ lesson, userId, textbookTitle, onBack, onStartActivity, onProgressChange }) {
   const [pcts, setPcts] = useState({ tuvung: 0, shadowing: 0, nghechep: 0, ontap: 0 });
 
   useEffect(() => {
     let alive = true;
-    loadActivityProgress(lesson).then((p) => { if (alive) setPcts(p); });
+    loadActivityProgress(lesson, userId).then((p) => {
+      if (!alive) return;
+      setPcts(p);
+      const overall = Math.round(Object.values(p).reduce((sum, value) => sum + value, 0) / Object.keys(p).length);
+      onProgressChange?.(overall, p);
+    });
     return () => { alive = false; };
-  }, [lesson]);
+  }, [lesson, userId]);
 
   return (
     <section className="card page">
       <div className="card-title-row">
-        <div className="card-title">
-          <NotebookPen size={19} color="#7C6FE4" /> Bài {lesson.no} · 회화 익힘책 2-1
+        <div className="page-back-heading">
+          <button className="fc2-back" onClick={onBack} aria-label="Về danh sách bài"><ChevronLeft size={20} /></button>
+          <div className="card-title">
+            <NotebookPen size={19} color="#7C6FE4" /> Bài {lesson.no} · {textbookTitle}
+          </div>
         </div>
-        <button className="link-btn" onClick={onBack}>← Danh sách bài</button>
       </div>
 
       <div className="lesson-hero">
@@ -4055,8 +4451,7 @@ function CurriculumHubView({ onBack, onOpenBook, onAddBook, myBooks = [], availa
   );
 }
 
-function GrammarHubView({ onBack, onOpenBook, books = null }) {
-  const visibleBooks = books?.length ? books : UPLOADED_BOOKS.map((title) => ({ title, hasContent: title.includes("2-1"), lessonCount: title.includes("2-1") ? LESSONS_2_1.length : 0 }));
+function GrammarHubView({ onBack, onOpenBook, onAddBook, books = [] }) {
   return (
     <section className="cg-page wide-page">
       <div className="fc2-topbar">
@@ -4065,28 +4460,28 @@ function GrammarHubView({ onBack, onOpenBook, books = null }) {
           <span className="fc2-title"><NotebookPen size={18} color="#3FA95C" /> Ngữ pháp</span>
         </div>
       </div>
-      <p className="cg-sub" style={{ marginTop: 0 }}>Ngữ pháp của tất cả các bài được tổng hợp tại đây — chọn giáo trình để bắt đầu.</p>
-      <div className="gm-hub-grid">
-        {visibleBooks.map((book) => {
-          const title = book.title;
-          const hasContent = book.hasContent;
-          return (
-            <button
-              key={title}
-              className={`gm-hub-card ${hasContent ? "has" : "soon"}`}
-              onClick={() => hasContent && onOpenBook()}
-              disabled={!hasContent}
-              title={hasContent ? undefined : "Chưa có nội dung ngữ pháp"}
-            >
-              <span className="gm-hub-badge">NGỮ PHÁP</span>
-              <b lang="ko">{title}</b>
-              <span className="gm-hub-count">
-                {hasContent ? `${book.lessonCount} bài · ${GRAMMAR_SAMPLE.length} mẫu ngữ pháp` : book.lessonCount ? `${book.lessonCount} bài · Đang biên soạn` : "Chưa có nội dung"}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <p className="cg-sub" style={{ marginTop: 0 }}>Danh sách các mẫu ngữ pháp thuộc những giáo trình bạn đã thêm.</p>
+      {!books.length ? (
+        <div className="curriculum-empty grammar-empty">
+          <NotebookPen size={28} />
+          <b>Bạn chưa có giáo trình</b>
+          <span>Thêm giáo trình trước để xem ngữ pháp theo đúng nội dung đang học.</span>
+          <button type="button" className="curriculum-empty-action" onClick={onAddBook}><Plus size={15} /> Thêm giáo trình</button>
+        </div>
+      ) : <div className="grammar-catalog-list">
+        {books.flatMap((book) => GRAMMAR_SAMPLE.map((grammar, index) => (
+          <button key={`${book.id || book.title}-${grammar.no}`} className="grammar-catalog-card" onClick={() => onOpenBook(book)}>
+            <span className="grammar-catalog-number">{index + 1}</span>
+            <span className="grammar-catalog-content">
+              <b lang="ko">{grammar.pattern}</b>
+              <small>{grammar.translation}</small>
+              <span>{grammar.context}</span>
+            </span>
+            <span className="grammar-catalog-book"><BookOpen size={13} /> {book.title}</span>
+            <ChevronRight size={18} />
+          </button>
+        )))}
+      </div>}
     </section>
   );
 }
@@ -4131,10 +4526,11 @@ function GrammarBookView({ onBack, onSelectLesson, lessons = LESSONS_2_1, textbo
 /* ------------------------------------------------------------------ */
 /*  DANH SÁCH TỪ VỰNG — mỗi dòng: Từ Hàn - Nghĩa Việt, có Loa + Ngôi sao */
 /* ------------------------------------------------------------------ */
-function VocabListView({ lesson, userId, onBack, onStudy, vocabulary = VOCAB_SAMPLE }) {
+function VocabListView({ lesson, userId, onBack, onStudy, onReviewStart, reviewingSession = false, vocabulary = VOCAB_SAMPLE }) {
   const [progress, setProgress] = useState({});
   const [loaded, setLoaded] = useState(false);
-  const storageKey = vocabProgressKey(lesson);
+  const [reviewing, setReviewing] = useState(reviewingSession);
+  const storageKey = vocabProgressKey(lesson, userId);
 
   useEffect(() => {
     let alive = true;
@@ -4161,14 +4557,31 @@ function VocabListView({ lesson, userId, onBack, onStudy, vocabulary = VOCAB_SAM
     void saveRemoteVocabularyState(lesson.no, userId, updated);
   };
 
+  const completed = loaded && vocabulary.length > 0 && vocabulary.every((word) => progress[word.word]?.lastRating === "good");
+
+  if (completed && !reviewing) {
+    return (
+      <SkillCompletionView
+        title="Bạn đã hoàn thành Từ vựng & Ngữ pháp!"
+        description="Bạn đã học thuộc toàn bộ nội dung của bài. Bạn có muốn ôn lại từ đầu không?"
+        retryLabel="Ôn lại"
+        onBack={onBack}
+        onRetry={() => {
+          setReviewing(true);
+          onReviewStart?.();
+        }}
+      />
+    );
+  }
+
   return (
     <section className="cg-page wide-page">
       <div className="fc2-topbar">
         <div className="fc2-top-left">
           <button className="fc2-back" onClick={onBack} aria-label="Về bài học"><ChevronLeft size={20} /></button>
-          <span className="fc2-title"><Type size={18} color="#7C6FE4" /> Danh sách từ vựng · Bài {lesson.no}</span>
+          <span className="fc2-title"><Type size={18} color="#7C6FE4" /> Từ vựng & Ngữ pháp · Bài {lesson.no}</span>
         </div>
-        <button className="cg-post-btn" onClick={onStudy}><Play size={13} fill="#fff" /> Học bằng Flashcard</button>
+        <button className="cg-post-btn" onClick={() => onStudy(reviewing)}><Play size={13} fill="#fff" /> {reviewing ? "Ôn lại bằng Flashcard" : "Học bằng Flashcard"}</button>
       </div>
       <div className="vl-list">
         {vocabulary.map((w) => {
@@ -4192,6 +4605,18 @@ function VocabListView({ lesson, userId, onBack, onStudy, vocabulary = VOCAB_SAM
             </div>
           );
         })}
+      </div>
+      <div className="vl-grammar-section">
+        <div className="vl-section-heading"><NotebookPen size={18} /> Ngữ pháp trong bài <span>{GRAMMAR_SAMPLE.length} mẫu</span></div>
+        <div className="vl-grammar-grid">
+          {GRAMMAR_SAMPLE.map((grammar) => (
+            <article className="vl-grammar-card" key={grammar.no}>
+              <div><b lang="ko">{grammar.pattern}</b><span>{grammar.translation}</span></div>
+              <p>{grammar.context}</p>
+              {grammar.examples?.[0] && <small><span lang="ko">{cleanKo(grammar.examples[0].ko)}</span> — {grammar.examples[0].vi}</small>}
+            </article>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -4301,6 +4726,7 @@ function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords
   const [grammarIdx, setGrammarIdx] = useState(0);
   const [grammarFlipped, setGrammarFlipped] = useState(false);
   const deck = deckWords && deckWords.length ? deckWords : vocabulary;
+  const isIdentifiedDeck = Boolean(deckWords?.length && deckWords.every((word) => word.id && word.lessonId && word.textbookId));
   // Hàng đợi phiên học: mảng chỉ số vào `deck`. "Chưa thuộc" đẩy từ đó xuống
   // cuối hàng đợi để lặp lại trong CÙNG phiên, cho đến khi được "Đã thuộc".
   const [queue, setQueue] = useState(() => deck.map((_, i) => i));
@@ -4309,6 +4735,7 @@ function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords
   const [progress, setProgress] = useState({});   // { [word]: { box, lastRating, dueAt, timesReviewed, starred, note } }
   const [loaded, setLoaded] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
+  const [isRecheck, setIsRecheck] = useState(false);
   const [flipped, setFlipped] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [dragX, setDragX] = useState(0);
@@ -4340,11 +4767,15 @@ function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords
           }
         }
         const localSaved = res?.value ? JSON.parse(res.value) : {};
-        const remoteSaved = await loadRemoteVocabularyState(lesson.no, userId);
+        const remoteSaved = isIdentifiedDeck
+          ? await loadRemoteVocabularyStateForWords(deckWords, userId)
+          : await loadRemoteVocabularyState(lesson.no, userId);
         const saved = remoteSaved ? mergeVocabStates(localSaved, remoteSaved) : localSaved;
         if (remoteSaved) {
           await window.storage.set(storageKey, JSON.stringify(saved));
-          if (Object.keys(localSaved).length) void saveRemoteVocabularyState(lesson.no, userId, saved);
+          if (Object.keys(localSaved).length) void (isIdentifiedDeck
+            ? saveRemoteVocabularyStateForWords(deckWords, userId, saved)
+            : saveRemoteVocabularyState(lesson.no, userId, saved));
         }
         if (alive && Object.keys(saved).length) {
           const remaining = deck
@@ -4363,7 +4794,7 @@ function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords
       }
     })();
     return () => { alive = false; };
-  }, [storageKey, userId, includeMastered]);
+  }, [storageKey, userId, includeMastered, isIdentifiedDeck]);
 
   // Mỗi khi chuyển thẻ (kể cả khi cùng 1 từ bị đẩy lại ngay do "Chưa thuộc"
   // và hàng đợi chỉ còn 1 từ): quay về mặt trước + nạp ghi chú đã lưu.
@@ -4378,7 +4809,8 @@ function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords
     setProgress(updated);
     try {
       await window.storage.set(storageKey, JSON.stringify(updated));
-      await saveRemoteVocabularyState(lesson.no, userId, updated);
+      if (isIdentifiedDeck) await saveRemoteVocabularyStateForWords(deckWords, userId, updated);
+      else await saveRemoteVocabularyState(lesson.no, userId, updated);
     } catch (e) {
       /* lưu thất bại — tiến trình vẫn hiển thị tạm trong phiên này */
     }
@@ -4398,7 +4830,10 @@ function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords
         timesReviewed: (cur?.timesReviewed || 0) + 1,
       },
     };
-    persist(updated);
+    if (ratingId === "good") playCorrectSound();
+    else playIncorrectSound();
+    if (isRecheck) setProgress(updated);
+    else persist(updated);
     const wordIdx = queue[0];
     if (ratingId === "good") {
       setMasteredCount((c) => c + 1);
@@ -4586,8 +5021,13 @@ function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords
         <div className="fc2-session-done">
           <div className="fc2-session-done-emoji">🎉</div>
           <h3>Đã thuộc hết {total} từ!</h3>
-          <p>Bạn đã học xong toàn bộ {deckTitle ? deckTitle : "bộ thẻ"} trong phiên này.</p>
-          <button className="fc2-act-btn primary" onClick={onFinish}>Làm bài tập <ChevronRight size={16} /></button>
+          <p>Bạn đã học xong toàn bộ {deckTitle ? deckTitle : "bộ thẻ"} trong phiên này. Bạn có muốn kiểm tra lại không?</p>
+          <div className="fc2-session-done-actions">
+            <button className="fc2-act-btn" onClick={onFinish}><ChevronLeft size={16} /> Về bài học</button>
+            <button className="fc2-act-btn primary" onClick={() => { setIsRecheck(true); setQueue(deck.map((_, index) => index)); setMasteredCount(0); setTurn((value) => value + 1); }}>
+              <RotateCcw size={16} /> Kiểm tra lại
+            </button>
+          </div>
         </div>
       ) : (
       <>
@@ -4883,7 +5323,11 @@ function FillBlankListenView({ onBack }) {
         </div>
 
         {!checked ? (
-          <button className="qz-check-btn purple" onClick={() => setChecked(true)}>Kiểm tra đáp án</button>
+          <button className="qz-check-btn purple" onClick={() => {
+            setChecked(true);
+            if (FILL_BLANK_ITEMS.every((item, index) => (answers[index] || "").trim() === item.word)) playCorrectSound();
+            else playIncorrectSound();
+          }}>Kiểm tra đáp án</button>
         ) : (
           <div className="qz-result-row">
             <span className="qz-score">Bạn đúng {score}/{total} câu</span>
@@ -4914,9 +5358,11 @@ function MatchPairsView({ onBack }) {
     if (selected === null || isRightDone(pos)) return;
     const ok = MATCH_ITEMS[selected].meaning === MATCH_ITEMS[order[pos]].meaning;
     if (ok) {
+      playCorrectSound();
       setPairs((p) => ({ ...p, [selected]: pos }));
       setSelected(null);
     } else {
+      playIncorrectSound();
       setWrongFlash({ left: selected, right: pos });
       setTimeout(() => setWrongFlash(null), 500);
       setSelected(null);
@@ -4990,7 +5436,12 @@ function ChooseImageView({ onBack }) {
   const total = items.length;
   const item = items[idx];
 
-  const pick = (word) => { if (!picked) setPicked(word); };
+  const pick = (word) => {
+    if (picked) return;
+    setPicked(word);
+    if (word === item.answer) playCorrectSound();
+    else playIncorrectSound();
+  };
   const next = () => {
     if (idx < total - 1) { setIdx(idx + 1); setPicked(null); }
     else onBack();
@@ -5049,11 +5500,12 @@ function ChooseImageView({ onBack }) {
 /*  NGHE CHÉP CHÍNH TẢ — dùng audio thật (4 câu 1과.mp3 đã cắt sẵn      */
 /*  cho Shadowing), gợi ý hé lộ từng ký tự khi trả lời sai              */
 /* ------------------------------------------------------------------ */
-function DictationView({ lesson, onBack, onGoVocab }) {
-  const [mode, setMode] = useState("practice"); // "practice" (không giới hạn) | "test" (giới hạn 2 lần)
+function DictationView({ lesson, initialMode = "practice", onBack, onFinish, onGoVocab }) {
+  const mode = initialMode; // hai tuyến độc lập; chỉ "test" ghi tiến trình
   const [idx, setIdx] = useState(0);
   const [inputs, setInputs] = useState({});
   const [status, setStatus] = useState({});
+  const [verified, setVerified] = useState({}); // chỉ câu đúng trong phần Kiểm tra mới tính tiến độ
   const [checkedValues, setCheckedValues] = useState({}); // giá trị đã gõ TẠI THỜI ĐIỂM bấm Kiểm tra, dùng để bôi màu đúng/sai từng từ
   const [reveal, setReveal] = useState({});
   const [listensLeft, setListensLeft] = useState({});
@@ -5063,7 +5515,14 @@ function DictationView({ lesson, onBack, onGoVocab }) {
   const [curTime, setCurTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
+  const [retryQueue, setRetryQueue] = useState([]);
+  const [wrongAttempts, setWrongAttempts] = useState({});
+  const [retryRound, setRetryRound] = useState(0);
+  const [retryNotice, setRetryNotice] = useState("");
+  const [showCompletion, setShowCompletion] = useState(false);
+  const [isRecheck, setIsRecheck] = useState(false);
   const audioRef = useRef(null);
+  const autoAdvanceRef = useRef(null);
 
   const total = SHADOW_LINES.length;
   const line = SHADOW_LINES[idx];
@@ -5073,14 +5532,23 @@ function DictationView({ lesson, onBack, onGoVocab }) {
   const maxReveal = target.replace(/\s/g, "").length;
   const value = inputs[idx] || "";
   const st = status[idx];
+  const questionLocked = st === "correct" || (mode === "test" && st === "failed");
   const storageKey = dictationProgressKey(lesson);
 
   useEffect(() => {
+    if (mode !== "test") return undefined;
     let alive = true;
     window.storage.get(storageKey).then((res) => {
       if (!alive || !res?.value) return;
-      const saved = JSON.parse(res.value);
-      setStatus((s) => ({ ...saved, ...s }));
+      const saved = correctDictationResults(JSON.parse(res.value));
+      setVerified(saved);
+      setStatus(saved);
+      const completedIndexes = Object.keys(saved).filter((key) => saved[key] === "correct");
+      if (completedIndexes.length) {
+        const firstPending = Array.from({ length: total }).findIndex((_, questionIndex) => saved[questionIndex] !== "correct");
+        if (firstPending < 0) setShowCompletion(true);
+        else setIdx(firstPending);
+      }
       setAttempted((a) => {
         const next = { ...a };
         Object.keys(saved).forEach((k) => { next[k] = true; });
@@ -5089,12 +5557,24 @@ function DictationView({ lesson, onBack, onGoVocab }) {
     }).catch(() => {});
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mode, storageKey, total]);
 
-  useEffect(() => { setCurTime(0); setPlaying(false); }, [idx]);
+  useEffect(() => {
+    clearTimeout(autoAdvanceRef.current);
+    setCurTime(0);
+    setPlaying(false);
+  }, [idx]);
+  useEffect(() => () => clearTimeout(autoAdvanceRef.current), []);
   useEffect(() => { if (audioRef.current) audioRef.current.playbackRate = speed; }, [speed, idx]);
+  const consumeListen = () => {
+    if (mode === "practice") return;
+    setListensLeft((current) => ({
+      ...current,
+      [idx]: Math.max(0, (current[idx] ?? 2) - 1),
+    }));
+  };
 
-  // "Nghe" (từ đầu) và "Nghe lại từ đầu" đều tính là 1 lượt nghe mới.
+  // Mỗi lần bắt đầu nghe (kể cả phát tiếp) đều dùng một lượt ở tuyến kiểm tra.
   const playFromStart = () => {
     if (leftCount <= 0) return;
     const el = audioRef.current;
@@ -5102,16 +5582,22 @@ function DictationView({ lesson, onBack, onGoVocab }) {
     el.currentTime = 0;
     el.playbackRate = speed;
     el.play().catch(() => {});
-    setListensLeft((l) => ({ ...l, [idx]: leftCount - 1 }));
+    consumeListen();
   };
 
-  // Tạm dừng / Phát tiếp — KHÔNG tính thêm lượt nghe khi chỉ resume giữa chừng.
+  // Nhấn khi đang phát chỉ tạm dừng; nhấn Play để phát/phát tiếp sẽ dùng một lượt.
   const togglePause = () => {
     const el = audioRef.current;
     if (!el) return;
     if (playing) { el.pause(); return; }
-    if (curTime > 0) { el.play().catch(() => {}); }
-    else { playFromStart(); }
+    if (leftCount <= 0) return;
+    if (curTime > 0 && curTime < duration) {
+      el.playbackRate = speed;
+      el.play().catch(() => {});
+      consumeListen();
+    } else {
+      playFromStart();
+    }
   };
 
   const fmt = (s) => {
@@ -5123,21 +5609,52 @@ function DictationView({ lesson, onBack, onGoVocab }) {
 
   const setVal = (v) => setInputs((o) => ({ ...o, [idx]: v }));
 
+  const normalizeDictation = (text) => text
+    .normalize("NFC")
+    .toLocaleLowerCase("ko-KR")
+    // Chấp nhận các cách nói tương đương thường gặp trong hội thoại.
+    // Bài mẫu dùng "함께 뭘", trong khi audio/người học có thể dùng
+    // "같이 뭐"; khác biệt này không làm thay đổi nghĩa của câu.
+    .replace(/함께/g, "같이")
+    .replace(/뭘/g, "뭐")
+    .replace(/[\p{P}\p{S}\s]+/gu, "");
+
   const check = () => {
-    const ok = value.trim() === target;
-    const newStatus = { ...status, [idx]: ok ? "correct" : "wrong" };
+    if (questionLocked) return;
+    const ok = normalizeDictation(value) === normalizeDictation(target);
+    if (ok) playCorrectSound();
+    else playIncorrectSound();
+    const nextWrongCount = ok ? (wrongAttempts[idx] || 0) : (wrongAttempts[idx] || 0) + 1;
+    const failed = mode === "test" && !ok && nextWrongCount >= 2;
+    const newStatus = { ...status, [idx]: ok ? "correct" : failed ? "failed" : "wrong" };
     setStatus(newStatus);
+    if (!ok) setWrongAttempts((current) => ({ ...current, [idx]: nextWrongCount }));
     setCheckedValues((c) => ({ ...c, [idx]: value }));
     setAttempted((a) => ({ ...a, [idx]: true }));
-    window.storage.set(storageKey, JSON.stringify(newStatus)).catch(() => {});
+    setRetryQueue((queue) => ok ? queue.filter((item) => item !== idx) : (queue.includes(idx) ? queue : [...queue, idx]));
+    const nextVerified = mode === "test" && ok ? { ...verified, [idx]: "correct" } : verified;
+    if (mode === "test" && ok) {
+      setVerified(nextVerified);
+      const fullyCorrect = Array.from({ length: total }).every((_, questionIndex) => nextVerified[questionIndex] === "correct");
+      if (!isRecheck || fullyCorrect) window.storage.set(storageKey, JSON.stringify(nextVerified)).catch(() => {});
+    }
+    if (ok) {
+      clearTimeout(autoAdvanceRef.current);
+      autoAdvanceRef.current = window.setTimeout(() => goNext(newStatus, nextVerified), 800);
+    }
   };
 
   // So khớp theo từng từ để bôi xanh (đúng) / đỏ (sai hoặc thiếu) — dùng đúng
   // nội dung đã gõ TẠI LÚC bấm Kiểm tra, không đổi theo khi gõ tiếp sau đó.
   const diffWords = () => {
-    const targetWords = target.split(/\s+/).filter(Boolean);
-    const userWords = (checkedValues[idx] || "").trim().split(/\s+/).filter(Boolean);
-    return targetWords.map((w, i) => ({ word: w, correct: userWords[i] === w }));
+    const targetWords = target.replace(/[\p{P}\p{S}]+/gu, " ").split(/\s+/).filter(Boolean);
+    const userWords = (checkedValues[idx] || "").replace(/[\p{P}\p{S}]+/gu, " ").trim().split(/\s+/).filter(Boolean);
+    return Array.from({ length: Math.max(targetWords.length, userWords.length) }, (_, index) => {
+      const expected = targetWords[index] || "";
+      const entered = userWords[index] || "";
+      const correct = Boolean(expected && entered) && normalizeDictation(entered) === normalizeDictation(expected);
+      return { word: entered || expected, expected, correct, missing: !entered && Boolean(expected) };
+    });
   };
 
   const hint = () => {
@@ -5155,6 +5672,101 @@ function DictationView({ lesson, onBack, onGoVocab }) {
   };
 
   const goto = (i) => setIdx(i);
+  const goNext = (statusSnapshot = status, verifiedSnapshot = verified) => {
+    const currentDone = statusSnapshot[idx] === "correct" || (mode === "test" && statusSnapshot[idx] === "failed");
+    if (!currentDone) return;
+    const nextIndex = mode === "test"
+      ? Array.from({ length: total }).findIndex((_, questionIndex) => questionIndex > idx && verifiedSnapshot[questionIndex] !== "correct")
+      : idx < total - 1 ? idx + 1 : -1;
+    if (nextIndex >= 0) { goto(nextIndex); return; }
+    const pending = mode === "test"
+      ? Array.from({ length: total }, (_, questionIndex) => questionIndex).filter((questionIndex) => verifiedSnapshot[questionIndex] !== "correct")
+      : retryQueue.filter((questionIndex) => statusSnapshot[questionIndex] !== "correct");
+    if (pending.length) {
+      if (mode === "test") {
+        setRetryRound((round) => round + 1);
+        setRetryNotice(`Bạn đã đi hết lượt. Có ${pending.length} câu chưa đúng — bắt đầu lượt làm lại.`);
+        setStatus((current) => {
+          const next = { ...current };
+          pending.forEach((questionIndex) => { delete next[questionIndex]; });
+          return next;
+        });
+        setInputs((current) => {
+          const next = { ...current };
+          pending.forEach((questionIndex) => { delete next[questionIndex]; });
+          return next;
+        });
+        setCheckedValues((current) => {
+          const next = { ...current };
+          pending.forEach((questionIndex) => { delete next[questionIndex]; });
+          return next;
+        });
+        setReveal((current) => {
+          const next = { ...current };
+          pending.forEach((questionIndex) => { delete next[questionIndex]; });
+          return next;
+        });
+        setShowTrans((current) => {
+          const next = { ...current };
+          pending.forEach((questionIndex) => { delete next[questionIndex]; });
+          return next;
+        });
+        setAttempted((current) => {
+          const next = { ...current };
+          pending.forEach((questionIndex) => { delete next[questionIndex]; });
+          return next;
+        });
+        setWrongAttempts((current) => {
+          const next = { ...current };
+          pending.forEach((questionIndex) => { delete next[questionIndex]; });
+          return next;
+        });
+        setListensLeft((current) => {
+          const next = { ...current };
+          pending.forEach((questionIndex) => { delete next[questionIndex]; });
+          return next;
+        });
+      }
+      goto(pending[0]);
+      return;
+    }
+    setShowCompletion(true);
+  };
+
+  const clearCurrentAnswer = () => {
+    if (questionLocked) return;
+    setVal("");
+    setCheckedValues((current) => { const next = { ...current }; delete next[idx]; return next; });
+    setStatus((current) => { const next = { ...current }; delete next[idx]; return next; });
+  };
+
+  const retryDictation = () => {
+    setShowCompletion(false);
+    setIsRecheck(true);
+    setIdx(0);
+    setInputs({});
+    setStatus({});
+    setVerified({});
+    setCheckedValues({});
+    setAttempted({});
+    setRetryQueue([]);
+    setListensLeft({});
+    setWrongAttempts({});
+    setRetryRound(0);
+    setRetryNotice("");
+  };
+
+  if (showCompletion) {
+    return (
+      <SkillCompletionView
+        title={mode === "test" ? "Bạn đã hoàn thành Kiểm tra nghe chép!" : "Bạn đã hoàn thành Luyện tập nghe chép!"}
+        description={mode === "test" ? "Kết quả đúng đã được lưu vào tiến trình. Bạn có muốn kiểm tra lại không?" : "Lượt luyện tập không tính vào tiến trình. Bạn có muốn luyện lại không?"}
+        retryLabel={mode === "test" ? "Kiểm tra lại" : "Luyện lại"}
+        onBack={mode === "test" && !isRecheck ? (onFinish || onBack) : onBack}
+        onRetry={retryDictation}
+      />
+    );
+  }
 
   return (
     <section className="dc-page">
@@ -5171,14 +5783,14 @@ function DictationView({ lesson, onBack, onGoVocab }) {
         </div>
       </div>
 
-      <div className="dc-mode-row">
-        <button className={`dc-mode-btn ${mode === "practice" ? "on" : ""}`} onClick={() => setMode("practice")}>
-          <Headphones size={13} /> Luyện tập <small>(nghe không giới hạn)</small>
-        </button>
-        <button className={`dc-mode-btn ${mode === "test" ? "on" : ""}`} onClick={() => setMode("test")}>
-          <Target size={13} /> Kiểm tra <small>(2 lần nghe/câu)</small>
-        </button>
+      <div className={`dc-route-banner ${mode}`}>
+        {mode === "practice" ? <Headphones size={15} /> : <Target size={15} />}
+        <strong>{mode === "practice" ? "Tuyến Luyện tập" : "Tuyến Kiểm tra"}</strong>
+        <span>{mode === "practice" ? "Không giới hạn lượt nghe · không tính tiến trình" : "Tối đa 2 lượt nghe/câu · có lưu tiến trình"}</span>
       </div>
+      {retryNotice && (
+        <div className="dc-retry-notice"><RotateCcw size={15} /> <span>{retryNotice}</span><small>Lượt làm lại {retryRound}</small></div>
+      )}
 
       <div className="dc-body">
         <div className="dc-main">
@@ -5194,18 +5806,19 @@ function DictationView({ lesson, onBack, onGoVocab }) {
             onEnded={() => setPlaying(false)}
           />
           <div className="dc-player">
-            <button className="dc-play-btn" onClick={togglePause} disabled={leftCount <= 0 && curTime === 0} aria-label={playing ? "Tạm dừng" : "Nghe"}>
+            <button className="dc-play-btn" onClick={togglePause} disabled={!playing && leftCount <= 0} aria-label={playing ? "Tạm dừng" : leftCount <= 0 ? "Đã hết lượt nghe" : "Nghe"}>
               {playing ? <Square size={17} fill="#fff" color="#fff" /> : <Play size={20} fill="#fff" color="#fff" />}
             </button>
-            <div className="dc-wave">
+            <div className={`dc-wave ${playing ? "is-playing" : ""}`} aria-hidden="true">
               {Array.from({ length: 26 }).map((_, i) => (
-                <span key={i} className={playing ? "on" : ""} style={{ "--h": `${22 + ((i * 37) % 55)}%`, "--d": `${(i % 7) * 0.06}s` }} />
+                <span key={i} style={{ "--h": `${22 + ((i * 37) % 55)}%`, "--d": `${(i % 7) * 0.07}s` }} />
               ))}
             </div>
             <div className="dc-time">{fmt(curTime)} / {fmt(duration)}</div>
-            <button className="dc-relisten-btn" onClick={playFromStart} disabled={leftCount <= 0}>
-              <RotateCcw size={14} /> Nghe lại từ đầu
-            </button>
+            <div className={`dc-listen-counter ${mode === "test" && leftCount <= 0 ? "empty" : ""}`} aria-live="polite">
+              <Headphones size={14} />
+              {mode === "practice" ? "Không giới hạn lượt nghe" : `Còn ${leftCount} / 2 lượt nghe`}
+            </div>
           </div>
           <div className="dc-speed-row">
             <span className="dc-speed-label">Tốc độ:</span>
@@ -5213,16 +5826,18 @@ function DictationView({ lesson, onBack, onGoVocab }) {
               <button key={s} className={`dc-speed-chip ${speed === s ? "on" : ""}`} onClick={() => setSpeed(s)}>{s}x</button>
             ))}
           </div>
-          <div className="dc-listen-left">{mode === "practice" ? "(Không giới hạn lượt nghe)" : leftCount > 0 ? `(Còn ${leftCount} lần nghe)` : "(Hết lượt nghe)"}</div>
-
           <p className="dc-instruction"><Volume2 size={15} color="#7C6FE4" /> Nghe đoạn hội thoại và nhập chính xác câu bạn nghe được.</p>
 
           <div className="dc-input-row">
             <textarea
-              className={`dc-textarea ${st === "correct" ? "ok" : st === "wrong" ? "wrong" : ""}`}
+              className={`dc-textarea ${st === "correct" ? "ok" : st === "wrong" || st === "failed" ? "wrong" : ""}`}
               placeholder="Nhập câu tiếng Hàn tại đây..."
               value={value}
-              onChange={(e) => setVal(e.target.value)}
+              onChange={(e) => {
+                setVal(e.target.value);
+                if (st === "wrong") setStatus((current) => ({ ...current, [idx]: undefined }));
+              }}
+              disabled={questionLocked}
               lang="ko"
             />
             <div className="dc-side-btns">
@@ -5246,21 +5861,32 @@ function DictationView({ lesson, onBack, onGoVocab }) {
           {st && (
             <div className={`dc-feedback ${st === "correct" ? "ok" : "wrong"}`}>
               {st === "correct" ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
-              {st === "correct" ? "Chính xác! Làm tốt lắm." : "Chưa đúng — xem đối chiếu từng từ bên dưới:"}
+              {st === "correct"
+                ? "Chính xác! Làm tốt lắm."
+                : st === "failed"
+                  ? "Đã sai 2 lần — câu này được đánh dấu sai. Hãy làm tiếp và quay lại ở lượt cuối."
+                  : mode === "test"
+                    ? "Chưa đúng — bạn còn 1 lần trả lời cho câu này."
+                    : "Chưa đúng — xem đối chiếu từng từ bên dưới:"}
             </div>
           )}
-          {st === "wrong" && (
+          {(st === "wrong" || st === "failed") && (
             <div className="dc-diff-line" lang="ko">
               {diffWords().map((d, i) => (
-                <span key={i} className={`dc-diff-word ${d.correct ? "correct" : "wrong"}`}>{d.word}</span>
+                <span key={i} className={`dc-diff-word ${d.correct ? "correct" : "wrong"} ${d.missing ? "missing" : ""}`} title={!d.correct && d.expected ? `Đúng: ${d.expected}` : undefined}>
+                  {d.correct ? d.word : d.missing ? (
+                    <><span>Thiếu:</span><b>{d.expected}</b></>
+                  ) : (
+                    <><del>{d.word}</del><span className="dc-diff-arrow">→</span><b>{d.expected}</b></>
+                  )}
+                </span>
               ))}
             </div>
           )}
 
           <div className="dc-actions">
-            <button className="dc-act-btn" onClick={() => setVal("")}><Eraser size={15} /> Xóa</button>
-            <button className="dc-act-btn" onClick={playFromStart} disabled={leftCount <= 0}><Volume2 size={15} /> Nghe lại</button>
-            <button className="dc-act-btn primary" onClick={check}><CheckCircle2 size={15} /> Kiểm tra</button>
+            <button className="dc-act-btn" onClick={clearCurrentAnswer} disabled={questionLocked || (!value && !checkedValues[idx])}><Eraser size={15} /> Xóa</button>
+            <button className="dc-act-btn primary" onClick={check} disabled={!value.trim() || questionLocked}><CheckCircle2 size={15} /> {questionLocked ? "Đã hoàn thành" : "Kiểm tra"}</button>
           </div>
         </div>
 
@@ -5268,8 +5894,8 @@ function DictationView({ lesson, onBack, onGoVocab }) {
           <div className="dc-tip-box">
             <div className="dc-tip-title"><Star size={15} fill="#F0C24E" color="#F0C24E" /> Mẹo</div>
             <ul>
-              <li>Chỉ nghe tối đa 2 lần.</li>
-              <li>Chú ý khoảng trắng và dấu câu.</li>
+              <li>{mode === "practice" ? "Tuyến luyện tập không làm thay đổi tiến trình." : "Mỗi câu được nghe tối đa 2 lần và câu đúng được lưu."}</li>
+              <li>Dấu câu và khoảng trắng nhỏ không bị tính sai.</li>
               <li>Nghe theo cụm từ.</li>
             </ul>
             <div className="dc-tip-bunny"><BunnyMascot /></div>
@@ -5293,14 +5919,15 @@ function DictationView({ lesson, onBack, onGoVocab }) {
           {SHADOW_LINES.map((_, i) => (
             <button
               key={i}
-              className={`fc-dot ${i === idx ? "on" : ""} ${status[i] === "correct" ? "rated-good" : status[i] === "wrong" ? "rated-forgot" : ""}`}
-              onClick={() => goto(i)}
+              className={`fc-dot ${i === idx ? "on" : ""} ${status[i] === "correct" ? "rated-good" : status[i] === "wrong" || status[i] === "failed" ? "rated-forgot" : ""}`}
+              onClick={() => (i === idx || status[i] === "correct") && goto(i)}
+              disabled={i !== idx && status[i] !== "correct"}
               aria-label={`Câu ${i + 1}`}
             />
           ))}
         </div>
-        <button className="fc-nav-btn primary" onClick={() => (idx === total - 1 ? onBack() : goto(idx + 1))}>
-          {idx === total - 1 ? "Hoàn thành" : "Câu tiếp"} <ChevronRight size={18} />
+        <button className="fc-nav-btn primary" disabled={status[idx] !== "correct" && !(mode === "test" && status[idx] === "failed")} onClick={() => goNext()}>
+          {idx === total - 1 && retryQueue.some((questionIndex) => status[questionIndex] !== "correct") ? "Làm lại câu sai" : idx === total - 1 ? "Hoàn thành" : "Câu tiếp"} <ChevronRight size={18} />
         </button>
       </div>
     </section>
@@ -5313,7 +5940,7 @@ function DictationView({ lesson, onBack, onGoVocab }) {
 const IMMERSIVE_VIEWS = [
   "lesson-detail", "flashcards", "flashcards-grammar", "flashcards-notebook", "vocab-list",
   "vocab-test-select", "vocab-test-fillblank", "vocab-test-match", "vocab-test-image",
-  "shadowing", "dictation",
+  "shadowing", "dictation", "dictation-mode-select",
   "review-intro", "review-quiz", "review-result", "aiquiz", "study-custom-lesson", "test-custom-lesson",
 ];
 
@@ -5350,15 +5977,9 @@ Trả lời CHỈ bằng JSON, không markdown, không chữ nào khác:
   "correctIndex": <số nguyên 0-3, vị trí đáp án đúng trong mảng options>,
   "explanation": "<1 câu tiếng Việt giải thích ngắn gọn vì sao đáp án đó đúng>"
 }`;
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 500, messages: [{ role: "user", content: prompt }] }),
-  });
-  const data = await res.json();
-  const text = (data.content || []).map((b) => b.text || "").join("").replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(text);
+  const { value: parsed } = await requestAIJson(prompt);
   if (!parsed.question || !Array.isArray(parsed.options) || parsed.options.length < 2) throw new Error("malformed");
+  parsed.correctIndex = Math.max(0, Math.min(parsed.options.length - 1, Number(parsed.correctIndex) || 0));
   return parsed;
 }
 
@@ -5412,7 +6033,12 @@ function AIQuizView({ onBack }) {
               <button
                 key={i}
                 className={`rv-opt-row ${picked !== null ? (i === q.correctIndex ? "correct" : picked === i ? "wrong" : "") : ""}`}
-                onClick={() => picked === null && setPicked(i)}
+                onClick={() => {
+                  if (picked !== null) return;
+                  setPicked(i);
+                  if (i === q.correctIndex) playCorrectSound();
+                  else playIncorrectSound();
+                }}
                 disabled={picked !== null}
               >
                 <span className="rv-opt-letter">{String.fromCharCode(65 + i)}</span>
@@ -6145,7 +6771,12 @@ const DAILY_GOAL_KEY = "daily-goal:2-1";     // personal: { targetMinutes, today
 const LAST_NOTIF_SEEN_KEY = "last-notif-seen:2-1"; // personal: { ts }
 const userStatsKey = (name) => `user-stats:${(name || "").toLowerCase()}`; // shared, dùng cho Xếp hạng
 
-function todayStrOf(d) { return d.toISOString().slice(0, 10); }
+function todayStrOf(d) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 function todayStr() { return todayStrOf(new Date()); }
 
 // Ghi nhận "hôm nay có học" vào nhật ký (mỗi ngày chỉ ghi 1 lần) rồi trả về
@@ -6160,6 +6791,13 @@ async function touchStudyLog() {
     try { await window.storage.set(STUDY_LOG_KEY, JSON.stringify({ dates })); } catch (e) {}
   }
   return dates;
+}
+
+async function loadStudyGoalDates() {
+  try {
+    const result = await window.storage.get(STUDY_LOG_KEY);
+    return JSON.parse(result.value).dates || [];
+  } catch (e) { return []; }
 }
 
 // Streak = số ngày liên tiếp có học, tính lùi từ hôm nay. Nếu hôm nay CHƯA
@@ -6179,14 +6817,15 @@ async function computeAndSyncUserStats(profile) {
   const lesson = LESSONS_2_1[0];
   let xp = 0;
   try { const v = await window.storage.get(vocabProgressKey(lesson)); xp += Object.keys(JSON.parse(v.value)).length * 10; } catch (e) {}
-  try { const d = await window.storage.get(dictationProgressKey(lesson)); xp += Object.keys(JSON.parse(d.value)).length * 12; } catch (e) {}
+  try { const d = await window.storage.get(dictationProgressKey(lesson)); xp += Object.keys(correctDictationResults(JSON.parse(d.value))).length * 12; } catch (e) {}
   try { const s = await window.storage.get(shadowProgressKey(lesson)); xp += Object.keys(JSON.parse(s.value)).length * 12; } catch (e) {}
   try {
     const r = await window.storage.get(reviewHistoryKey(lesson));
     const h = JSON.parse(r.value);
     xp += Object.values(h).filter((x) => x.correct > 0).length * 5;
   } catch (e) {}
-  const dates = await touchStudyLog();
+  // Chỉ ngày đã đạt đủ mục tiêu phút mới được tính vào streak.
+  const dates = await loadStudyGoalDates();
   const streak = computeStreak(dates);
   const stats = { displayName: profile.displayName, xp, streak, updatedAt: Date.now() };
   try { await window.storage.set(userStatsKey(profile.displayName), JSON.stringify(stats), true); } catch (e) {}
@@ -6270,7 +6909,7 @@ async function computeRadarStats(lesson, profile) {
   let dictationDone = 0;
   try {
     const d = await window.storage.get(dictationProgressKey(lesson));
-    if (d?.value) dictationDone = Object.keys(JSON.parse(d.value)).length;
+    if (d?.value) dictationDone = Object.keys(correctDictationResults(JSON.parse(d.value))).length;
   } catch (e) {}
 
   let shadowDone = 0;
@@ -6313,6 +6952,9 @@ async function saveDailyGoal(g) {
   try {
     await window.storage.set(DAILY_GOAL_KEY, JSON.stringify(normalized));
     window.dispatchEvent(new CustomEvent("kstudy:daily-goal-updated", { detail: normalized }));
+    if (normalized.targetMinutes > 0 && normalized.todayMinutes >= normalized.targetMinutes) {
+      await touchStudyLog();
+    }
     await saveRemoteDailyGoal(normalized);
     return normalized;
   } catch (e) { return normalized; }
@@ -6438,7 +7080,8 @@ function CustomLessonTestView({ lessonData, onBack }) {
   const choose = (opt) => {
     if (picked) return;
     setPicked(opt);
-    if (opt === q.correct) setScore((s) => s + 1);
+    if (opt === q.correct) { setScore((s) => s + 1); playCorrectSound(); }
+    else playIncorrectSound();
   };
   const next = () => {
     if (idx + 1 < questions.length) { setIdx((i) => i + 1); setPicked(null); }
@@ -6587,6 +7230,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const [reviewMode, setReviewMode] = useState("bylesson"); // "bylesson" | "random"
   const [reviewSelectedLessons, setReviewSelectedLessons] = useState([]);
   const [reviewSeed, setReviewSeed] = useState(null); // có giá trị = đang làm "đề thi chuẩn"
+  const [reviewIsRecheck, setReviewIsRecheck] = useState(false);
   const [rankTab, setRankTab] = useState("xephang"); // tab mặc định khi mở màn Xếp hạng & Cộng đồng
   const [customLessonData, setCustomLessonData] = useState(null);
   const [reviewDeck, setReviewDeck] = useState(null); // bộ từ tuỳ chỉnh khi ôn từ Sổ tay từ vựng
@@ -6594,10 +7238,16 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const [lessonListBackView, setLessonListBackView] = useState("curriculum-hub");
   const [lessonDetailBackView, setLessonDetailBackView] = useState("tuvung-bai");
   const [activitySelectBackView, setActivitySelectBackView] = useState("home");
+  const [activityRunBackView, setActivityRunBackView] = useState("lesson-detail");
+  const [dictationMode, setDictationMode] = useState("practice");
+  const [dictationEntryBackView, setDictationEntryBackView] = useState("lesson-detail");
   const [reviewHubBackView, setReviewHubBackView] = useState("home");
+  const [reviewIntroBackView, setReviewIntroBackView] = useState("home");
   const [learningCatalog, setLearningCatalog] = useState(null);
   const [addingTextbookId, setAddingTextbookId] = useState(null);
   const [catalogNotice, setCatalogNotice] = useState(null);
+  const [lessonCelebration, setLessonCelebration] = useState(false);
+  const [reviewAllFlashcards, setReviewAllFlashcards] = useState(false);
   const goHome = () => { setView("home"); setActive("home"); };
   const openLesson = (l, backView = "tuvung-bai") => {
     if (l?.textbookId && l?.id) markLessonStarted(l.textbookId, l.id).catch(() => {});
@@ -6625,6 +7275,21 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     setView("tuvung-bai");
   };
 
+  const openGrammarBook = async (book) => {
+    const catalog = prepareLearningCatalog(await loadLearningCatalog(book.id));
+    if (catalog) setLearningCatalog(catalog);
+    setView("nguphap-book");
+  };
+
+  const switchLessonTextbook = async (textbookId) => {
+    if (!textbookId || textbookId === learningCatalog?.activeTextbook?.id) return;
+    const catalog = prepareLearningCatalog(await loadLearningCatalog(textbookId));
+    if (catalog) {
+      setLearningCatalog(catalog);
+      setLesson(catalog.continueLesson || catalog.lessons?.[0] || null);
+    }
+  };
+
   const handleAddTextbook = async (book) => {
     setAddingTextbookId(book.id);
     setCatalogNotice(null);
@@ -6637,6 +7302,48 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
       setCatalogNotice({ type: "error", message: error?.message || "Không thể thêm giáo trình. Vui lòng thử lại." });
     } finally {
       setAddingTextbookId(null);
+    }
+  };
+
+  const handleLessonProgressChange = async (lessonProgress, activities) => {
+    if (!lesson?.id || !lesson?.textbookId) return;
+    const lastActivity = Object.entries(activities).sort((a, b) => b[1] - a[1])[0]?.[0] || "lesson";
+    setLearningCatalog((current) => {
+      if (!current) return current;
+      const updatedLessons = current.lessons.map((item) => item.id === lesson.id ? { ...item, progressPercent: lessonProgress } : item);
+      const updatedContinueLesson = current.continueLesson?.id === lesson.id ? { ...current.continueLesson, progressPercent: lessonProgress } : current.continueLesson;
+      return { ...current, hasStarted: true, lessons: updatedLessons, continueLesson: updatedContinueLesson };
+    });
+    try {
+      await syncLessonProgress(lesson.textbookId, lesson.id, lessonProgress, lastActivity);
+      const catalog = prepareLearningCatalog(await loadLearningCatalog(lesson.textbookId));
+      if (catalog) setLearningCatalog(catalog);
+    } catch (error) {}
+  };
+
+  const handleActivityFinish = async (activityId) => {
+    if (!lesson) return;
+    try {
+      const previousActivities = await loadActivityProgress(lesson, profile?.id);
+      if ((previousActivities[activityId] || 0) >= 100) {
+        setView("lesson-detail");
+        return;
+      }
+      await markActivityCompleted(lesson, profile?.id, activityId);
+      const activities = await loadActivityProgress(lesson, profile?.id);
+      const lessonProgress = Math.round(Object.values(activities).reduce((sum, value) => sum + value, 0) / ACTIVITIES.length);
+      await handleLessonProgressChange(lessonProgress, activities);
+      const lessonDone = ACTIVITIES.every((activity) => (activities[activity.id] || 0) >= 100);
+      if (lessonDone) {
+        goHome();
+        setLessonCelebration({ title: `Bài ${lesson.no}${lesson.title ? ` · ${lesson.title}` : ""}` });
+        if (isCelebrationSoundEnabled()) playCelebrationSound();
+        window.setTimeout(() => setLessonCelebration(false), 4500);
+      } else {
+        setView("lesson-detail");
+      }
+    } catch (error) {
+      setView("lesson-detail");
     }
   };
 
@@ -6691,7 +7398,15 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const openLeaderboard = () => { setRankTab("xephang"); setView("xephang"); setActive("xephanghub"); };
   const goDictation = () => { setActivitySelectBackView("home"); setView("dictation-select"); };
   const goShadowing = () => { setActivitySelectBackView("home"); setView("shadowing-select"); };
-  const goReview = () => { setReviewHubBackView("home"); setView("review-hub"); };
+  const goReview = () => {
+    setReviewMode("random");
+    setReviewSelectedLessons([]);
+    setReviewSeed(null);
+    setLesson(primaryLesson);
+    setReviewIntroBackView("home");
+    setView("review-intro");
+    setActive("thithu");
+  };
   const catalogLessons = learningCatalog?.lessons?.length ? learningCatalog.lessons : LESSONS_2_1;
   const catalogVocabulary = learningCatalog?.vocabulary?.length ? learningCatalog.vocabulary : VOCAB_SAMPLE;
   const primaryLesson = catalogLessons[0] || LESSONS_2_1[0];
@@ -6702,6 +7417,17 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   return (
     <div className={`app ${immersive ? "no-sidebar" : ""}`}>
       <style>{css}</style>
+      {lessonCelebration && (
+        <div className="lesson-celebration" role="status" aria-live="polite">
+          <ConfettiBurst />
+          <div className="lesson-celebration-card">
+            <div className="lesson-celebration-book"><BookOpen size={64} /></div>
+            <span className="lesson-celebration-kicker">TUYỆT VỜI!</span>
+            <strong>Bạn đã hoàn thành bài học</strong>
+            <p>{lessonCelebration.title}</p>
+          </div>
+        </div>
+      )}
       {!immersive && (
         <Sidebar active={active} setActive={setActive} setView={setView} setLesson={setLesson} goHome={goHome} onSignOut={onSignOut} isAdmin={profile?.role === "admin"} />
       )}
@@ -6728,9 +7454,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             <PersonalProgressSection profile={profile} />
             <div className="mid-row">
               <ReviewSchedule
-                lesson={primaryLesson}
                 userId={profile.id}
-                vocabulary={catalogVocabulary}
                 onReview={(words) => { setLesson(primaryLesson); setReviewDeck(words); setView("flashcards-schedule"); }}
               />
               <MyTextbooks
@@ -6750,22 +7474,40 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
           />
         )}
         {view === "tuvung-chude" && <TopicsView onBack={goHome} />}
-        {view === "study-hub" && (
-          <StudyHubView
+        {view === "nguphap-hub" && (
+          <GrammarHubView
+            books={learningCatalog?.myTextbooks || []}
             onBack={goHome}
-            onVocab={() => setView("vocab-lessons")}
-            onDictation={() => { setActivitySelectBackView("study-hub"); setView("dictation-select"); }}
-            onShadowing={() => { setActivitySelectBackView("study-hub"); setView("shadowing-select"); }}
-            onReview={() => { setReviewHubBackView("study-hub"); setView("review-hub"); }}
+            onOpenBook={openGrammarBook}
+            onAddBook={() => { setCatalogNotice(null); setView("curriculum-hub"); setActive("giaotrinh"); }}
           />
         )}
-        {view === "nguphap-hub" && <GrammarHubView books={learningCatalog?.textbooks} onBack={goHome} onOpenBook={() => setView("nguphap-book")} />}
+        {view === "mock-exam" && (
+          <ReviewIntroView
+            lesson={primaryLesson}
+            mode="random"
+            selectedLessons={[]}
+            onBack={goHome}
+            onStart={(diff, useSeed) => {
+              setLesson(primaryLesson);
+              setReviewMode("random");
+              setReviewIntroBackView("mock-exam");
+              setReviewDifficulty(diff);
+              setReviewSeed(useSeed ? diff.stars * 97 + 13 : null);
+              setView("review-quiz");
+            }}
+          />
+        )}
         {view === "nguphap-book" && (
           <GrammarBookView
             lessons={catalogLessons}
             textbookTitle={activeTextbookTitle}
             onBack={() => setView("nguphap-hub")}
-            onSelectLesson={(idx) => { setLesson(catalogLessons[idx]); setView("flashcards-grammar"); }}
+            onSelectLesson={(idx) => {
+              const selectedLesson = catalogLessons[idx];
+              if (selectedLesson?.textbookId && selectedLesson?.id) markLessonStarted(selectedLesson.textbookId, selectedLesson.id).catch(() => {});
+              setLesson(selectedLesson); setView("flashcards-grammar");
+            }}
           />
         )}
         {view === "flashcards-grammar" && lesson && (
@@ -6812,10 +7554,11 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             lesson={lesson}
             mode={reviewMode}
             selectedLessons={reviewSelectedLessons}
-            onBack={() => setView(reviewMode === "bylesson" ? "review-lesson-select" : "review-hub")}
+            onBack={() => setView(reviewIntroBackView)}
             onStart={(diff, useSeed) => {
               setReviewDifficulty(diff);
               setReviewSeed(useSeed ? diff.stars * 97 + 13 : null);
+              setReviewIsRecheck(false);
               setView("review-quiz");
             }}
           />
@@ -6826,6 +7569,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             difficulty={reviewDifficulty}
             mode={reviewMode}
             seed={reviewSeed}
+            isRecheck={reviewIsRecheck}
             onBack={() => setView("review-intro")}
             onChangeSet={() => setReviewSeed(null)}
             onFinish={(answers, writing, elapsedMs, reflex) => {
@@ -6845,9 +7589,9 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             elapsedMs={reviewElapsed}
             difficulty={reviewDifficulty}
             mode={reviewMode}
-            onRetry={() => setView("review-quiz")}
-            onChangeSet={reviewMode === "random" ? () => { setReviewSeed(null); setView("review-quiz"); } : undefined}
-            onHome={goHome}
+            onRetry={() => { setReviewIsRecheck(true); setView("review-quiz"); }}
+            onChangeSet={reviewMode === "random" ? () => { setReviewSeed(null); setReviewIsRecheck(true); setView("review-quiz"); } : undefined}
+            onHome={() => reviewMode === "bylesson" ? handleActivityFinish("ontap") : goHome()}
           />
         )}
         {view.startsWith("soon-") && (
@@ -6865,23 +7609,39 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             onAddBook={handleAddTextbook}
           />
         )}
-        {view === "tuvung-bai" && <LessonsView lessons={catalogLessons} textbookTitle={activeTextbookTitle} title="Giáo trình · Danh sách bài" backLabel={lessonListBackView === "home" ? "Trang chủ" : "Giáo trình"} onBack={() => setView(lessonListBackView)} onSelect={(selectedLesson) => openLesson(selectedLesson, "tuvung-bai")} />}
-        {view === "vocab-lessons" && <LessonsView lessons={catalogLessons} textbookTitle={activeTextbookTitle} title="Từ vựng · Chọn bài học" backLabel="Từ vựng & bài học" onBack={() => setView("study-hub")} onSelect={(selectedLesson) => openVocabulary(selectedLesson, "study-hub")} />}
+        {view === "tuvung-bai" && <LessonsView lessons={catalogLessons} textbooks={learningCatalog?.myTextbooks || []} activeTextbookId={learningCatalog?.activeTextbook?.id} continueLesson={learningCatalog?.hasStarted ? learningCatalog?.continueLesson : null} onChangeTextbook={switchLessonTextbook} textbookTitle={activeTextbookTitle} title="Giáo trình · Danh sách bài" backLabel={lessonListBackView === "home" ? "Trang chủ" : "Giáo trình"} onBack={() => setView(lessonListBackView)} onSelect={(selectedLesson) => openLesson(selectedLesson, "tuvung-bai")} />}
         {view === "lesson-detail" && lesson && (
           <LessonDetailView
             lesson={lesson}
+            userId={profile.id}
+            textbookTitle={activeTextbookTitle}
+            onProgressChange={handleLessonProgressChange}
             onBack={() => setView(lessonDetailBackView)}
             onStartActivity={(actId) => {
               if (actId === "tuvung") { setVocabBackView("lesson-detail"); setView("vocab-list"); }
-              if (actId === "shadowing") { setActivitySelectBackView("lesson-detail"); setView("shadowing"); }
-              if (actId === "nghechep") { setActivitySelectBackView("lesson-detail"); setView("dictation"); }
-              if (actId === "ontap") { setReviewHubBackView("lesson-detail"); setView("review-hub"); }
+              if (actId === "shadowing") { setActivityRunBackView("lesson-detail"); setView("shadowing"); }
+              if (actId === "nghechep") { setDictationEntryBackView("lesson-detail"); setView("dictation-mode-select"); }
+              if (actId === "ontap") {
+                setReviewMode("bylesson");
+                setReviewSelectedLessons([lesson]);
+                setReviewSeed(null);
+                setReviewIntroBackView("lesson-detail");
+                setView("review-intro");
+              }
               if (actId === "aiquiz") setView("aiquiz");
             }}
           />
         )}
         {view === "vocab-list" && lesson && (
-          <VocabListView lesson={lesson} userId={profile.id} vocabulary={catalogVocabulary} onBack={() => setView(vocabBackView)} onStudy={() => setView("flashcards")} />
+          <VocabListView
+            lesson={lesson}
+            userId={profile.id}
+            vocabulary={catalogVocabulary}
+            reviewingSession={reviewAllFlashcards}
+            onBack={() => { setReviewAllFlashcards(false); setView(vocabBackView); }}
+            onReviewStart={() => setReviewAllFlashcards(true)}
+            onStudy={(reviewing) => { setReviewAllFlashcards(Boolean(reviewing)); setView("flashcards"); }}
+          />
         )}
         {view === "vocab-notebook" && lesson && (
           <VocabNotebookView
@@ -6920,8 +7680,9 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             lesson={lesson}
             userId={profile.id}
             vocabulary={catalogVocabulary}
+            includeMastered={reviewAllFlashcards}
             onBack={() => setView("vocab-list")}
-            onFinish={() => setView("vocab-test-select")}
+            onFinish={() => { setReviewAllFlashcards(false); handleActivityFinish("tuvung"); }}
           />
         )}
         {view === "vocab-test-select" && lesson && (
@@ -6949,11 +7710,11 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             color="#7C6FE4"
             onBack={() => setView(activitySelectBackView)}
             backLabel={activitySelectBackView === "study-hub" ? "Từ vựng & bài học" : activitySelectBackView === "lesson-detail" ? `Bài ${lesson?.no || 1}` : "Trang chủ"}
-            onSelect={(l) => { setLesson(l); setView("shadowing"); }}
+            onSelect={(l) => { setLesson(l); setActivityRunBackView("shadowing-select"); setView("shadowing"); }}
           />
         )}
         {view === "shadowing" && lesson && (
-          <ShadowingView lesson={lesson} onBack={() => setView("shadowing-select")} />
+          <ShadowingView lesson={lesson} onBack={() => setView(activityRunBackView)} onFinish={() => handleActivityFinish("shadowing")} />
         )}
         {view === "dictation-select" && (
           <ActivityLessonSelectView
@@ -6964,13 +7725,22 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             color="#3FA95C"
             onBack={() => setView(activitySelectBackView)}
             backLabel={activitySelectBackView === "study-hub" ? "Từ vựng & bài học" : activitySelectBackView === "lesson-detail" ? `Bài ${lesson?.no || 1}` : "Trang chủ"}
-            onSelect={(l) => { setLesson(l); setView("dictation"); }}
+            onSelect={(l) => { setLesson(l); setDictationEntryBackView("dictation-select"); setView("dictation-mode-select"); }}
+          />
+        )}
+        {view === "dictation-mode-select" && lesson && (
+          <DictationModeSelectView
+            lesson={lesson}
+            onBack={() => setView(dictationEntryBackView)}
+            onSelect={(selectedMode) => { setDictationMode(selectedMode); setView("dictation"); }}
           />
         )}
         {view === "dictation" && lesson && (
           <DictationView
             lesson={lesson}
-            onBack={() => setView("dictation-select")}
+            initialMode={dictationMode}
+            onBack={() => setView("dictation-mode-select")}
+            onFinish={() => handleActivityFinish("nghechep")}
             onGoVocab={() => setView("flashcards")}
           />
         )}
@@ -7095,6 +7865,8 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 }
 .card-title{display:flex;align-items:center;gap:9px;font:800 17px 'Baloo 2';color:#2E2A4A}
 .card-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.page-back-heading{display:flex;align-items:center;gap:12px;min-width:0}
+.page-back-heading .card-title{min-width:0;line-height:1.25}
 .card > .card-title{margin-bottom:14px}
 .link-btn{
   display:flex;align-items:center;gap:3px;border:none;background:none;
@@ -7125,6 +7897,15 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .confetti-wrap{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:2}
 .confetti-piece{position:absolute;top:-10px;width:7px;height:11px;opacity:.9;animation:confetti-fall 1.1s ease-in forwards;border-radius:2px}
 @keyframes confetti-fall{to{transform:translateY(150px) rotate(340deg);opacity:0}}
+.lesson-celebration{position:fixed;inset:0;z-index:150;display:grid;place-items:center;pointer-events:none;background:rgba(53,44,102,.28);backdrop-filter:blur(5px);animation:lesson-overlay 4.5s ease both}
+.lesson-celebration .confetti-wrap{position:fixed}.lesson-celebration .confetti-piece{width:10px;height:16px;animation-duration:2.15s}
+.lesson-celebration-card{position:relative;z-index:3;width:min(440px,calc(100vw - 36px));padding:34px 34px 30px;text-align:center;border:1px solid rgba(255,255,255,.7);border-radius:30px;background:linear-gradient(145deg,#fff,#F5F1FF);box-shadow:0 30px 90px rgba(50,35,130,.34),0 0 55px rgba(164,143,255,.5);animation:lesson-celebration-in .5s cubic-bezier(.2,.9,.3,1.2)}
+.lesson-celebration-book{width:112px;height:112px;margin:0 auto 15px;border-radius:50%;display:grid;place-items:center;color:#fff;background:linear-gradient(145deg,#9B8CF4,#6D5DDA);box-shadow:0 0 0 13px rgba(139,123,232,.12),0 0 45px rgba(124,111,228,.75);animation:book-glow 1.1s ease-in-out infinite alternate}
+.lesson-celebration-kicker{display:block;margin-bottom:5px;color:#7C6FE4;font-size:12px;font-weight:800;letter-spacing:.16em}.lesson-celebration-card strong{display:block;font:700 28px 'Baloo 2','Quicksand',sans-serif;color:#282044}.lesson-celebration-card p{margin-top:5px;color:#8177A7;font-size:15px;font-weight:700}
+@keyframes lesson-celebration-in{from{opacity:0;transform:translateY(14px) scale(.9)}to{opacity:1;transform:none}}
+@keyframes book-glow{to{transform:translateY(-5px) scale(1.04);box-shadow:0 0 0 17px rgba(139,123,232,.1),0 0 70px rgba(124,111,228,.95)}}
+@keyframes lesson-overlay{0%{opacity:0}8%,88%{opacity:1}100%{opacity:0}}
+.settings-volume-row input[type="range"]{width:min(260px,45%);accent-color:#7C6FE4;cursor:pointer}.settings-volume-row.disabled{opacity:.55}.settings-volume-row input:disabled{cursor:not-allowed}
 
 /* ---- Menu truy cập nhanh ---- */
 .qa-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;width:100%}
@@ -7176,6 +7957,10 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .day.today .day-name{color:#7C6FE4}
 .day.selected{border-color:#7C6FE4;box-shadow:0 0 0 3px rgba(124,111,228,.11)}
 .day.selected .day-ico{color:#7C6FE4;opacity:1}
+.day.rest-day{background:#FAFAFD;border-style:dashed}
+.day.rest-day .day-words{color:#AAA4BC;font-size:12.5px;font-weight:600}
+.day-ico.rest{color:#B2ACC4;opacity:.85}
+.day.has-review .day-words{color:#6C5FD6}
 .review-cycle{font-size:11.5px;font-weight:700;color:#9A94B5;background:#F6F4FC;border-radius:99px;padding:6px 10px}
 .review-selected-day{margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 14px;background:#F7F5FE;border:1px solid #E7E1F7;border-radius:14px}
 .review-selected-day>div{display:flex;flex-direction:column;gap:2px;min-width:0}.review-selected-day b{font-size:12.5px;color:#373151}.review-selected-day span{font-size:11.5px;font-weight:600;color:#8B85AB}
@@ -7215,7 +8000,7 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .cont-bar{display:flex;align-items:center;gap:9px;margin-top:9px}
 .cont-bar > div{flex:1}
 .cont-bar em,.book-bar em{font:700 12.5px 'Quicksand';font-style:normal;color:#8B85AB}
-.cont-plant{flex-shrink:0}
+.cont-plant{flex-shrink:0}.progress-plant-wrap{position:relative;display:inline-grid;place-items:center;outline:none;cursor:help}.plant-tooltip{position:absolute;z-index:20;right:-10px;bottom:calc(100% - 2px);display:flex;align-items:center;gap:9px;min-width:190px;padding:10px 12px;border:1px solid #ded8f3;border-radius:14px;background:rgba(255,255,255,.97);box-shadow:0 12px 30px rgba(52,42,97,.18);color:#40385f;opacity:0;pointer-events:none;transform:translateY(7px) scale(.96);transform-origin:right bottom;transition:opacity .18s ease,transform .18s ease}.plant-tooltip::after{content:"";position:absolute;right:28px;bottom:-6px;width:11px;height:11px;border-right:1px solid #ded8f3;border-bottom:1px solid #ded8f3;background:#fff;transform:rotate(45deg)}.progress-plant-wrap:hover .plant-tooltip,.progress-plant-wrap:focus-visible .plant-tooltip{opacity:1;transform:none}.plant-tooltip-icon{display:grid;place-items:center;width:32px;height:32px;border-radius:10px;background:#edf8ef;font-size:17px}.plant-tooltip>span:nth-child(2){display:flex;flex:1;flex-direction:column;line-height:1.2}.plant-tooltip b{font:650 13px 'Baloo 2';color:#373052}.plant-tooltip small{margin-top:2px;color:#938aa9;font-size:10px;white-space:nowrap}.plant-tooltip>strong{color:#6f60dc;font:700 14px 'Baloo 2'}
 .progress-plant{overflow:visible;animation:plant-grow-in .5s cubic-bezier(.2,1.25,.4,1) both;filter:drop-shadow(0 5px 5px rgba(68,113,67,.12))}
 .plant-stem{stroke-dasharray:70;stroke-dashoffset:70;animation:plant-stem-grow .55s .08s ease-out forwards}
 .plant-leaf{opacity:0;transform-box:fill-box;transform-origin:center;animation:plant-leaf-open .35s cubic-bezier(.2,1.4,.5,1) forwards}
@@ -7293,7 +8078,21 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   background:#7C6FE4;color:#fff;border-radius:99px;padding:5px 14px;
   font:700 13px 'Quicksand';box-shadow:0 3px 8px rgba(124,111,228,.3);
 }
+.book-switcher{
+  position:relative;display:flex;align-items:center;min-width:260px;max-width:min(460px,70vw);
+  min-height:36px;padding-left:12px;border:1.5px solid #DCD5F5;border-radius:12px;
+  color:#6E60D8;background:#fff;box-shadow:0 3px 10px rgba(124,111,228,.1);
+  transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease;
+}
+.book-switcher:hover{border-color:#AFA3EE;box-shadow:0 5px 14px rgba(124,111,228,.15);transform:translateY(-1px)}
+.book-switcher:focus-within{border-color:#7C6FE4;box-shadow:0 0 0 3px rgba(124,111,228,.12)}
+.book-switcher select{
+  width:100%;min-width:0;height:34px;padding:0 34px 0 9px;border:0;outline:0;appearance:none;
+  color:#4B4470;background:transparent;font:700 12.5px 'Quicksand';cursor:pointer;
+}
+.book-switcher>svg:last-child{position:absolute;right:11px;pointer-events:none}
 .lesson-count{font-size:13px;font-weight:600;color:#8B85AB}
+.current-study-chip{padding:5px 10px;border-radius:99px;color:#279C5B;background:#EAF8F0;font:700 11.5px 'Quicksand';white-space:nowrap}
 
 .lesson-list{display:flex;flex-direction:column;gap:9px}
 .lesson-row{
@@ -7327,6 +8126,9 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 @media (max-width:760px){
   .topics-grid{grid-template-columns:repeat(2,1fr)}
   .lesson-main em{display:none}
+  .lesson-book-tag{align-items:stretch;flex-wrap:wrap;gap:7px}
+  .book-switcher{width:100%;min-width:0;max-width:none}
+  .lesson-count,.current-study-chip{align-self:center}
 }
 
 /* ---------------- Lesson detail ---------------- */
@@ -7437,13 +8239,17 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   width:38px;height:38px;border-radius:99px;border:1.5px solid #E7E3F6;background:#FBFAFF;
   display:flex;align-items:center;justify-content:center;color:#7C6FE4;cursor:pointer;flex-shrink:0;
 }
-.fc2-back:hover{background:#F3F1FC}
+.fc2-back{transition:background .18s ease,border-color .18s ease,transform .18s ease,box-shadow .18s ease}
+.fc2-back:hover{background:#F3F1FC;border-color:#C9BCF2;transform:translateX(-2px);box-shadow:0 4px 10px rgba(124,111,228,.12)}
+.fc2-back:focus-visible{outline:3px solid rgba(124,111,228,.22);outline-offset:2px}
 .fc2-title{display:flex;align-items:center;gap:7px;font:800 16px 'Baloo 2';color:#2E2A4A;white-space:nowrap}
 .fc2-top-mid{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:140px}
 .fc2-progress-text{font:700 12.5px 'Quicksand';color:#8B85AB}
 @media (max-width:520px){
   .fc2-topbar{flex-wrap:wrap;row-gap:10px}
   .fc2-title{white-space:normal;overflow-wrap:anywhere}
+  .page-back-heading{gap:9px}
+  .page-back-heading .card-title{font-size:15px;overflow-wrap:anywhere}
 }
 .fc2-progress-bar{width:100%;height:7px;background:#ECEAF6;border-radius:99px;overflow:hidden}
 .fc2-progress-bar > div{height:100%;background:#8B7BE8;border-radius:99px;transition:width .4s ease}
@@ -7727,6 +8533,8 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .fc2-session-done-emoji{font-size:52px}
 .fc2-session-done h3{font:800 20px 'Baloo 2';color:#2E2A4A}
 .fc2-session-done p{font-size:14px;font-weight:600;color:#8B85AB;max-width:320px}
+.fc2-session-done-actions{width:min(420px,100%);display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:520px){.fc2-session-done-actions{grid-template-columns:1fr}}
 
 .fc2-toast{
   position:fixed;bottom:26px;left:50%;transform:translateX(-50%);
@@ -7892,6 +8700,20 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 
 /* ---------------- Nghe chép chính tả (dc-) ---------------- */
 .dc-page{display:flex;flex-direction:column;gap:14px}
+.dictation-mode-page{max-width:1000px;margin:0 auto;padding:28px}
+.dictation-mode-note{margin-top:5px;color:#8B85AB;font-size:13px}
+.dictation-mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:28px}
+.dictation-mode-card{display:flex;min-height:250px;flex-direction:column;align-items:flex-start;gap:12px;padding:26px;border:1.5px solid #E7E2F5;border-radius:22px;background:#fff;color:#3F3A5F;text-align:left;cursor:pointer;transition:.2s ease}
+.dictation-mode-card:hover{transform:translateY(-3px);box-shadow:0 14px 30px rgba(77,62,145,.12)}
+.dictation-mode-card.practice:hover{border-color:#71C58A}.dictation-mode-card.test:hover{border-color:#8B7BE8}
+.dictation-mode-icon{width:54px;height:54px;border-radius:16px;display:grid;place-items:center}
+.dictation-mode-card.practice .dictation-mode-icon{background:#E8F7EC;color:#35A85A}.dictation-mode-card.test .dictation-mode-icon{background:#F0EEFC;color:#7566E4}
+.dictation-mode-card strong{font:700 23px 'Baloo 2';color:#292440}.dictation-mode-card p{flex:1;color:#81799D;line-height:1.65}
+.dictation-mode-card>span:last-child{display:flex;align-items:center;gap:5px;font-weight:700;color:#6F61DD}
+.dc-route-banner{display:flex;align-items:center;gap:8px;padding:11px 16px;border-radius:13px;font-size:12.5px}
+.dc-route-banner span{margin-left:auto;color:#81799D}.dc-route-banner.practice{background:#EBF7EE;color:#2E8148}.dc-route-banner.test{background:#F0EEFC;color:#6756DB}
+.dc-retry-notice{display:flex;align-items:center;gap:8px;padding:11px 15px;border:1px solid #F1C86C;border-radius:13px;background:#FFF8E7;color:#8D6419;font-size:12.5px;font-weight:600}
+.dc-retry-notice small{margin-left:auto;padding:4px 8px;border-radius:999px;background:#fff;color:#A4741E;white-space:nowrap}
 .dc-mode-row{display:flex;gap:8px}
 .dc-mode-btn{
   flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
@@ -7918,9 +8740,15 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 }
 .dc-play-btn:hover:not(:disabled){background:#6C5FD6}
 .dc-play-btn:disabled{opacity:.4;cursor:not-allowed}
-.dc-wave{flex:1;min-width:0;display:flex;align-items:center;gap:1.5px;height:32px}
-.dc-wave span{flex:1;background:#DCD3F4;border-radius:2px;min-width:2px;transition:background .15s}
-.dc-wave span.on{background:#8B7BE8}
+.dc-wave{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:3px;height:38px;overflow:hidden}
+.dc-wave span{width:3px;height:var(--h);min-height:5px;flex:1;max-width:5px;background:#DCD3F4;border-radius:99px;transform:scaleY(.28);transition:background .2s,transform .25s}
+.dc-wave.is-playing span{background:#8B7BE8;animation:dc-wave-pulse .72s ease-in-out var(--d) infinite alternate}
+@keyframes dc-wave-pulse{
+  0%{transform:scaleY(.28);opacity:.55}
+  55%{transform:scaleY(1);opacity:1}
+  100%{transform:scaleY(.48);opacity:.72}
+}
+@media (prefers-reduced-motion:reduce){.dc-wave.is-playing span{animation:none;transform:scaleY(.72)}}
 .dc-time{flex-shrink:0;font:700 12.5px monospace;color:#8B85AB}
 .dc-relisten-btn{
   flex-shrink:0;display:flex;align-items:center;gap:6px;border:1.5px solid #DCD3F4;border-radius:12px;
@@ -7929,6 +8757,8 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .dc-relisten-btn:hover:not(:disabled){background:#F3F1FC}
 .dc-relisten-btn:disabled{opacity:.4;cursor:not-allowed}
 .dc-listen-left{font-size:11px;color:#A9A3C6;font-weight:700;margin-left:4px}
+.dc-listen-counter{flex-shrink:0;display:flex;align-items:center;gap:6px;border:1.5px solid #DCD3F4;border-radius:12px;background:#fff;color:#7C6FE4;font:700 12.5px 'Quicksand';padding:9px 14px;white-space:nowrap}
+.dc-listen-counter.empty{border-color:#F1CACA;background:#FFF7F7;color:#C34E59}
 
 .dc-speed-row{display:flex;align-items:center;gap:8px;margin-top:8px}
 .dc-speed-label{font-size:12px;font-weight:700;color:#8B85AB}
@@ -7940,9 +8770,12 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .dc-speed-chip:hover:not(.on){border-color:#C9BCF2}
 
 .dc-diff-line{display:flex;flex-wrap:wrap;gap:6px;margin-top:-4px}
-.dc-diff-word{font:700 15px 'Quicksand';padding:3px 8px;border-radius:8px}
+.dc-diff-word{font:700 15px 'Quicksand';padding:4px 9px;border-radius:8px;display:inline-flex;align-items:center;gap:5px}
 .dc-diff-word.correct{background:#EBF7EE;color:#2E8148}
-.dc-diff-word.wrong{background:#FCEEEE;color:#B83A3A;text-decoration:line-through}
+.dc-diff-word.wrong{background:#FCEEEE;color:#B83A3A}
+.dc-diff-word.wrong del{opacity:.72;text-decoration-thickness:1.5px}
+.dc-diff-word.wrong b{color:#2E8148;font-weight:700;text-decoration:none}
+.dc-diff-arrow{color:#9A91B8;text-decoration:none}
 .dc-instruction{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:#6B6590;flex-wrap:wrap}
 .dc-input-row{display:flex;gap:14px}
 .dc-textarea{
@@ -7967,7 +8800,7 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .dc-feedback{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;padding:10px 14px;border-radius:12px}
 .dc-feedback.ok{background:#EBF7EE;color:#2E8148}
 .dc-feedback.wrong{background:#FCEEEE;color:#B83A3A}
-.dc-actions{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:10px}
+.dc-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .dc-act-btn{
   display:flex;align-items:center;justify-content:center;gap:7px;border:none;border-radius:13px;
   padding:12px;font:700 13.5px 'Quicksand';cursor:pointer;background:#F0EEFC;color:#7C6FE4;
@@ -7975,6 +8808,7 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .dc-act-btn:hover{background:#E3DEF4}
 .dc-act-btn.primary{background:#7C6FE4;color:#fff;box-shadow:0 5px 14px rgba(124,111,228,.32)}
 .dc-act-btn.primary:hover{background:#6C5FD6}
+.dc-act-btn:disabled,.dc-act-btn:disabled:hover{background:#EFEDF6;color:#AAA5BC;box-shadow:none;cursor:not-allowed;opacity:.78}
 .dc-nav{display:flex;align-items:center;justify-content:space-between}
 
 .dc-side{display:flex;flex-direction:column;gap:16px}
@@ -7990,10 +8824,35 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .dc-vocab-count-wrap b{font:800 26px 'Baloo 2';color:#2E2A4A}
 .dc-vocab-count-wrap span{font-size:12px;font-weight:600;color:#8B85AB}
 
+/* Danh sách ngữ pháp theo giáo trình + phần ngữ pháp ngay trong bài học */
+.grammar-catalog-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.grammar-catalog-card{display:grid;grid-template-columns:42px minmax(0,1fr) auto 20px;align-items:center;gap:14px;padding:17px 18px;border:1.5px solid #E7E2F5;border-radius:17px;background:#fff;color:#3F3A5F;text-align:left;cursor:pointer;transition:.2s ease}
+.grammar-catalog-card:hover{border-color:#BDB2F4;transform:translateY(-2px);box-shadow:0 8px 22px rgba(124,111,228,.12)}
+.grammar-catalog-number{width:38px;height:38px;border-radius:12px;background:#F0EEFC;color:#7C6FE4;display:grid;place-items:center;font-weight:700}
+.grammar-catalog-content{display:flex;min-width:0;flex-direction:column;gap:2px}
+.grammar-catalog-content b{font:600 18px 'Quicksand';color:#2E2A4A}
+.grammar-catalog-content small{font-size:13px;color:#7C6FE4}
+.grammar-catalog-content>span{font-size:12.5px;color:#8B85AB;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grammar-catalog-book{display:flex;align-items:center;gap:6px;max-width:210px;font-size:12px;color:#8B85AB}
+.vl-grammar-section{margin-top:20px;padding-top:18px;border-top:1px solid #E9E5F5}
+.vl-section-heading{display:flex;align-items:center;gap:8px;margin-bottom:12px;font:700 17px 'Quicksand';color:#3F3A5F}
+.vl-section-heading>span{margin-left:auto;padding:5px 10px;border-radius:999px;background:#EBF7EE;color:#3FA95C;font-size:11px}
+.vl-grammar-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.vl-grammar-card{padding:16px;border:1px solid #E7E2F5;border-radius:15px;background:#FAF9FE}
+.vl-grammar-card>div{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.vl-grammar-card b{font:600 17px 'Quicksand';color:#2E2A4A}
+.vl-grammar-card>div span{font-size:12px;color:#7C6FE4}
+.vl-grammar-card p{font-size:13px;color:#6F688D;margin-bottom:8px}
+.vl-grammar-card small{font-size:12px;line-height:1.5;color:#8B85AB}
+
 @media (max-width:900px){
+  .dictation-mode-grid{grid-template-columns:1fr}.dictation-mode-card{min-height:210px}
   .dc-body{grid-template-columns:1fr}
   .dc-input-row{flex-direction:column}
   .dc-side-btns{width:100%;flex-direction:row}
+  .grammar-catalog-list,.vl-grammar-grid{grid-template-columns:1fr}
+  .grammar-catalog-card{grid-template-columns:38px minmax(0,1fr) 18px}
+  .grammar-catalog-book{display:none}
 }
 @media (max-width:560px){
   .dc-actions{grid-template-columns:1fr 1fr}
@@ -8048,6 +8907,7 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   box-shadow:0 8px 20px rgba(124,111,228,.4);transition:transform .12s;
 }
 .sw-mic-btn:hover:not(:disabled){transform:scale(1.05)}
+.sw-mic-btn:disabled{background:#B8B1D8;box-shadow:none;cursor:not-allowed;opacity:.78}
 .sw-mic-btn.rec{background:#E5566B;animation:swPulse 1.3s ease-out infinite}
 @keyframes swPulse{
   0%{box-shadow:0 0 0 0 rgba(229,86,107,.45)}
@@ -8084,6 +8944,31 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .sw-accuracy b.great,.sw-accuracy b.good{color:#3FA95C}
 .sw-accuracy b.mid{color:#E8A93D}
 .sw-accuracy b.bad{color:#D64545}
+
+.sw-ai-feedback{
+  margin-top:10px;padding:11px 13px;border:1px solid #EEEAFB;border-radius:12px;
+  background:#FCFBFF;color:#625B7D;font-size:12.5px;line-height:1.45;
+}
+.sw-ai-feedback p{margin:5px 0}.sw-ai-feedback strong{color:#393451;font-weight:700}
+.sw-ai-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.sw-ai-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:999px;background:#ECE8FF;color:#6756DB;font-weight:700}
+.sw-ai-badge.fallback{background:#FFF2D8;color:#A56A11}
+.sw-ai-model{color:#AAA3C1;font-size:11px}.sw-ai-warning{color:#9B681B!important}
+.sw-score-state{display:flex;align-items:center;gap:7px;margin-top:12px;padding:9px 11px;border-radius:11px;font-size:12.5px;font-weight:700}
+.sw-score-state.good{background:#EBF7EE;color:#2E8148}
+.sw-score-state.mid{background:#FFF6DC;color:#A56A11}
+.sw-score-state.bad{background:#FCEEEE;color:#B83A3A}
+
+.skill-complete-card{width:min(720px,calc(100% - 24px));margin:clamp(36px,9vh,90px) auto;padding:clamp(28px,5vw,52px);border:1px solid #E5DFF7;border-radius:26px;background:#fff;box-shadow:0 18px 50px rgba(69,55,130,.12);text-align:center}
+.skill-complete-icon{width:82px;height:82px;margin:0 auto 16px;border-radius:50%;display:grid;place-items:center;background:#E9F7ED;color:#35A85A}
+.skill-complete-kicker{font-size:11px;font-weight:700;letter-spacing:.18em;color:#7C6FE4}
+.skill-complete-card h2{margin:8px 0;font:700 clamp(25px,4vw,36px) 'Baloo 2';color:#27223E}
+.skill-complete-card>p{max-width:520px;margin:0 auto 22px;color:#81799D;line-height:1.6}
+.skill-complete-ai,.skill-complete-assessment{margin:18px auto;padding:14px 16px;border-radius:15px;background:#F7F5FD;color:#625B7D;text-align:left}
+.skill-complete-ai,.skill-complete-assessment>div,.skill-complete-assessment small{display:flex;align-items:center;gap:8px}
+.skill-complete-assessment p{margin:8px 0;line-height:1.55}.skill-complete-assessment small{color:#81799D}
+.skill-complete-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px}
+@media(max-width:560px){.skill-complete-actions{grid-template-columns:1fr}.skill-complete-card{margin:24px auto;padding:26px 20px}}
 
 .sw-compare-row{display:flex;gap:8px;margin-top:10px}
 .sw-compare-btn{
@@ -8593,6 +9478,8 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .cg-thread-prompt b{font-size:13.5px;color:#2E2A4A}
 .cg-thread-prompt span{font-size:13px;font-weight:600;color:#A09AB9}
 @media (max-width:560px){
+  .dictation-mode-page{padding:20px 16px}.dc-route-banner{align-items:flex-start;flex-wrap:wrap}.dc-route-banner span{width:100%;margin-left:23px}
+  .dc-player{flex-wrap:wrap}.dc-wave{order:3;flex-basis:100%}.dc-listen-counter{margin-left:auto;padding:8px 10px;font-size:11.5px}
   .cg-thread-starter{grid-template-columns:38px minmax(0,1fr);gap:10px;padding:12px 13px;border-radius:15px}
   .cg-thread-starter>.cg-post-avatar{width:36px;height:36px;font-size:13px}
   .cg-thread-starter>.cg-new-btn{grid-column:1/-1;width:100%;justify-content:center;padding:10px 14px}
@@ -8685,6 +9572,8 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .gm-hub-card b{font:700 15px 'Baloo 2';color:#3B2A55}
 .gm-hub-count{font-size:12.5px;color:#8B85AB;font-weight:600}
 .gm-hub-description{margin:0;color:#77708F;font-size:11.5px;font-weight:500;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:34px}
+.gm-grammar-book-description{font-size:11.5px;color:#8B85AB;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+.grammar-empty{min-height:230px;margin-top:4px}
 .gm-book-action{width:100%;margin-top:auto;min-height:38px;border:1px solid #DCD5F2;border-radius:11px;background:#fff;color:#6558CC;display:flex;align-items:center;justify-content:center;gap:6px;font:650 12.5px 'Quicksand';cursor:pointer;transition:.16s}
 .gm-book-action:hover:not(:disabled){border-color:#8B7BE8;background:#F6F3FF;transform:translateY(-1px)}
 .gm-book-action.add{border-color:#7C6FE4;background:#7C6FE4;color:#fff;box-shadow:0 5px 13px rgba(124,111,228,.2)}
@@ -9122,7 +10011,7 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   .logo-badge{width:36px;height:36px;border-radius:10px;font-size:17px}
   .logo-text{font-size:15px;white-space:nowrap}
   .logo-row .lucide-sparkles{display:none}
-  .home-pill{margin-bottom:8px;padding:10px 12px;border-radius:12px;font-size:13px}
+  .home-pill{min-height:48px;margin-bottom:6px;padding:7px 12px;border-radius:13px;font-size:13px}
   .nav-grid{display:flex;flex-direction:column;gap:6px}
   .nav-tile{
     min-height:48px;flex-direction:row;justify-content:flex-start;gap:10px;
@@ -9260,10 +10149,10 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
     font-size:0;text-align:center;
   }
   .sidebar .home-pill svg{width:22px;height:22px}
-  .sidebar .nav-grid{display:flex;gap:2px;flex:5;min-width:0}
+  .sidebar .nav-grid{display:contents}
   .sidebar .nav-tile{
-    flex:1;min-width:0;height:52px;padding:3px 1px;gap:0;border:0;border-radius:11px;
-    justify-content:center;background:transparent;
+    flex:1 1 0;min-width:0;width:auto;height:52px;padding:3px 1px;gap:0;border:0;border-radius:11px;
+    justify-content:center;background:#F7F6FC;
   }
   .sidebar .home-pill.active,.sidebar .nav-tile.active{
     background:#7C6FE4;color:#fff;border-color:#7C6FE4;
@@ -9272,11 +10161,11 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
   .sidebar .nav-tile.active .nav-tile-ico{background:rgba(255,255,255,.18)!important}
   .sidebar .nav-tile.active .nav-tile-ico svg{color:#fff!important;stroke:#fff!important}
   .sidebar .nav-tile.active .nav-tile-label{color:#fff}
-  .sidebar .nav-tile-ico{width:35px;height:35px;border-radius:10px}
+  .sidebar .nav-tile-ico{width:35px;height:35px;border-radius:10px;background:transparent!important}
   .sidebar .nav-tile-ico svg{width:21px;height:21px}
   .sidebar .nav-tile-label,.sidebar .nav-label-desktop,.sidebar .nav-label-mobile{display:none}
   .sidebar .sidebar-signout{
-    display:flex;width:38px;min-width:38px;height:52px;margin:0;padding:0;border:0;border-radius:11px;
+    display:flex;flex:1 1 0;width:auto;min-width:0;height:52px;margin:0;padding:0;border:0;border-radius:11px;
     align-items:center;justify-content:center;background:#FFF2F4;color:#B94B5B;
   }
   .sidebar .sidebar-signout span{display:none}.sidebar .sidebar-signout svg{width:20px;height:20px}

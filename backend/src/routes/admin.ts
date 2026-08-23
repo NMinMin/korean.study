@@ -4,6 +4,26 @@ import { requireAdmin } from '../plugins/admin.js'
 
 type Status = 'draft' | 'published' | 'locked' | 'no_content'
 type ReportStatus = 'pending' | 'resolved' | 'dismissed'
+type SkillType = 'vocabulary_grammar' | 'dictation' | 'shadowing' | 'review'
+const DASHBOARD_CACHE_VERSION = 2
+const APP_TIME_ZONE = 'Asia/Ho_Chi_Minh'
+
+function appDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: APP_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `${value.year}-${value.month}-${value.day}`
+}
+
+function shiftDateKey(key: string, days: number) {
+  const [year = 1970, month = 1, day = 1] = key.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day + days))
+  return date.toISOString().slice(0, 10)
+}
 
 export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.addHook('preHandler', requireAdmin)
@@ -13,12 +33,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const freshAfter = new Date(Date.now() - 5 * 60 * 1000).toISOString()
     if (request.query.refresh !== 'true') {
       const { data: cached } = await supabaseAdmin.from('admin_dashboard_cache').select('payload, refreshed_at').eq('range_days', days).gte('refreshed_at', freshAfter).maybeSingle()
-      if (cached?.payload) return { data: cached.payload, cached: true }
+      if (cached?.payload && (cached.payload as { cacheVersion?: number }).cacheVersion === DASHBOARD_CACHE_VERSION) return { data: cached.payload, cached: true }
     }
-    const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - days + 1)
-    const previousStart = new Date(start); previousStart.setDate(previousStart.getDate() - days)
+    const todayKey = appDateKey()
+    const startKey = shiftDateKey(todayKey, -days + 1)
+    const previousStartKey = shiftDateKey(startKey, -days)
     const [{ data: stats, error: statsError }, { data: progress, error: progressError }, { data: vocabProgress, error: vocabError }, textbookCount, lessonCount, userCount] = await Promise.all([
-      supabaseAdmin.from('daily_study_stats').select('user_id, study_date, minutes').gte('study_date', previousStart.toISOString().slice(0, 10)),
+      supabaseAdmin.from('daily_study_stats').select('user_id, study_date, minutes').gte('study_date', previousStartKey).lte('study_date', todayKey),
       supabaseAdmin.from('lesson_progress').select('user_id, textbook_id, progress_percent, textbooks(title_ko)'),
       supabaseAdmin.from('vocabulary_progress').select('vocabulary_id, incorrect_count, correct_count, vocabulary(word_ko, meaning_vi), textbooks(title_ko)').gt('incorrect_count', 0),
       supabaseAdmin.from('textbooks').select('*', { count: 'exact', head: true }),
@@ -26,7 +47,6 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }),
     ])
     if (statsError || progressError || vocabError) return reply.code(500).send({ code: 'DASHBOARD_READ_FAILED', message: 'Không thể tải thống kê dashboard.', requestId: request.id })
-    const startKey = start.toISOString().slice(0, 10)
     const recent = (stats ?? []).filter((item) => item.study_date >= startKey)
     const previous = (stats ?? []).filter((item) => item.study_date < startKey)
     const activeUsers = new Set(recent.map((item) => item.user_id))
@@ -35,8 +55,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const totalMinutes = recent.reduce((sum, item) => sum + Number(item.minutes || 0), 0)
     const completed = (progress ?? []).filter((item) => Number(item.progress_percent) >= 100)
     const chart = Array.from({ length: days }, (_, index) => {
-      const date = new Date(start); date.setDate(date.getDate() + index)
-      const key = date.toISOString().slice(0, 10)
+      const key = shiftDateKey(startKey, index)
       return { date: key, minutes: recent.filter((item) => item.study_date === key).reduce((sum, item) => sum + Number(item.minutes || 0), 0) }
     })
     const courseMap = new Map<string, { title: string; total: number; count: number }>()
@@ -51,7 +70,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       current.incorrect += Number(item.incorrect_count || 0); current.total += Number(item.incorrect_count || 0) + Number(item.correct_count || 0); hardMap.set(item.vocabulary_id, current)
     }
     const payload = {
-      days, activeUsers: activeUsers.size, averageCompletedLessons: activeUsers.size ? completed.length / activeUsers.size : 0,
+      cacheVersion: DASHBOARD_CACHE_VERSION, days, activeUsers: activeUsers.size, averageCompletedLessons: activeUsers.size ? completed.length / activeUsers.size : 0,
       averageMinutes: recent.length ? totalMinutes / recent.length : 0, retentionRate: activeUsers.size ? retained / activeUsers.size * 100 : 0,
       totalTextbooks: textbookCount.count ?? 0, totalLessons: lessonCount.count ?? 0, totalUsers: userCount.count ?? 0,
       chart, courses: [...courseMap.values()].map((item) => ({ title: item.title, percent: item.count ? item.total / item.count : 0 })).sort((a, b) => b.percent - a.percent).slice(0, 5),
@@ -64,7 +83,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.get('/admin/users', async (request, reply) => {
     const [{ data: authData, error: authError }, { data: profiles, error: profileError }, { data: roles, error: roleError }] = await Promise.all([
       supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-      supabaseAdmin.from('profiles').select('id, display_name, avatar_url, xp, level, created_at').order('created_at', { ascending: false }),
+      supabaseAdmin.from('profiles').select('id, display_name, avatar_url, xp, level, created_at, is_locked, locked_at').order('created_at', { ascending: false }),
       supabaseAdmin.from('user_roles').select('user_id, role'),
     ])
     if (authError || profileError || roleError) return reply.code(500).send({ code: 'ADMIN_USERS_READ_FAILED', message: 'Không thể tải danh sách người dùng.', requestId: request.id })
@@ -87,6 +106,22 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     if (id === request.userId && role !== 'admin') return reply.code(400).send({ code: 'CANNOT_DEMOTE_SELF', message: 'Bạn không thể tự gỡ quyền admin của mình.', requestId: request.id })
     const { data, error } = await supabaseAdmin.from('user_roles').upsert({ user_id: id, role }).select().single()
     if (error) return reply.code(400).send({ code: 'ROLE_UPDATE_FAILED', message: 'Không thể cập nhật vai trò người dùng.', requestId: request.id })
+    return { data }
+  })
+
+  app.patch<{ Params: { id: string }; Body: { locked: boolean } }>('/admin/users/:id/lock', async (request, reply) => {
+    const { id } = request.params
+    const locked = request.body?.locked
+    if (typeof locked !== 'boolean') return reply.code(400).send({ code: 'INVALID_LOCK_STATE', message: 'Trạng thái khóa không hợp lệ.', requestId: request.id })
+    if (id === request.userId && locked) return reply.code(400).send({ code: 'CANNOT_LOCK_SELF', message: 'Bạn không thể tự khóa tài khoản của mình.', requestId: request.id })
+
+    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(id, { ban_duration: locked ? '876000h' : 'none' })
+    if (authError) return reply.code(400).send({ code: 'AUTH_LOCK_FAILED', message: 'Không thể cập nhật trạng thái đăng nhập.', requestId: request.id })
+    const { data, error } = await supabaseAdmin.from('profiles').update({ is_locked: locked, locked_at: locked ? new Date().toISOString() : null, locked_by: locked ? request.userId : null }).eq('id', id).select('id, is_locked, locked_at').single()
+    if (error) {
+      await supabaseAdmin.auth.admin.updateUserById(id, { ban_duration: locked ? 'none' : '876000h' })
+      return reply.code(400).send({ code: 'PROFILE_LOCK_FAILED', message: 'Không thể lưu trạng thái khóa tài khoản.', requestId: request.id })
+    }
     return { data }
   })
 
@@ -140,6 +175,39 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.delete<{ Params: { id: string } }>('/admin/lessons/:id', async (request, reply) => {
     const { error } = await supabaseAdmin.from('lessons').delete().eq('id', request.params.id)
     if (error) return reply.code(400).send({ code: 'LESSON_DELETE_FAILED', message: error.message, requestId: request.id })
+    return reply.code(204).send()
+  })
+
+  app.get<{ Querystring: { lessonId?: string; skillType?: SkillType } }>('/admin/exercises', async (request, reply) => {
+    let query = supabaseAdmin.from('lesson_exercises').select('*, lessons(lesson_number, title_ko, textbook_id, textbooks(title_ko))').order('sort_order')
+    if (request.query.lessonId) query = query.eq('lesson_id', request.query.lessonId)
+    if (request.query.skillType) query = query.eq('skill_type', request.query.skillType)
+    const { data, error } = await query
+    if (error) return reply.code(500).send({ code: 'EXERCISES_READ_FAILED', message: 'Không thể tải danh sách bài tập. Hãy chạy migration 20260823000100_lesson_exercises.sql.', requestId: request.id })
+    return { data }
+  })
+
+  app.post<{ Body: { lessonId: string; skillType: SkillType; exerciseType?: string; promptKo: string; promptVi?: string; answer?: unknown; explanationVi?: string; mediaUrl?: string; imageUrl?: string; audioUrl?: string; sortOrder?: number; status?: Status } }>('/admin/exercises', async (request, reply) => {
+    const body = request.body
+    if (!body.lessonId || !body.skillType || !body.promptKo?.trim()) return reply.code(400).send({ code: 'EXERCISE_FIELDS_REQUIRED', message: 'Bài học, kỹ năng và nội dung tiếng Hàn là bắt buộc.', requestId: request.id })
+    const isListeningSkill = body.skillType === 'dictation' || body.skillType === 'shadowing'
+    const { data, error } = await supabaseAdmin.from('lesson_exercises').insert({ lesson_id: body.lessonId, skill_type: body.skillType, exercise_type: body.exerciseType?.trim() || 'question', prompt_ko: body.promptKo.trim(), prompt_vi: body.promptVi?.trim() || null, answer: body.answer ?? {}, explanation_vi: body.explanationVi?.trim() || null, media_url: body.mediaUrl?.trim() || null, image_url: isListeningSkill ? null : body.imageUrl?.trim() || null, audio_url: body.audioUrl?.trim() || null, sort_order: body.sortOrder ?? 0, status: body.status ?? 'published' }).select().single()
+    if (error) return reply.code(400).send({ code: 'EXERCISE_CREATE_FAILED', message: error.message, requestId: request.id })
+    return reply.code(201).send({ data })
+  })
+
+  app.patch<{ Params: { id: string }; Body: { lessonId?: string; skillType?: SkillType; exerciseType?: string; promptKo?: string; promptVi?: string; answer?: unknown; explanationVi?: string; mediaUrl?: string; imageUrl?: string; audioUrl?: string; sortOrder?: number; status?: Status } }>('/admin/exercises/:id', async (request, reply) => {
+    const body = request.body
+    const listeningSkillSelected = body.skillType === 'dictation' || body.skillType === 'shadowing'
+    const patch = { ...(body.lessonId !== undefined && { lesson_id: body.lessonId }), ...(body.skillType !== undefined && { skill_type: body.skillType }), ...(body.exerciseType !== undefined && { exercise_type: body.exerciseType.trim() || 'question' }), ...(body.promptKo !== undefined && { prompt_ko: body.promptKo.trim() }), ...(body.promptVi !== undefined && { prompt_vi: body.promptVi.trim() || null }), ...(body.answer !== undefined && { answer: body.answer }), ...(body.explanationVi !== undefined && { explanation_vi: body.explanationVi.trim() || null }), ...(body.mediaUrl !== undefined && { media_url: body.mediaUrl.trim() || null }), ...(listeningSkillSelected ? { image_url: null } : body.imageUrl !== undefined && { image_url: body.imageUrl.trim() || null }), ...(body.audioUrl !== undefined && { audio_url: body.audioUrl.trim() || null }), ...(body.sortOrder !== undefined && { sort_order: body.sortOrder }), ...(body.status !== undefined && { status: body.status }), updated_at: new Date().toISOString() }
+    const { data, error } = await supabaseAdmin.from('lesson_exercises').update(patch).eq('id', request.params.id).select().single()
+    if (error) return reply.code(400).send({ code: 'EXERCISE_UPDATE_FAILED', message: error.message, requestId: request.id })
+    return { data }
+  })
+
+  app.delete<{ Params: { id: string } }>('/admin/exercises/:id', async (request, reply) => {
+    const { error } = await supabaseAdmin.from('lesson_exercises').delete().eq('id', request.params.id)
+    if (error) return reply.code(400).send({ code: 'EXERCISE_DELETE_FAILED', message: error.message, requestId: request.id })
     return reply.code(204).send()
   })
 

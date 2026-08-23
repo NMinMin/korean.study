@@ -4,6 +4,7 @@ import { config } from '../config.js'
 import { requireAuth } from '../plugins/auth.js'
 
 type UploadKind = 'lesson' | 'community' | 'avatar'
+type AssetType = 'image' | 'audio' | 'file'
 
 const folders: Record<UploadKind, string> = {
   lesson: 'korean-study/lessons',
@@ -12,7 +13,7 @@ const folders: Record<UploadKind, string> = {
 }
 
 export const uploadRoutes: FastifyPluginAsync = async (app) => {
-  app.post<{ Body: { kind?: UploadKind } }>(
+  app.post<{ Body: { kind?: UploadKind; assetType?: AssetType } }>(
     '/uploads/cloudinary/signature',
     {
       preHandler: requireAuth,
@@ -20,7 +21,10 @@ export const uploadRoutes: FastifyPluginAsync = async (app) => {
         body: {
           type: 'object',
           additionalProperties: false,
-          properties: { kind: { type: 'string', enum: ['lesson', 'community', 'avatar'] } },
+          properties: {
+            kind: { type: 'string', enum: ['lesson', 'community', 'avatar'] },
+            assetType: { type: 'string', enum: ['image', 'audio', 'file'] },
+          },
         },
       },
     },
@@ -35,6 +39,7 @@ export const uploadRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const kind = request.body?.kind ?? 'lesson'
+      const assetType = request.body?.assetType ?? 'file'
       const timestamp = Math.floor(Date.now() / 1000)
       const folder = `${folders[kind]}/${request.userId}`
       const signature = createHash('sha1')
@@ -47,7 +52,7 @@ export const uploadRoutes: FastifyPluginAsync = async (app) => {
         timestamp,
         folder,
         signature,
-        maxBytes: 20 * 1024 * 1024,
+        maxBytes: assetType === 'image' ? 10 * 1024 * 1024 : assetType === 'audio' ? 100 * 1024 * 1024 : 20 * 1024 * 1024,
       }
     },
   )

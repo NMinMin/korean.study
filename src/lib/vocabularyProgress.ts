@@ -16,6 +16,13 @@ type VocabularyRow = {
   textbook_id: string
 }
 
+type IdentifiedVocabulary = {
+  id: string
+  word: string
+  lessonId: string
+  textbookId: string
+}
+
 const DEFAULT_TEXTBOOK_SLUG = 'sejong-conversation-workbook-2-1'
 
 async function vocabularyRows(lessonNumber: number, textbookSlug = DEFAULT_TEXTBOOK_SLUG): Promise<VocabularyRow[]> {
@@ -99,6 +106,51 @@ export async function saveRemoteVocabularyState(lessonNumber: number, userId: st
       : supabase.from('vocabulary_bookmarks').delete().eq('user_id', userId).eq('vocabulary_id', word.id))
     if (item.note?.trim()) operations.push(supabase.from('vocabulary_notes').upsert({ user_id: userId, vocabulary_id: word.id, note: item.note.trim(), updated_at: new Date().toISOString() }))
     else operations.push(supabase.from('vocabulary_notes').delete().eq('user_id', userId).eq('vocabulary_id', word.id))
+  }
+  await Promise.all(operations)
+  return true
+}
+
+export async function loadRemoteVocabularyStateForWords(words: IdentifiedVocabulary[], userId?: string | null): Promise<LocalVocabularyState | null> {
+  if (!supabase || !userId || !words.length) return null
+  const ids = words.map((word) => word.id)
+  const { data, error } = await supabase
+    .from('vocabulary_progress')
+    .select('vocabulary_id, mastery, last_rating, next_review_at, times_reviewed')
+    .eq('user_id', userId)
+    .in('vocabulary_id', ids)
+  if (error) return null
+  const byId = new Map(words.map((word) => [word.id, word]))
+  const state: LocalVocabularyState = {}
+  for (const item of data ?? []) {
+    const word = byId.get(item.vocabulary_id)?.word
+    if (word) state[word] = {
+      box: item.mastery || 1,
+      lastRating: item.last_rating ?? undefined,
+      dueAt: item.next_review_at ?? undefined,
+      timesReviewed: item.times_reviewed || 0,
+    }
+  }
+  return state
+}
+
+export async function saveRemoteVocabularyStateForWords(words: IdentifiedVocabulary[], userId: string | null | undefined, state: LocalVocabularyState) {
+  if (!supabase || !userId || !words.length) return false
+  const operations: PromiseLike<unknown>[] = []
+  for (const word of words) {
+    const item = state[word.word]
+    if (!item) continue
+    operations.push(supabase.from('vocabulary_progress').upsert({
+      user_id: userId,
+      textbook_id: word.textbookId,
+      lesson_id: word.lessonId,
+      vocabulary_id: word.id,
+      mastery: item.box || 1,
+      last_rating: item.lastRating ?? null,
+      next_review_at: item.dueAt ?? null,
+      times_reviewed: item.timesReviewed || 0,
+      updated_at: new Date().toISOString(),
+    }))
   }
   await Promise.all(operations)
   return true

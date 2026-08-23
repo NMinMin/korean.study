@@ -28,7 +28,7 @@ export default function AuthPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [remember, setRemember] = useState(true)
+  const [remember, setRemember] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -62,8 +62,7 @@ export default function AuthPage() {
     }
     setBusy(true)
     try {
-      if (!remember) localStorage.setItem('kstudy:session-preference', 'session-only')
-      else localStorage.removeItem('kstudy:session-preference')
+      localStorage.setItem('kstudy:session-preference', remember ? 'persistent' : 'session-only')
       if (mode === 'login') {
         await auth.signIn(cleanEmail, password)
       } else {
