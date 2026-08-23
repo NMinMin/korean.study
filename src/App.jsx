@@ -2487,6 +2487,7 @@ function ShadowingView({ lesson, userId, lines = SHADOW_LINES, onBack, onFinish 
   const [audioDuration, setAudioDuration] = useState(0);
   const [recordingElapsed, setRecordingElapsed] = useState(0);
   const [recordedUrls, setRecordedUrls] = useState({}); // { [idx]: blob url } — bản ghi âm THẬT của người dùng để nghe lại
+  const [recordedDurations, setRecordedDurations] = useState({});
   const [showCompletion, setShowCompletion] = useState(false);
   const [finalAssessment, setFinalAssessment] = useState(null);
   const [assessingFinal, setAssessingFinal] = useState(false);
@@ -2497,6 +2498,7 @@ function ShadowingView({ lesson, userId, lines = SHADOW_LINES, onBack, onFinish 
   const autoPlayTimer = useRef(null);
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
+  const recordedUrlsRef = useRef({});
   const mediaStreamRef = useRef(null);
   const recordingBlobPromiseRef = useRef(null);
   const recordingBlobResolveRef = useRef(null);
@@ -2563,6 +2565,7 @@ function ShadowingView({ lesson, userId, lines = SHADOW_LINES, onBack, onFinish 
     clearTimeout(autoAdvanceRef.current);
     clearTimeout(recognitionRestartTimerRef.current);
     try { recognitionRef.current?.abort(); } catch (e) {}
+    Object.values(recordedUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
   }, []);
 
   // Tự động phát khi bật "Tự động phát" và mỗi khi chuyển câu
@@ -2636,10 +2639,14 @@ function ShadowingView({ lesson, userId, lines = SHADOW_LINES, onBack, onFinish 
         const blob = new Blob(recordedChunksRef.current, { type: mr.mimeType || "audio/webm" });
         if (blob.size > 0) {
           const url = URL.createObjectURL(blob);
+          const recordedDuration = Math.max(0, (Date.now() - recordingStartedAtRef.current) / 1000);
           setRecordedUrls((prev) => {
             if (prev[idx]) URL.revokeObjectURL(prev[idx]);
-            return { ...prev, [idx]: url };
+            const next = { ...prev, [idx]: url };
+            recordedUrlsRef.current = next;
+            return next;
           });
+          setRecordedDurations((prev) => ({ ...prev, [idx]: recordedDuration }));
         }
         stream.getTracks().forEach((t) => t.stop());
         if (mediaStreamRef.current === stream) mediaStreamRef.current = null;
@@ -3022,11 +3029,11 @@ function ShadowingView({ lesson, userId, lines = SHADOW_LINES, onBack, onFinish 
               <div className="sw-result">
                 <div className="sw-result-head"><Sparkles size={14} color="#7C6FE4" /> Kết quả mới nhất</div>
                 <div className="sw-result-row">
-                  <button className="sw-result-play" onClick={playNative} aria-label="Nghe lại câu mẫu">
+                  <button className="sw-result-play" onClick={playMyRecording} disabled={!recordedUrls[idx]} aria-label="Nghe lại bản ghi của bạn">
                     <Play size={16} fill="#fff" color="#fff" />
                   </button>
                   <div className="sw-result-wave"><SwWaveBars /></div>
-                  <span className="sw-result-time">{swFormatTime(audioDuration)}</span>
+                  <span className="sw-result-time">{recordedUrls[idx] ? swFormatTime(recordedDurations[idx] || recordingElapsed) : "--:--"}</span>
                   <div className="sw-accuracy">
                     <span>Độ khớp câu</span>
                     <b className={toneForScore(result.score)}>{result.score}%</b>
