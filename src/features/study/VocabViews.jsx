@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ChevronLeft, ChevronRight, Volume2, Star, BookOpen, Headphones, Mic, Sparkles,
   BookMarked, Lightbulb, CheckCircle2, RotateCcw, Plus, XCircle, ArrowLeft, ArrowRight,
-  Play, RotateCw, Check
+  Play, RotateCw, Check, Link2
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { speakKo, playVocabularyAudio, playCorrectSound, playIncorrectSound, playCelebrationSound } from '../../services/audioService';
