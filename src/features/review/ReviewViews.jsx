@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, BookOpen, Sparkles, Target, RotateCcw, CheckCircle2,
-  XCircle, Volume2, Lightbulb, Trophy, Star, Award, Check
+  XCircle, Volume2, Lightbulb, Trophy, Star, Award, Check, NotebookPen
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { requestAIJson } from '../../services/aiService';
