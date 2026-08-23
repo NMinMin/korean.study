@@ -5,6 +5,7 @@ import { AuthProvider, useAuth, type AppProfile } from './contexts/AuthContext'
 import AuthPage from './pages/AuthPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import AdminPage from './pages/AdminPage'
+import { userStorageKey } from './lib/storageKeys'
 
 const Dashboard = LegacyDashboard as ComponentType<{
   authenticatedProfile: AppProfile
@@ -16,7 +17,7 @@ function AppRoutes() {
 
   useEffect(() => {
     if (!auth.profile) return
-    localStorage.setItem('kstudy:user-profile:2-1', JSON.stringify({
+    localStorage.setItem(`kstudy:${userStorageKey('user-profile', auth.profile.id)}`, JSON.stringify({
       id: auth.profile.id,
       displayName: auth.profile.displayName,
       email: auth.profile.email,

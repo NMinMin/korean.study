@@ -1,6 +1,7 @@
 import type { Session, User } from '@supabase/supabase-js'
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { userStorageKey } from '../lib/storageKeys'
 
 export type AppProfile = {
   id: string
@@ -159,9 +160,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     async signOut() {
       if (!supabase) return
+      const signingOutUserId = session?.user.id
       const { error } = await supabase.auth.signOut()
       if (error) throw error
-      localStorage.removeItem('kstudy:user-profile:2-1')
+      if (signingOutUserId) localStorage.removeItem(`kstudy:${userStorageKey('user-profile', signingOutUserId)}`)
       localStorage.removeItem('kstudy:session-preference')
       clearSessionExpiry()
     },
