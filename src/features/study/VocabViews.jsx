@@ -19,6 +19,7 @@ import {
   saveScopedProgress
 } from '../../services/storageShim';
 import { markRemoteActivityCompleted } from '../../lib/activityProgress';
+import { ACTIVITIES } from './activityHelpers';
 import {
   loadRemoteVocabularyState,
   loadRemoteVocabularyStateForWords,
