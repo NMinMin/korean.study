@@ -2076,6 +2076,23 @@ async function requestAIJson(prompt) {
   }
 }
 
+async function transcribeShadowRecording(blob) {
+  if (!supabase) throw new Error("Supabase chưa được cấu hình.");
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error("Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.");
+  const extension = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
+  const form = new FormData();
+  form.append("audio", blob, `shadowing-${Date.now()}.${extension}`);
+  const response = await fetch(`${API_URL}/v1/shadowing/transcribe`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    body: form,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.message || "Không thể nhận dạng bản ghi âm.");
+  return data;
+}
+
 /* Worker AI chấm transcript tiếng Hàn; lỗi mạng sẽ dùng bộ chấm cục bộ. */
 async function gradeWithAI(target, said, realPron, timing = {}) {
   const prompt = `Bạn là giáo viên tiếng Hàn chấm bài luyện nói (shadowing) cho người Việt học tiếng Hàn.
@@ -2233,12 +2250,16 @@ function ShadowingView({ lesson, onBack, onFinish }) {
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
   const mediaStreamRef = useRef(null);
+  const recordingBlobPromiseRef = useRef(null);
+  const recordingBlobResolveRef = useRef(null);
   const myRecAudioRef = useRef(null);
   const recordingStartedAtRef = useRef(0);
   const recordingIntervalRef = useRef(null);
   const recordingTimeoutRef = useRef(null);
   const autoAdvanceRef = useRef(null);
   const recognizedTextRef = useRef("");
+  const recognitionBaseTextRef = useRef("");
+  const recognitionRestartTimerRef = useRef(null);
   const recordingFinishingRef = useRef(false);
 
   const line = SHADOW_LINES[idx];
@@ -2282,14 +2303,17 @@ function ShadowingView({ lesson, onBack, onFinish }) {
     clearInterval(recordingIntervalRef.current);
     clearTimeout(recordingTimeoutRef.current);
     clearTimeout(autoAdvanceRef.current);
+    clearTimeout(recognitionRestartTimerRef.current);
     recordingFinishingRef.current = false;
     recognizedTextRef.current = "";
+    recognitionBaseTextRef.current = "";
   }, [idx]);
 
   useEffect(() => () => {
     clearInterval(recordingIntervalRef.current);
     clearTimeout(recordingTimeoutRef.current);
     clearTimeout(autoAdvanceRef.current);
+    clearTimeout(recognitionRestartTimerRef.current);
     try { recognitionRef.current?.abort(); } catch (e) {}
   }, []);
 
@@ -2332,7 +2356,7 @@ function ShadowingView({ lesson, onBack, onFinish }) {
     }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setMicBlocked(true);
-      setErrMsg("Trình duyệt này chưa hỗ trợ ghi âm. Hãy dùng Chrome hoặc Edge phiên bản mới nhất.");
+      setErrMsg("Trình duyệt này chưa hỗ trợ ghi âm. Hãy cập nhật trình duyệt hoặc kiểm tra quyền Microphone.");
       setStatus("unsupported");
       return false;
     }
@@ -2350,6 +2374,7 @@ function ShadowingView({ lesson, onBack, onFinish }) {
       });
       mediaStreamRef.current = stream;
       recordedChunksRef.current = [];
+      recordingBlobPromiseRef.current = new Promise((resolve) => { recordingBlobResolveRef.current = resolve; });
       const preferredTypes = [
         "audio/webm;codecs=opus",
         "audio/webm",
@@ -2371,11 +2396,15 @@ function ShadowingView({ lesson, onBack, onFinish }) {
         stream.getTracks().forEach((t) => t.stop());
         if (mediaStreamRef.current === stream) mediaStreamRef.current = null;
         if (mediaRecorderRef.current === mr) mediaRecorderRef.current = null;
+        recordingBlobResolveRef.current?.(blob);
+        recordingBlobResolveRef.current = null;
       };
       mr.onerror = () => {
         setErrMsg("Không thể lưu bản ghi âm. Hãy kiểm tra micro rồi thử lại.");
         setStatus("error");
         stream.getTracks().forEach((track) => track.stop());
+        recordingBlobResolveRef.current?.(null);
+        recordingBlobResolveRef.current = null;
       };
       mediaRecorderRef.current = mr;
       mr.start(250);
@@ -2393,6 +2422,8 @@ function ShadowingView({ lesson, onBack, onFinish }) {
           ? "Không tìm thấy micro trên thiết bị. Hãy kết nối micro rồi thử lại."
           : `Không thể mở micro${e?.message ? `: ${e.message}` : ". Hãy thử lại."}`);
       setStatus("error");
+      recordingBlobResolveRef.current?.(null);
+      recordingBlobResolveRef.current = null;
       return false;
     }
   };
@@ -2404,7 +2435,10 @@ function ShadowingView({ lesson, onBack, onFinish }) {
       mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
       mediaRecorderRef.current = null;
+      recordingBlobResolveRef.current?.(null);
+      recordingBlobResolveRef.current = null;
     }
+    return recordingBlobPromiseRef.current || Promise.resolve(null);
   };
 
   const releaseRecordedAudio = () => {
@@ -2487,32 +2521,61 @@ function ShadowingView({ lesson, onBack, onFinish }) {
     }
   };
 
-  const finishRecording = (reason = "manual") => {
+  const finishRecording = async (reason = "manual") => {
     if (recordingFinishingRef.current) return;
     recordingFinishingRef.current = true;
     clearInterval(recordingIntervalRef.current);
     clearTimeout(recordingTimeoutRef.current);
+    clearTimeout(recognitionRestartTimerRef.current);
     if (reason === "timeout") setRecordingElapsed(recordingLimit);
-    stopMediaRecording();
+    const recordingBlobPromise = stopMediaRecording();
     try { recognitionRef.current?.stop(); } catch (e) {}
     setStatus("grading");
 
-    // Cho SpeechRecognition một nhịp ngắn để trả nốt phần transcript cuối.
-    window.setTimeout(() => {
-      const said = recognizedTextRef.current.trim();
-      if (!said) {
-        setErrMsg(reason === "timeout"
-          ? "Đã hết thời gian nhưng chưa nhận được giọng nói. Hãy thử lại và nói gần micro hơn nhé."
-          : "Chưa nhận được giọng nói. Hãy thử lại và nói gần micro hơn nhé.");
-        setStatus("error");
-        return;
+    // Chờ recorder đóng file và SpeechRecognition trả nốt transcript. Bản ghi
+    // luôn được gửi qua backend để Chrome, Edge và Safari có cùng kết quả.
+    await new Promise((resolve) => window.setTimeout(resolve, 220));
+    const recordingBlob = await recordingBlobPromise;
+    let said = recognizedTextRef.current.trim();
+    if (recordingBlob?.size) {
+      try {
+        const cloudResult = await transcribeShadowRecording(recordingBlob);
+        if (cloudResult?.transcript?.trim()) said = cloudResult.transcript.trim();
+      } catch (error) {
+        if (!said) {
+          setErrMsg(error?.message || "Không thể nhận diện bản ghi âm. Hãy thử lại nhé.");
+          setStatus("error");
+          return;
+        }
       }
-      submitForGrading(said);
-    }, 220);
+    }
+    if (!said) {
+      setErrMsg(reason === "timeout"
+        ? "Đã hết thời gian nhưng chưa nhận được giọng nói. Hãy thử lại và nói gần micro hơn nhé."
+        : "Chưa nhận được giọng nói. Hãy thử lại và nói gần micro hơn nhé.");
+      setStatus("error");
+      return;
+    }
+    await submitForGrading(said);
+  };
+
+  const startRecordingClock = () => {
+    setErrMsg("");
+    setRecordingElapsed(0);
+    recognizedTextRef.current = "";
+    recognitionBaseTextRef.current = "";
+    recordingFinishingRef.current = false;
+    setStatus("recording");
+    recordingStartedAtRef.current = Date.now();
+    recordingIntervalRef.current = window.setInterval(() => {
+      const elapsed = Math.min(recordingLimit, (Date.now() - recordingStartedAtRef.current) / 1000);
+      setRecordingElapsed(elapsed);
+    }, 100);
+    recordingTimeoutRef.current = window.setTimeout(() => finishRecording("timeout"), recordingLimit * 1000);
   };
 
   const startRecording = () => {
-    if (!speechSupported) { setStatus("unsupported"); return false; }
+    if (!speechSupported) return false;
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const rec = new SR();
     rec.lang = "ko-KR";
@@ -2520,53 +2583,48 @@ function ShadowingView({ lesson, onBack, onFinish }) {
     rec.maxAlternatives = 1;
     rec.continuous = true;
 
-    setErrMsg("");
-    setRecordingElapsed(0);
-    recognizedTextRef.current = "";
-    recordingFinishingRef.current = false;
-    setStatus("recording");
-
     rec.onresult = (e) => {
-      let said = "";
+      let sessionText = "";
       for (let i = 0; i < e.results.length; i += 1) {
-        said += `${e.results[i]?.[0]?.transcript || ""} `;
+        sessionText += `${e.results[i]?.[0]?.transcript || ""} `;
       }
-      recognizedTextRef.current = said.trim();
+      recognizedTextRef.current = `${recognitionBaseTextRef.current} ${sessionText}`.trim();
     };
     rec.onerror = (e) => {
       if (recordingFinishingRef.current || e.error === "aborted") return;
-      recordingFinishingRef.current = true;
-      clearInterval(recordingIntervalRef.current);
-      clearTimeout(recordingTimeoutRef.current);
-      stopMediaRecording();
-      const map = {
-        "not-allowed": "Trình duyệt/khung xem trước này chưa cấp quyền micro cho ứng dụng — không phải do bạn thao tác sai. Thử mở app ở môi trường triển khai thật (ngoài khung xem trước) để dùng mic.",
-        "no-speech": "Chưa nghe thấy giọng nói, thử nói to hơn nhé.",
-        "audio-capture": "Không tìm thấy micro trên thiết bị này.",
-        "network": "Khung xem trước này có thể đang chặn kết nối đến máy chủ nhận diện giọng nói — không phải lỗi do bạn.",
-      };
-      setErrMsg(map[e.error] || "Có lỗi khi nhận diện giọng nói, thử lại nhé.");
-      setStatus("error");
+      // Chrome thường phát no-speech khi người học lấy hơi hoặc bắt đầu nói
+      // chậm. Không kết thúc cả bản ghi; onend bên dưới sẽ mở lại nhận diện.
+      if (e.error === "no-speech") return;
+      // Web Speech chỉ là lớp nhận diện nhanh tùy chọn. Nếu trình duyệt không
+      // hỗ trợ hoặc dịch vụ của trình duyệt lỗi, MediaRecorder vẫn tiếp tục và
+      // backend sẽ nhận dạng bản ghi khi người học dừng.
+      rec.onend = null;
+      recognitionRef.current = null;
     };
     rec.onend = () => {
-      // Một số trình duyệt tự kết thúc phiên nhận diện khi người dùng ngừng nói.
-      // Khi đó vẫn hoàn tất và chấm phần đã ghi thay vì làm mất bản ghi.
-      if (!recordingFinishingRef.current) finishRecording("browser");
+      if (recordingFinishingRef.current) return;
+      // Chrome tự đóng SpeechRecognition khi có một khoảng lặng. Recorder vẫn
+      // đang chạy nên nối lại nhận diện cho tới lúc người học bấm dừng hoặc hết
+      // giới hạn, đồng thời giữ phần transcript đã nhận ở phiên trước.
+      recognitionBaseTextRef.current = recognizedTextRef.current.trim();
+      const elapsed = (Date.now() - recordingStartedAtRef.current) / 1000;
+      if (elapsed < recordingLimit - 0.25) {
+        clearTimeout(recognitionRestartTimerRef.current);
+        recognitionRestartTimerRef.current = window.setTimeout(() => {
+          if (recordingFinishingRef.current) return;
+          try { rec.start(); }
+          catch (error) { finishRecording("browser"); }
+        }, 120);
+        return;
+      }
+      finishRecording("timeout");
     };
 
     recognitionRef.current = rec;
     try {
       rec.start();
-      recordingStartedAtRef.current = Date.now();
-      recordingIntervalRef.current = window.setInterval(() => {
-        const elapsed = Math.min(recordingLimit, (Date.now() - recordingStartedAtRef.current) / 1000);
-        setRecordingElapsed(elapsed);
-      }, 100);
-      recordingTimeoutRef.current = window.setTimeout(() => finishRecording("timeout"), recordingLimit * 1000);
       return true;
     } catch (err) {
-      setErrMsg("Không thể khởi động micro.");
-      setStatus("error");
       return false;
     }
   };
@@ -2582,7 +2640,8 @@ function ShadowingView({ lesson, onBack, onFinish }) {
     setStatus("requesting");
     const mediaStarted = await startMediaRecording();
     if (!mediaStarted) return;
-    if (!startRecording()) stopMediaRecording();
+    startRecordingClock();
+    startRecording();
   };
 
   const goPrev = () => { if (idx > 0) setIdx(idx - 1); };
@@ -5814,7 +5873,13 @@ function DictationView({ lesson, initialMode = "practice", onBack, onFinish, onG
           {(st === "wrong" || st === "failed") && (
             <div className="dc-diff-line" lang="ko">
               {diffWords().map((d, i) => (
-                <span key={i} className={`dc-diff-word ${d.correct ? "correct" : "wrong"} ${d.missing ? "missing" : ""}`} title={!d.correct && d.expected ? `Đúng: ${d.expected}` : undefined}>{d.missing ? `Thiếu: ${d.word}` : d.word}</span>
+                <span key={i} className={`dc-diff-word ${d.correct ? "correct" : "wrong"} ${d.missing ? "missing" : ""}`} title={!d.correct && d.expected ? `Đúng: ${d.expected}` : undefined}>
+                  {d.correct ? d.word : d.missing ? (
+                    <><span>Thiếu:</span><b>{d.expected}</b></>
+                  ) : (
+                    <><del>{d.word}</del><span className="dc-diff-arrow">→</span><b>{d.expected}</b></>
+                  )}
+                </span>
               ))}
             </div>
           )}
@@ -8705,9 +8770,12 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .dc-speed-chip:hover:not(.on){border-color:#C9BCF2}
 
 .dc-diff-line{display:flex;flex-wrap:wrap;gap:6px;margin-top:-4px}
-.dc-diff-word{font:700 15px 'Quicksand';padding:3px 8px;border-radius:8px}
+.dc-diff-word{font:700 15px 'Quicksand';padding:4px 9px;border-radius:8px;display:inline-flex;align-items:center;gap:5px}
 .dc-diff-word.correct{background:#EBF7EE;color:#2E8148}
-.dc-diff-word.wrong{background:#FCEEEE;color:#B83A3A;text-decoration:line-through}
+.dc-diff-word.wrong{background:#FCEEEE;color:#B83A3A}
+.dc-diff-word.wrong del{opacity:.72;text-decoration-thickness:1.5px}
+.dc-diff-word.wrong b{color:#2E8148;font-weight:700;text-decoration:none}
+.dc-diff-arrow{color:#9A91B8;text-decoration:none}
 .dc-instruction{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:#6B6590;flex-wrap:wrap}
 .dc-input-row{display:flex;gap:14px}
 .dc-textarea{
