@@ -14,6 +14,7 @@ import { loadRemoteVocabularyState, loadRemoteVocabularyStateForWords, saveRemot
 import { addUserTextbook, loadLearningCatalog, markLessonStarted, syncLessonProgress } from "./lib/learningContent";
 import { loadVocabularyReviewSchedule } from "./lib/reviewSchedule";
 import { awardLessonGems, loadShopState, purchasePlant, selectPlant } from "./lib/gemStore";
+import { loadRemoteActivityProgress, saveRemoteActivityProgress } from "./lib/activityProgress";
 import { lessonProgressKey, userStorageKey, legacyLessonProgressKey, legacyTextbookProgressKey } from "./lib/storageKeys";
 import correctSoundUrl from "../Sound Effect/Correct.mp3";
 import incorrectSoundUrl from "../Sound Effect/Discorrect.mp3";
@@ -1336,6 +1337,14 @@ async function computeHomeProgress(lesson, userId, vocabulary = VOCAB_SAMPLE) {
       out[3].detail = `${mastered} / ${totalReviewable} mục đã vững`;
     }
   } catch (e) { }
+  try {
+    const remoteRows = await loadRemoteActivityProgress(lesson?.id);
+    const keyMap = { tuvung: 0, nghechep: 1, shadowing: 2, ontap: 3 };
+    for (const row of remoteRows) {
+      const targetIndex = keyMap[row.activityType];
+      if (targetIndex !== undefined) out[targetIndex].pct = Math.max(out[targetIndex].pct, row.progressPercent);
+    }
+  } catch (e) { }
   return out;
 }
 
@@ -2498,7 +2507,7 @@ function SwBunnyEmpty() {
   );
 }
 
-function ShadowingView({ lesson, userId, lines = SHADOW_LINES, onBack, onFinish }) {
+function ShadowingView({ lesson, userId, lines = SHADOW_LINES, onBack, onFinish, onProgress }) {
   const [idx, setIdx] = useState(0);
   const [autoPlay, setAutoPlay] = useState(false);
   const [status, setStatus] = useState("idle"); // idle | recording | grading | done | error | unsupported
@@ -2549,12 +2558,19 @@ function ShadowingView({ lesson, userId, lines = SHADOW_LINES, onBack, onFinish 
 
   useEffect(() => {
     let active = true;
-    readScopedProgress(shadowProgressKey(lesson, userId), legacyShadowProgressKey(lesson), userId).then((saved) => {
-      if (!active || !saved?.value) return;
+    Promise.all([
+      readScopedProgress(shadowProgressKey(lesson, userId), legacyShadowProgressKey(lesson), userId),
+      loadRemoteActivityProgress(lesson?.id),
+    ]).then(([saved, remoteRows]) => {
+      if (!active) return;
       try {
+        const localResults = saved?.value ? JSON.parse(saved.value) : {};
+        const remoteResults = remoteRows.find((row) => row.activityType === "shadowing")?.completedItems || {};
         const restored = Object.fromEntries(
-          Object.entries(JSON.parse(saved.value)).filter(([, item]) => item?.score >= 80),
+          Object.entries({ ...localResults, ...remoteResults }).filter(([, item]) => item?.score >= 80),
         );
+        if (!Object.keys(restored).length) return;
+        window.storage.set(shadowProgressKey(lesson, userId), JSON.stringify(restored)).catch(() => { });
         setResults(restored);
         setHistory(Object.entries(restored).map(([key, item]) => ({
           no: lines[Number(key)]?.no || Number(key) + 1,
@@ -2781,6 +2797,9 @@ function ShadowingView({ lesson, userId, lines = SHADOW_LINES, onBack, onFinish 
         const passed = Object.fromEntries(Object.entries(next).filter(([, item]) => item.score >= 80));
         if (!isRecheck || Object.keys(passed).length === total) {
           window.storage.set(shadowProgressKey(lesson, userId), JSON.stringify(passed)).catch(() => { });
+          saveRemoteActivityProgress(lesson.textbookId, lesson.id, "shadowing", passed, total)
+            .then((percent) => onProgress?.("shadowing", percent))
+            .catch(() => { });
         }
       }
       return next;
@@ -3238,11 +3257,19 @@ const reviewHistoryKey = (lesson, userId) => lessonProgressKey("review", lesson,
 async function loadReviewHistory(lesson, userId) {
   try {
     const res = await readScopedProgress(reviewHistoryKey(lesson, userId), legacyLessonProgressKey("review-history", lesson.no), userId);
-    return res?.value ? JSON.parse(res.value) : {};
+    const local = res?.value ? JSON.parse(res.value) : {};
+    const remoteRows = await loadRemoteActivityProgress(lesson?.id);
+    const remote = remoteRows.find((row) => row.activityType === "ontap")?.completedItems || {};
+    return { ...local, ...remote };
   } catch (e) { return {}; }
 }
 async function saveReviewHistory(lesson, userId, history) {
-  try { await window.storage.set(reviewHistoryKey(lesson, userId), JSON.stringify(history)); } catch (e) { }
+  try {
+    await window.storage.set(reviewHistoryKey(lesson, userId), JSON.stringify(history));
+    const completed = Object.fromEntries(Object.entries(history).filter(([, item]) => item?.correct > 0 && item.correct >= item.wrong));
+    const total = VOCAB_SAMPLE.length + GRAMMAR_SAMPLE.reduce((sum, item) => sum + item.formula.length, 0) + SHADOW_LINES.length + (SHADOW_LINES.length - 1);
+    await saveRemoteActivityProgress(lesson.textbookId, lesson.id, "ontap", completed, total);
+  } catch (e) { }
 }
 
 /* Lưu lại kết quả Shadowing phản xạ (từ Ôn tập) LÂU DÀI — trước đây kết quả
@@ -4312,6 +4339,10 @@ const ACTIVITIES = [
 /* nội dung đã ôn "vững" (đúng nhiều hơn sai) trên tổng số mục có thể ôn.   */
 async function loadActivityProgress(lesson, userId) {
   const out = { tuvung: 0, shadowing: 0, nghechep: 0, ontap: 0 };
+  try {
+    const remoteRows = await loadRemoteActivityProgress(lesson?.id);
+    for (const row of remoteRows) out[row.activityType] = Math.max(out[row.activityType] || 0, row.progressPercent);
+  } catch (e) { }
   try {
     const userKey = vocabProgressKey(lesson, userId);
     const [v, remote] = await Promise.all([
@@ -5809,7 +5840,7 @@ function ChooseImageView({ onBack }) {
 /*  NGHE CHÉP CHÍNH TẢ — dùng audio thật (4 câu 1과.mp3 đã cắt sẵn      */
 /*  cho Shadowing), gợi ý hé lộ từng ký tự khi trả lời sai              */
 /* ------------------------------------------------------------------ */
-function DictationView({ lesson, userId, lines = SHADOW_LINES, vocabulary = VOCAB_SAMPLE, initialMode = "practice", onBack, onFinish, onGoVocab }) {
+function DictationView({ lesson, userId, lines = SHADOW_LINES, vocabulary = VOCAB_SAMPLE, initialMode = "practice", onBack, onFinish, onGoVocab, onProgress }) {
   const mode = initialMode; // hai tuyến độc lập; chỉ "test" ghi tiến trình
   const [idx, setIdx] = useState(0);
   const [inputs, setInputs] = useState({});
@@ -5847,9 +5878,16 @@ function DictationView({ lesson, userId, lines = SHADOW_LINES, vocabulary = VOCA
   useEffect(() => {
     if (mode !== "test") return undefined;
     let alive = true;
-    readScopedProgress(storageKey, legacyDictationProgressKey(lesson), userId).then((res) => {
-      if (!alive || !res?.value) return;
-      const saved = correctDictationResults(JSON.parse(res.value));
+    Promise.all([
+      readScopedProgress(storageKey, legacyDictationProgressKey(lesson), userId),
+      loadRemoteActivityProgress(lesson?.id),
+    ]).then(([res, remoteRows]) => {
+      if (!alive) return;
+      const localSaved = res?.value ? correctDictationResults(JSON.parse(res.value)) : {};
+      const remoteSaved = remoteRows.find((row) => row.activityType === "nghechep")?.completedItems || {};
+      const saved = { ...localSaved, ...remoteSaved };
+      if (!Object.keys(saved).length) return;
+      window.storage.set(storageKey, JSON.stringify(saved)).catch(() => { });
       setVerified(saved);
       setStatus(saved);
       const completedIndexes = Object.keys(saved).filter((key) => saved[key] === "correct");
@@ -5945,7 +5983,12 @@ function DictationView({ lesson, userId, lines = SHADOW_LINES, vocabulary = VOCA
     if (mode === "test" && ok) {
       setVerified(nextVerified);
       const fullyCorrect = Array.from({ length: total }).every((_, questionIndex) => nextVerified[questionIndex] === "correct");
-      if (!isRecheck || fullyCorrect) window.storage.set(storageKey, JSON.stringify(nextVerified)).catch(() => { });
+      if (!isRecheck || fullyCorrect) {
+        window.storage.set(storageKey, JSON.stringify(nextVerified)).catch(() => { });
+        saveRemoteActivityProgress(lesson.textbookId, lesson.id, "nghechep", nextVerified, total)
+          .then((percent) => onProgress?.("nghechep", percent))
+          .catch(() => { });
+      }
     }
     if (ok) {
       clearTimeout(autoAdvanceRef.current);
@@ -7704,6 +7747,14 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     } catch (error) { }
   };
 
+  const handlePartialActivityProgress = async (activityId, progressPercent) => {
+    if (!lesson) return;
+    const activities = await loadActivityProgress(lesson, profile?.id);
+    activities[activityId] = Math.max(activities[activityId] || 0, progressPercent || 0);
+    const lessonProgress = Math.round(Object.values(activities).reduce((sum, value) => sum + value, 0) / ACTIVITIES.length);
+    await handleLessonProgressChange(lessonProgress, activities);
+  };
+
   const handleActivityFinish = async (activityId) => {
     if (!lesson) return;
     try {
@@ -8165,7 +8216,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             />
           )}
           {view === "shadowing" && lesson && (
-            <ShadowingView lesson={lesson} userId={profile.id} lines={lessonShadowLines} onBack={() => setView(activityRunBackView)} onFinish={() => handleActivityFinish("shadowing")} />
+            <ShadowingView lesson={lesson} userId={profile.id} lines={lessonShadowLines} onBack={() => setView(activityRunBackView)} onFinish={() => handleActivityFinish("shadowing")} onProgress={handlePartialActivityProgress} />
           )}
           {view === "dictation-select" && (
             <ActivityLessonSelectView
@@ -8193,10 +8244,11 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
               lines={lessonDictationLines}
               vocabulary={lessonVocabulary}
               initialMode={dictationMode}
-              onBack={() => setView("dictation-mode-select")}
-              onFinish={() => handleActivityFinish("nghechep")}
-              onGoVocab={() => setView("flashcards")}
-            />
+            onBack={() => setView("dictation-mode-select")}
+            onFinish={() => handleActivityFinish("nghechep")}
+            onGoVocab={() => setView("flashcards")}
+            onProgress={handlePartialActivityProgress}
+          />
           )}
         </main>
       </div>
