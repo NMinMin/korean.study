@@ -14,6 +14,7 @@ import { loadRemoteVocabularyState, loadRemoteVocabularyStateForWords, saveRemot
 import { addUserTextbook, loadLearningCatalog, markLessonStarted, syncLessonProgress } from "./lib/learningContent";
 import { loadVocabularyReviewSchedule } from "./lib/reviewSchedule";
 import correctSoundUrl from "../Sound Effect/Correct.mp3";
+import incorrectSoundUrl from "../Sound Effect/Discorrect.mp3";
 import completeLessonSoundUrl from "../Sound Effect/Complete_Lesson.mp3";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:3001").replace(/\/$/, "");
@@ -1326,6 +1327,7 @@ function playEffect(url) {
   } catch (e) { return null; }
 }
 function playCorrectSound() { return playEffect(correctSoundUrl); }
+function playIncorrectSound() { return playEffect(incorrectSoundUrl); }
 function playCelebrationSound() { return playEffect(completeLessonSoundUrl); }
 
 function ConfettiBurst() {
@@ -1748,7 +1750,7 @@ function SettingsView({ onBack }) {
         <div className="settings-row settings-sound-row">
           <div className="settings-row-label">
             <b>Âm thanh hiệu ứng</b>
-            <span>Phát khi trả lời đúng, đạt mục tiêu và hoàn thành bài học</span>
+            <span>Phát khi trả lời đúng/sai, đạt mục tiêu và hoàn thành bài học</span>
           </div>
           <button className={`settings-toggle ${celebrationSound ? "on" : ""}`} onClick={() => setCelebrationSound((enabled) => !enabled)} aria-label="Bật/tắt âm thanh chúc mừng" aria-pressed={celebrationSound}>
             <span className="settings-toggle-knob" />
@@ -2235,6 +2237,7 @@ function ShadowingView({ lesson, onBack, onFinish }) {
   const recordingStartedAtRef = useRef(0);
   const recordingIntervalRef = useRef(null);
   const recordingTimeoutRef = useRef(null);
+  const autoAdvanceRef = useRef(null);
   const recognizedTextRef = useRef("");
   const recordingFinishingRef = useRef(false);
 
@@ -2278,6 +2281,7 @@ function ShadowingView({ lesson, onBack, onFinish }) {
     setRecordingElapsed(0);
     clearInterval(recordingIntervalRef.current);
     clearTimeout(recordingTimeoutRef.current);
+    clearTimeout(autoAdvanceRef.current);
     recordingFinishingRef.current = false;
     recognizedTextRef.current = "";
   }, [idx]);
@@ -2285,6 +2289,7 @@ function ShadowingView({ lesson, onBack, onFinish }) {
   useEffect(() => () => {
     clearInterval(recordingIntervalRef.current);
     clearTimeout(recordingTimeoutRef.current);
+    clearTimeout(autoAdvanceRef.current);
     try { recognitionRef.current?.abort(); } catch (e) {}
   }, []);
 
@@ -2454,9 +2459,12 @@ function ShadowingView({ lesson, onBack, onFinish }) {
       graded = gradeLocally(line.ko, said);
       graded.warning = "Dịch vụ AI đang bận nên kết quả này được chấm dự phòng trên thiết bị.";
     }
+    const gradedResult = { transcript: said, ...graded, gradedAt: new Date().toISOString() };
+    const nextResults = { ...results, [idx]: gradedResult };
     if (graded.score >= 80 && !(results[idx]?.score >= 80)) playCorrectSound();
+    else if (graded.score < 80) playIncorrectSound();
     setResults((current) => {
-      const next = { ...current, [idx]: { transcript: said, ...graded, gradedAt: new Date().toISOString() } };
+      const next = { ...current, [idx]: gradedResult };
       if (graded.score >= 80) {
         const passed = Object.fromEntries(Object.entries(next).filter(([, item]) => item.score >= 80));
         if (!isRecheck || Object.keys(passed).length === total) {
@@ -2467,6 +2475,16 @@ function ShadowingView({ lesson, onBack, onFinish }) {
     });
     setHistory((h) => [{ no: line.no, ko: line.ko, score: graded.score }, ...h].slice(0, 12));
     setStatus("done");
+    if (graded.score >= 80) {
+      clearTimeout(autoAdvanceRef.current);
+      autoAdvanceRef.current = window.setTimeout(() => {
+        if (idx < total - 1) {
+          setIdx(idx + 1);
+        } else if (SHADOW_LINES.every((_, questionIndex) => nextResults[questionIndex]?.score >= 80)) {
+          finishAndAssess(nextResults);
+        }
+      }, 900);
+    }
   };
 
   const finishRecording = (reason = "manual") => {
@@ -3429,6 +3447,7 @@ function ReviewQuizView({ lesson, difficulty, mode, seed, isRecheck = false, onB
       if (picked) return;
       setPicked(opt);
       if (opt.correct) playCorrectSound();
+      else playIncorrectSound();
       setAnswers((a) => [...a, { correct: opt.correct, category: q.category, key: q.key, label: q.label }]);
     };
     const next = () => {
@@ -3517,6 +3536,8 @@ function ReviewQuizView({ lesson, difficulty, mode, seed, isRecheck = false, onB
     if (!wDraft.trim() || wGrading) return;
     setWGrading(true);
     const graded = await gradeWriting(wp, wDraft.trim());
+    if ((graded?.score || 0) >= 80) playCorrectSound();
+    else playIncorrectSound();
     setWResult(graded);
     setWGrading(false);
   };
@@ -3623,6 +3644,8 @@ function ReviewQuizView({ lesson, difficulty, mode, seed, isRecheck = false, onB
     setSPhaseState("grading");
     let graded;
     try { graded = await gradeWithAI(sLine.ko, said, sLine.realPron); } catch (e) { graded = gradeLocally(sLine.ko, said); }
+    if ((graded?.score || 0) >= 80) playCorrectSound();
+    else playIncorrectSound();
     const reflexRatio = sReflexSecondsRef.current > 0 ? timeLeftAtDone / sReflexSecondsRef.current : 0;
     const reflexLabel = reflexRatio >= 0.5 ? "Tuyệt vời" : reflexRatio >= 0.25 ? "Khá" : reflexRatio > 0 ? "Kịp giờ" : "Sát giờ";
     setSReflexResults((r) => [...r, { no: sLine.no, score: graded.score, timeLeftAtDone: Math.round(timeLeftAtDone * 10) / 10, reflexLabel, timedOut: false }]);
@@ -4749,6 +4772,7 @@ function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords
       },
     };
     if (ratingId === "good") playCorrectSound();
+    else playIncorrectSound();
     if (isRecheck) setProgress(updated);
     else persist(updated);
     const wordIdx = queue[0];
@@ -5243,6 +5267,7 @@ function FillBlankListenView({ onBack }) {
           <button className="qz-check-btn purple" onClick={() => {
             setChecked(true);
             if (FILL_BLANK_ITEMS.every((item, index) => (answers[index] || "").trim() === item.word)) playCorrectSound();
+            else playIncorrectSound();
           }}>Kiểm tra đáp án</button>
         ) : (
           <div className="qz-result-row">
@@ -5278,6 +5303,7 @@ function MatchPairsView({ onBack }) {
       setPairs((p) => ({ ...p, [selected]: pos }));
       setSelected(null);
     } else {
+      playIncorrectSound();
       setWrongFlash({ left: selected, right: pos });
       setTimeout(() => setWrongFlash(null), 500);
       setSelected(null);
@@ -5355,6 +5381,7 @@ function ChooseImageView({ onBack }) {
     if (picked) return;
     setPicked(word);
     if (word === item.answer) playCorrectSound();
+    else playIncorrectSound();
   };
   const next = () => {
     if (idx < total - 1) { setIdx(idx + 1); setPicked(null); }
@@ -5436,6 +5463,7 @@ function DictationView({ lesson, initialMode = "practice", onBack, onFinish, onG
   const [showCompletion, setShowCompletion] = useState(false);
   const [isRecheck, setIsRecheck] = useState(false);
   const audioRef = useRef(null);
+  const autoAdvanceRef = useRef(null);
 
   const total = SHADOW_LINES.length;
   const line = SHADOW_LINES[idx];
@@ -5472,7 +5500,12 @@ function DictationView({ lesson, initialMode = "practice", onBack, onFinish, onG
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, storageKey, total]);
 
-  useEffect(() => { setCurTime(0); setPlaying(false); }, [idx]);
+  useEffect(() => {
+    clearTimeout(autoAdvanceRef.current);
+    setCurTime(0);
+    setPlaying(false);
+  }, [idx]);
+  useEffect(() => () => clearTimeout(autoAdvanceRef.current), []);
   useEffect(() => { if (audioRef.current) audioRef.current.playbackRate = speed; }, [speed, idx]);
   const consumeListen = () => {
     if (mode === "practice") return;
@@ -5520,12 +5553,18 @@ function DictationView({ lesson, initialMode = "practice", onBack, onFinish, onG
   const normalizeDictation = (text) => text
     .normalize("NFC")
     .toLocaleLowerCase("ko-KR")
+    // Chấp nhận các cách nói tương đương thường gặp trong hội thoại.
+    // Bài mẫu dùng "함께 뭘", trong khi audio/người học có thể dùng
+    // "같이 뭐"; khác biệt này không làm thay đổi nghĩa của câu.
+    .replace(/함께/g, "같이")
+    .replace(/뭘/g, "뭐")
     .replace(/[\p{P}\p{S}\s]+/gu, "");
 
   const check = () => {
     if (questionLocked) return;
     const ok = normalizeDictation(value) === normalizeDictation(target);
     if (ok) playCorrectSound();
+    else playIncorrectSound();
     const nextWrongCount = ok ? (wrongAttempts[idx] || 0) : (wrongAttempts[idx] || 0) + 1;
     const failed = mode === "test" && !ok && nextWrongCount >= 2;
     const newStatus = { ...status, [idx]: ok ? "correct" : failed ? "failed" : "wrong" };
@@ -5534,11 +5573,15 @@ function DictationView({ lesson, initialMode = "practice", onBack, onFinish, onG
     setCheckedValues((c) => ({ ...c, [idx]: value }));
     setAttempted((a) => ({ ...a, [idx]: true }));
     setRetryQueue((queue) => ok ? queue.filter((item) => item !== idx) : (queue.includes(idx) ? queue : [...queue, idx]));
+    const nextVerified = mode === "test" && ok ? { ...verified, [idx]: "correct" } : verified;
     if (mode === "test" && ok) {
-      const nextVerified = { ...verified, [idx]: "correct" };
       setVerified(nextVerified);
       const fullyCorrect = Array.from({ length: total }).every((_, questionIndex) => nextVerified[questionIndex] === "correct");
       if (!isRecheck || fullyCorrect) window.storage.set(storageKey, JSON.stringify(nextVerified)).catch(() => {});
+    }
+    if (ok) {
+      clearTimeout(autoAdvanceRef.current);
+      autoAdvanceRef.current = window.setTimeout(() => goNext(newStatus, nextVerified), 800);
     }
   };
 
@@ -5570,16 +5613,16 @@ function DictationView({ lesson, initialMode = "practice", onBack, onFinish, onG
   };
 
   const goto = (i) => setIdx(i);
-  const goNext = () => {
-    const currentDone = status[idx] === "correct" || (mode === "test" && status[idx] === "failed");
+  const goNext = (statusSnapshot = status, verifiedSnapshot = verified) => {
+    const currentDone = statusSnapshot[idx] === "correct" || (mode === "test" && statusSnapshot[idx] === "failed");
     if (!currentDone) return;
     const nextIndex = mode === "test"
-      ? Array.from({ length: total }).findIndex((_, questionIndex) => questionIndex > idx && verified[questionIndex] !== "correct")
+      ? Array.from({ length: total }).findIndex((_, questionIndex) => questionIndex > idx && verifiedSnapshot[questionIndex] !== "correct")
       : idx < total - 1 ? idx + 1 : -1;
     if (nextIndex >= 0) { goto(nextIndex); return; }
     const pending = mode === "test"
-      ? Array.from({ length: total }, (_, questionIndex) => questionIndex).filter((questionIndex) => verified[questionIndex] !== "correct")
-      : retryQueue.filter((questionIndex) => status[questionIndex] !== "correct");
+      ? Array.from({ length: total }, (_, questionIndex) => questionIndex).filter((questionIndex) => verifiedSnapshot[questionIndex] !== "correct")
+      : retryQueue.filter((questionIndex) => statusSnapshot[questionIndex] !== "correct");
     if (pending.length) {
       if (mode === "test") {
         setRetryRound((round) => round + 1);
@@ -5818,7 +5861,7 @@ function DictationView({ lesson, initialMode = "practice", onBack, onFinish, onG
             />
           ))}
         </div>
-        <button className="fc-nav-btn primary" disabled={status[idx] !== "correct" && !(mode === "test" && status[idx] === "failed")} onClick={goNext}>
+        <button className="fc-nav-btn primary" disabled={status[idx] !== "correct" && !(mode === "test" && status[idx] === "failed")} onClick={() => goNext()}>
           {idx === total - 1 && retryQueue.some((questionIndex) => status[questionIndex] !== "correct") ? "Làm lại câu sai" : idx === total - 1 ? "Hoàn thành" : "Câu tiếp"} <ChevronRight size={18} />
         </button>
       </div>
@@ -5929,6 +5972,7 @@ function AIQuizView({ onBack }) {
                   if (picked !== null) return;
                   setPicked(i);
                   if (i === q.correctIndex) playCorrectSound();
+                  else playIncorrectSound();
                 }}
                 disabled={picked !== null}
               >
@@ -6972,6 +7016,7 @@ function CustomLessonTestView({ lessonData, onBack }) {
     if (picked) return;
     setPicked(opt);
     if (opt === q.correct) { setScore((s) => s + 1); playCorrectSound(); }
+    else playIncorrectSound();
   };
   const next = () => {
     if (idx + 1 < questions.length) { setIdx((i) => i + 1); setPicked(null); }
