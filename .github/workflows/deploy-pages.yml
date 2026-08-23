@@ -1,0 +1,80 @@
+name: Deploy frontend to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # Cho phép bước build đọc các secret được lưu trong Environment
+    # "github-pages" (Settings > Environments > github-pages).
+    environment:
+      name: github-pages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        env:
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL || vars.VITE_API_URL }}
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "::error::Thiếu VITE_SUPABASE_URL hoặc VITE_SUPABASE_ANON_KEY trong GitHub Secrets/Variables của environment github-pages."
+            exit 1
+          fi
+          npm run build
+
+      - name: Prepare GitHub Pages artifact
+        shell: bash
+        run: |
+          touch dist/.nojekyll
+          cp dist/index.html dist/404.html
+          entry_file="$(grep -oE 'assets/index-[^"]+\.js' dist/index.html | head -n 1)"
+          if [ -z "$entry_file" ] || [ ! -f "dist/$entry_file" ]; then
+            echo "::error::Bundle JavaScript được index.html tham chiếu không tồn tại trong dist."
+            find dist -maxdepth 2 -type f -print
+            exit 1
+          fi
+          echo "Verified dist/$entry_file"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

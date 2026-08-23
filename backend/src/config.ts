@@ -13,6 +13,9 @@ const schema = z.object({
   GOOGLE_APPLICATION_CREDENTIALS_JSON: z.string().optional(),
   SMTP_FROM_EMAIL: z.string().email().optional(),
   REMINDER_JOB_SECRET: z.string().min(24).optional(),
+  CLOUDINARY_CLOUD_NAME: z.string().min(1).optional(),
+  CLOUDINARY_API_KEY: z.string().min(1).optional(),
+  CLOUDINARY_API_SECRET: z.string().min(1).optional(),
 })
 
 const result = schema.safeParse(process.env)
@@ -22,5 +25,8 @@ if (!result.success) {
 }
 export const config = {
   ...result.data,
-  allowedOrigins: result.data.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean),
+  allowedOrigins: Array.from(new Set([
+    ...result.data.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim().replace(/\/$/, '')).filter(Boolean),
+    'https://nminmin.github.io',
+  ])),
 }
