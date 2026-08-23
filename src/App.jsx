@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { createContext, useContext, useState, useRef, useEffect, useMemo } from "react";
 import {
   Home, BookOpen, NotebookPen, Type, Mic, Headphones, PencilLine,
   Trophy, Settings, ChevronDown, ChevronRight, ChevronLeft, Flame, CalendarDays,
-  Play, Plus, Gem, Sparkles, Lightbulb, TrendingUp, Star,
+  Play, Plus, Sparkles, Lightbulb, TrendingUp, Star,
   BookMarked, MessageCircle, Hexagon, Volume2, Square, RotateCcw,
   CheckCircle2, XCircle, AlertTriangle, Link2, Image as ImageIcon,
   Lock, Eraser, Scissors, Smile, Target, Trash2, Copy, Bell, Edit2,
@@ -13,9 +13,11 @@ import { loadRemoteDailyGoal, loadRemoteStudyPlan, saveRemoteDailyGoal, saveRemo
 import { loadRemoteVocabularyState, loadRemoteVocabularyStateForWords, saveRemoteVocabularyState, saveRemoteVocabularyStateForWords } from "./lib/vocabularyProgress";
 import { addUserTextbook, loadLearningCatalog, markLessonStarted, syncLessonProgress } from "./lib/learningContent";
 import { loadVocabularyReviewSchedule } from "./lib/reviewSchedule";
+import { awardLessonGems, loadShopState, purchasePlant, selectPlant } from "./lib/gemStore";
 import correctSoundUrl from "../Sound Effect/Correct.mp3";
 import incorrectSoundUrl from "../Sound Effect/Discorrect.mp3";
 import completeLessonSoundUrl from "../Sound Effect/Complete_Lesson.mp3";
+import dashboardCardBackgroundUrl from "../UIUX/backgroundcard.png";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:3001").replace(/\/$/, "");
 
@@ -117,6 +119,19 @@ if (typeof window !== "undefined" && !window.storage) {
 /*  MOCK DATA                                                          */
 /* ------------------------------------------------------------------ */
 const USER = { name: "Mai Anh", level: 12, xp: 1250, xpMax: 2000, streak: 12, todayLessons: 3, gems: 1250 };
+const GemBalanceContext = createContext(0);
+function UserGemCount() {
+  return useContext(GemBalanceContext).toLocaleString("vi-VN");
+}
+
+function DiamondIcon({ size = 18, color = "#7465E7", fill = "#B8AEF5", className = "" }) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4.2 8.1 7.4 3.8h9.2l3.2 4.3L12 20.2 4.2 8.1Z" fill={fill} stroke={color} strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="m7.4 3.8 2.1 4.3L12 20.2l2.5-12.1 2.1-4.3M4.2 8.1h15.6" stroke={color} strokeWidth="1.25" strokeLinejoin="round" opacity=".9" />
+    </svg>
+  );
+}
 
 const TEXTBOOKS = [
   { id: "2-1", name: "회화 익힘책 2-1", pct: 15, color: "#7C6FE4", tag: "2-1", studying: true },
@@ -873,23 +888,104 @@ function BunnyMascot() {
 }
 
 /* Cây tiến độ: phát triển cùng phần trăm hoàn thành giáo trình. */
-function Plant({ progress = 0 }) {
+function Plant({ progress = 0, variant = "mugunghwa" }) {
   const pct = Math.max(0, Math.min(100, Math.round(progress)));
   const stage = pct === 100 ? 5 : pct >= 75 ? 4 : pct >= 50 ? 3 : pct >= 25 ? 2 : pct > 0 ? 1 : 0;
-  const stageLabel = ["Hạt giống", "Nảy mầm", "Cây non", "Đang phát triển", "Cây sum suê", "Cây Mugunghwa nở hoa"][stage];
+  const plantNames = { mugunghwa: "Mugunghwa", cherry: "Anh đào", sunflower: "Hướng dương", lavender: "Oải hương", bonsai: "Bonsai", succulent: "Sen đá", cactus: "Xương rồng", bamboo: "Tre may mắn", monstera: "Trầu bà lá xẻ", rose: "Hoa hồng" };
+  const stageLabel = stage === 5 ? `${plantNames[variant] || plantNames.mugunghwa} trưởng thành` : ["Hạt giống", "Nảy mầm", "Cây non", "Đang phát triển", "Cây sum suê"][stage];
 
   return (
     <span key={stage} className="progress-plant-wrap" tabIndex={0} aria-label={`${stageLabel}, tiến độ ${pct}%`}>
-    <svg className={`progress-plant stage-${stage}`} viewBox="0 0 90 110" width="72" height="88" aria-hidden="true">
+    <svg className={`progress-plant plant-${variant} stage-${stage}`} viewBox="0 0 90 110" width="72" height="88" aria-hidden="true">
       <ellipse cx="45" cy="77" rx="16" ry="5" fill="#7B5136" />
       {stage === 0 && <ellipse className="plant-seed" cx="45" cy="70" rx="5" ry="3.5" fill="#8C623F" />}
-      {stage >= 1 && <path className="plant-stem" d={`M45 73 C44 63 45 ${stage >= 4 ? 29 : stage === 3 ? 38 : stage === 2 ? 49 : 61} 46 ${stage >= 4 ? 22 : stage === 3 ? 34 : stage === 2 ? 46 : 58}`} fill="none" stroke={stage === 5 ? "#397A3F" : "#4E9E5F"} strokeWidth={stage === 5 ? 5 : 3.5} strokeLinecap="round" />}
-      {stage >= 1 && <path className="plant-leaf leaf-one" d="M45 62 C35 52 29 54 27 57 C33 65 39 67 45 66 Z" fill="#65B96F" />}
-      {stage >= 2 && <path className="plant-leaf leaf-two" d="M45 53 C53 42 62 42 66 46 C60 55 54 58 45 58 Z" fill="#4E9E5F" />}
-      {stage >= 3 && <path className="plant-leaf leaf-three" d="M45 44 C36 34 27 35 24 39 C30 48 37 51 45 50 Z" fill="#72C57B" />}
-      {stage >= 4 && <path className="plant-leaf leaf-four" d="M45 34 C54 23 65 24 69 29 C62 38 55 41 45 40 Z" fill="#3F9B54" />}
-      {stage === 4 && <path className="plant-leaf leaf-five" d="M45 29 C38 19 30 19 27 23 C31 31 37 35 45 35 Z" fill="#5AAF67" />}
-      {stage === 5 && (
+      {variant === "mugunghwa" && stage >= 1 && <path className="plant-stem" d={`M45 73 C44 63 45 ${stage >= 4 ? 29 : stage === 3 ? 38 : stage === 2 ? 49 : 61} 46 ${stage >= 4 ? 22 : stage === 3 ? 34 : stage === 2 ? 46 : 58}`} fill="none" stroke={stage === 5 ? "#397A3F" : "#4E9E5F"} strokeWidth={stage === 5 ? 5 : 3.5} strokeLinecap="round" />}
+      {variant === "mugunghwa" && stage >= 1 && <path className="plant-leaf leaf-one" d="M45 62 C35 52 29 54 27 57 C33 65 39 67 45 66 Z" fill="#65B96F" />}
+      {variant === "mugunghwa" && stage >= 2 && <path className="plant-leaf leaf-two" d="M45 53 C53 42 62 42 66 46 C60 55 54 58 45 58 Z" fill="#4E9E5F" />}
+      {variant === "mugunghwa" && stage >= 3 && <path className="plant-leaf leaf-three" d="M45 44 C36 34 27 35 24 39 C30 48 37 51 45 50 Z" fill="#72C57B" />}
+      {variant === "mugunghwa" && stage >= 4 && <path className="plant-leaf leaf-four" d="M45 34 C54 23 65 24 69 29 C62 38 55 41 45 40 Z" fill="#3F9B54" />}
+      {variant === "mugunghwa" && stage === 4 && <path className="plant-leaf leaf-five" d="M45 29 C38 19 30 19 27 23 C31 31 37 35 45 35 Z" fill="#5AAF67" />}
+
+      {/* Mỗi giống cây có hình thái phát triển riêng, không dùng lại bộ thân/lá mặc định. */}
+      {variant === "sunflower" && stage >= 1 && stage < 5 && (
+        <g className="sunflower-growth">
+          <path className="plant-stem" d={`M45 74 L45 ${stage === 1 ? 60 : stage === 2 ? 48 : stage === 3 ? 34 : 21}`} fill="none" stroke="#51964D" strokeWidth={stage >= 3 ? 5 : 3.5} strokeLinecap="round" />
+          {stage >= 2 && <path className="plant-leaf" d="M44 60 C31 48 22 51 20 57 C27 67 36 68 44 65Z" fill="#65A85B" />}
+          {stage >= 3 && <path className="plant-leaf" d="M46 49 C59 36 69 40 71 46 C63 57 54 58 46 54Z" fill="#4E984E" />}
+          {stage === 4 && <g transform="translate(45 19)">{Array.from({ length: 10 }, (_, i) => <ellipse key={i} cy="-7" ry="7" rx="3.2" fill="#F7C743" transform={`rotate(${i * 36})`} />)}<circle r="6" fill="#80562E" /></g>}
+          {stage === 3 && <circle cx="45" cy="32" r="7" fill="#6EA456" />}
+        </g>
+      )}
+      {variant === "cherry" && stage >= 1 && stage < 5 && (
+        <g className="cherry-growth">
+          <path className="plant-stem" d={`M45 74 C43 62 48 ${stage >= 3 ? 47 : 58} ${stage >= 4 ? 39 : 45} ${stage >= 4 ? 28 : stage === 3 ? 40 : 54}`} fill="none" stroke="#76513F" strokeWidth={stage >= 3 ? 5 : 3.5} strokeLinecap="round" />
+          {stage >= 2 && <path d="M44 58 C35 51 30 47 25 43" fill="none" stroke="#76513F" strokeWidth="3" strokeLinecap="round" />}
+          {stage >= 2 && <circle cx="25" cy="42" r={stage >= 4 ? 11 : 7} fill="#F2B2C7" />}
+          {stage >= 3 && <circle cx="43" cy="36" r={stage >= 4 ? 14 : 9} fill="#F6C0D1" />}
+          {stage >= 4 && <><path d="M42 45 C53 39 59 34 64 28" fill="none" stroke="#76513F" strokeWidth="3" /><circle cx="65" cy="27" r="11" fill="#EFA6BE" /><circle cx="48" cy="37" r="3" fill="#FFF4F7" /><circle cx="66" cy="25" r="3" fill="#FFF4F7" /></>}
+        </g>
+      )}
+      {variant === "lavender" && stage >= 1 && stage < 5 && (
+        <g className="lavender-growth">
+          {Array.from({ length: stage }, (_, i) => {
+            const x = 45 + (i - (stage - 1) / 2) * 9;
+            const top = 60 - stage * 8 + Math.abs(i - 1.5) * 3;
+            return <g key={i}><path d={`M45 74 Q${x} 57 ${x} ${top}`} fill="none" stroke="#73966A" strokeWidth="2.2" />{Array.from({ length: stage >= 3 ? 3 : 2 }, (__, j) => <g key={j}><ellipse cx={x - 2.5} cy={top + j * 6} rx="3.5" ry="2.2" fill="#9378CB" transform={`rotate(-30 ${x - 2.5} ${top + j * 6})`} /><ellipse cx={x + 2.5} cy={top + j * 6 + 2} rx="3.5" ry="2.2" fill="#B09ADE" transform={`rotate(30 ${x + 2.5} ${top + j * 6 + 2})`} /></g>)}</g>;
+          })}
+        </g>
+      )}
+      {variant === "bonsai" && stage >= 1 && stage < 5 && (
+        <g className="bonsai-growth">
+          <path className="plant-stem" d={`M45 74 C${stage >= 2 ? 34 : 42} 63 ${stage >= 3 ? 53 : 43} 54 ${stage >= 4 ? 40 : 45} ${stage >= 4 ? 34 : 51}`} fill="none" stroke="#76513F" strokeWidth={stage >= 3 ? 7 : 4.5} strokeLinecap="round" />
+          <ellipse cx={stage >= 2 ? 37 : 43} cy={stage >= 2 ? 57 : 54} rx={stage >= 3 ? 14 : 9} ry={stage >= 3 ? 7 : 5} fill="#4D7E52" />
+          {stage >= 3 && <ellipse cx="50" cy="42" rx={stage >= 4 ? 18 : 13} ry={stage >= 4 ? 8 : 6} fill="#3F7047" />}
+          {stage >= 4 && <ellipse cx="31" cy="33" rx="16" ry="7" fill="#588758" />}
+        </g>
+      )}
+      {variant === "succulent" && stage >= 1 && stage < 5 && (
+        <g className="succulent-growth">
+          {Array.from({ length: stage + 2 }, (_, i) => {
+            const angle = (360 / (stage + 2)) * i;
+            return <ellipse key={i} cx="45" cy={stage === 1 ? 64 : 60} rx={stage * 2.3 + 5} ry={stage + 3} fill={i % 2 ? "#77B69A" : "#91C7AA"} transform={`rotate(${angle} 45 ${stage === 1 ? 64 : 60})`} />;
+          })}
+          {stage >= 3 && Array.from({ length: 7 }, (_, i) => <ellipse key={`inner-${i}`} cx="45" cy="58" rx="8" ry="4" fill="#A9D4B8" transform={`rotate(${i * 51} 45 58)`} />)}
+        </g>
+      )}
+      {variant === "cactus" && stage >= 1 && stage < 5 && (
+        <g className="cactus-growth">
+          <rect x={39 - stage} y={70 - stage * 10} width={12 + stage * 2} height={stage * 10 + 7} rx={7 + stage} fill="#58A66F" />
+          {stage >= 2 && <path d="M40 59 H34 Q29 59 29 53 V48" fill="none" stroke="#58A66F" strokeWidth={stage >= 4 ? 8 : 6} strokeLinecap="round" />}
+          {stage >= 3 && <path d="M51 49 H58 Q63 49 63 43 V38" fill="none" stroke="#4A9564" strokeWidth={stage >= 4 ? 8 : 6} strokeLinecap="round" />}
+          {stage >= 4 && <g transform="translate(46 28)"><circle r="7" fill="#F29AB6" /><circle r="3" fill="#F9D36E" /></g>}
+          {Array.from({ length: stage + 2 }, (_, i) => <path key={i} d={`M${43 + (i % 2) * 5} ${65 - i * 7} l${i % 2 ? 3 : -3} -2`} stroke="#D8E8C9" strokeWidth="1" />)}
+        </g>
+      )}
+      {variant === "bamboo" && stage >= 1 && stage < 5 && (
+        <g className="bamboo-growth">
+          <path d={stage === 1 ? "M45 74V59" : stage === 2 ? "M42 74V49M50 74V43" : stage === 3 ? "M37 74V39M45 74V32M54 74V38" : "M36 74V28M45 74V20M55 74V27"} stroke="#62A95F" strokeWidth="5" strokeLinecap="round" />
+          {stage >= 2 && <path d="M39 59h6M47 58h6M42 49h6M47 43h6" stroke="#397E45" strokeWidth="1.5" />}
+          {stage >= 3 && <><path d="M37 43 C27 35 22 40 23 44 C29 49 34 48 37 46Z" fill="#76BA6E" /><path d="M54 40 C64 32 69 37 68 41 C62 46 57 45 54 43Z" fill="#64AA61" /></>}
+          {stage >= 4 && <><path d="M45 28 C35 19 30 24 31 28 C36 34 41 33 45 31Z" fill="#82C177" /><path d="M55 32 C65 23 71 28 70 32 C64 38 59 37 55 35Z" fill="#6EB268" /></>}
+        </g>
+      )}
+      {variant === "monstera" && stage >= 1 && stage < 5 && (
+        <g className="monstera-growth">
+          <path d={`M45 74 C44 62 45 ${62 - stage * 7} 46 ${58 - stage * 7}`} fill="none" stroke="#4D9060" strokeWidth="4" />
+          <path d={`M45 ${66 - stage * 4} C${29 - stage} ${55 - stage * 5} ${22 - stage} ${61 - stage * 5} ${24 - stage} ${69 - stage * 5} C34 ${73 - stage * 5} 41 ${69 - stage * 5} 45 ${66 - stage * 4}Z`} fill="#4FA16B" />
+          {stage >= 2 && <path d={`M46 ${58 - stage * 5} C${60 + stage} ${46 - stage * 4} ${70 + stage} ${52 - stage * 4} ${68 + stage} ${60 - stage * 4} C58 ${65 - stage * 4} 51 ${62 - stage * 4} 46 ${58 - stage * 5}Z`} fill="#3D8E5D" />}
+          {stage >= 3 && <path d="M31 47 l5 5 m-1-10 5 6 M59 38 l-5 7 m12-4-8 7" stroke="#D5EACE" strokeWidth="1.4" />}
+        </g>
+      )}
+      {variant === "rose" && stage >= 1 && stage < 5 && (
+        <g className="rose-growth">
+          <path d={`M45 74 C39 62 51 55 44 ${stage >= 4 ? 30 : 64 - stage * 9}`} fill="none" stroke="#4D915B" strokeWidth="4" strokeLinecap="round" />
+          {stage >= 2 && <path d="M44 59 C33 50 28 54 28 58 C34 64 39 65 44 63Z" fill="#5BA464" />}
+          {stage >= 3 && <path d="M46 48 C57 40 64 44 64 48 C58 55 52 56 46 53Z" fill="#4C955A" />}
+          {stage >= 3 && <circle cx="45" cy={stage >= 4 ? 28 : 36} r={stage >= 4 ? 10 : 7} fill="#D95775" />}
+          {stage >= 4 && <><path d="M38 28 Q45 20 52 28 Q45 38 38 28Z" fill="#EE8098" /><path d="M41 27 Q45 23 49 27 Q45 32 41 27Z" fill="#B93659" /></>}
+        </g>
+      )}
+      {stage === 5 && variant === "mugunghwa" && (
         <g className="mature-crown">
           <circle cx="33" cy="31" r="15" fill="#57A95E" />
           <circle cx="49" cy="22" r="17" fill="#438E4D" />
@@ -930,8 +1026,73 @@ function Plant({ progress = 0 }) {
           </g>
         </g>
       )}
-      <path d="M28 78 h34 l-4 26 a6 6 0 0 1-6 5 h-14 a6 6 0 0 1-6-5 Z" fill="#E8B98B" />
-      <path d="M26 74 h38 v8 h-38 z" fill="#D9A876" rx="3" />
+      {stage === 5 && variant === "cherry" && (
+        <g className="mature-crown cherry-crown">
+          <path d="M45 68 C43 54 39 44 32 34 M45 57 C53 48 59 39 62 30 M42 50 C35 43 29 39 24 36" fill="none" stroke="#76513F" strokeWidth="4" strokeLinecap="round" />
+          <circle cx="25" cy="31" r="13" fill="#F4AFC5" /><circle cx="39" cy="23" r="15" fill="#F7BED0" /><circle cx="56" cy="27" r="16" fill="#EDA1BC" /><circle cx="67" cy="39" r="12" fill="#F7C4D3" /><circle cx="37" cy="41" r="16" fill="#F5B3C8" />
+          {[[20,27],[34,17],[48,23],[62,29],[31,37],[54,42],[70,38]].map(([x,y], i) => <g key={i} transform={`translate(${x} ${y})`}><circle r="4" fill="#FFF4F7" /><circle r="1.4" fill="#E8789D" /></g>)}
+        </g>
+      )}
+      {stage === 5 && variant === "sunflower" && (
+        <g className="mature-crown sunflower-crown">
+          <path d="M45 70 C45 54 45 39 45 20 M44 50 C36 43 31 37 28 31 M46 48 C54 41 61 35 64 27" fill="none" stroke="#4F944F" strokeWidth="4" strokeLinecap="round" />
+          {[[45,19,1],[25,30,.78],[66,27,.82]].map(([x,y,s], flowerIndex) => <g key={flowerIndex} transform={`translate(${x} ${y}) scale(${s})`}>{Array.from({length:12},(_,i)=><ellipse key={i} cy="-10" ry="9" rx="4" fill={i%2 ? "#FFD95A" : "#F7C43C"} transform={`rotate(${i*30})`} />)}<circle r="8" fill="#76502D" /><circle r="4.5" fill="#9B6A32" /></g>)}
+          <path d="M44 53 C34 45 27 47 24 51 C31 59 38 59 44 58Z" fill="#5EAA59" /><path d="M46 43 C56 35 64 37 67 41 C61 49 53 51 46 49Z" fill="#4C9850" />
+        </g>
+      )}
+      {stage === 5 && variant === "lavender" && (
+        <g className="mature-crown lavender-crown">
+          {[[31,35],[39,23],[47,30],[55,18],[63,34]].map(([x,y], stemIndex) => <g key={stemIndex}><path d={`M45 72 Q${x} 53 ${x} ${y}`} fill="none" stroke="#6F9564" strokeWidth="2.4" strokeLinecap="round" />{[0,6,12,18].map((dy,i)=><g key={i}><ellipse cx={x-3} cy={y+dy} rx="4" ry="2.5" fill={i%2 ? "#8D74C8" : "#A58CDD"} transform={`rotate(-28 ${x-3} ${y+dy})`} /><ellipse cx={x+3} cy={y+dy+2} rx="4" ry="2.5" fill={i%2 ? "#A58CDD" : "#7C61B8"} transform={`rotate(28 ${x+3} ${y+dy+2})`} /></g>)}</g>)}
+          <path d="M45 60 C34 52 27 55 26 59 C33 66 39 67 45 65Z" fill="#789D70" /><path d="M46 55 C55 48 63 50 66 54 C59 61 52 62 46 60Z" fill="#688D63" />
+        </g>
+      )}
+      {stage === 5 && variant === "bonsai" && (
+        <g className="mature-crown bonsai-crown">
+          <path d="M45 73 C34 59 53 54 40 43 C31 35 43 28 51 20" fill="none" stroke="#74513B" strokeWidth="8" strokeLinecap="round" />
+          <path d="M42 50 C31 46 25 43 18 38 M45 39 C56 34 62 30 69 24" fill="none" stroke="#74513B" strokeWidth="4" strokeLinecap="round" />
+          <ellipse cx="25" cy="35" rx="19" ry="10" fill="#487B4D" /><ellipse cx="57" cy="23" rx="22" ry="11" fill="#3D7045" /><ellipse cx="61" cy="42" rx="18" ry="9" fill="#568A58" /><ellipse cx="34" cy="51" rx="17" ry="8" fill="#416F47" />
+          <path d="M15 34 Q25 25 38 34 M43 22 Q57 12 74 22 M47 41 Q61 32 76 41" fill="none" stroke="#75A272" strokeWidth="2" opacity=".7" />
+        </g>
+      )}
+      {stage === 5 && variant === "succulent" && (
+        <g className="mature-crown succulent-crown">
+          {[0,45,90,135].map((angle) => <ellipse key={`outer-${angle}`} cx="45" cy="57" rx="25" ry="9" fill={angle % 90 ? "#67A98E" : "#78B89A"} transform={`rotate(${angle} 45 57)`} />)}
+          {[22,82,142,202,262,322].map((angle) => <ellipse key={`mid-${angle}`} cx="45" cy="57" rx="17" ry="7" fill={angle % 2 ? "#94C9A9" : "#86BEA0"} transform={`rotate(${angle} 45 57)`} />)}
+          {[0,60,120].map((angle) => <ellipse key={`in-${angle}`} cx="45" cy="57" rx="10" ry="5" fill="#B7D9BB" transform={`rotate(${angle} 45 57)`} />)}
+          <circle cx="45" cy="57" r="4" fill="#D6E7C8" />
+        </g>
+      )}
+      {stage === 5 && variant === "cactus" && (
+        <g className="mature-crown cactus-crown">
+          <rect x="34" y="19" width="22" height="57" rx="11" fill="#4F9D68" />
+          <path d="M36 53 H27 Q20 53 20 44 V35 M54 44 H64 Q70 44 70 35 V28" fill="none" stroke="#58A66F" strokeWidth="11" strokeLinecap="round" />
+          <path d="M40 23 V70 M50 23 V70" stroke="#75BC83" strokeWidth="1.5" opacity=".7" />
+          {[[31,34],[44,18],[67,27]].map(([x,y], i) => <g key={i} transform={`translate(${x} ${y})`}>{Array.from({length:7},(_,j)=><ellipse key={j} cy="-6" ry="6" rx="3" fill={j%2 ? "#F5A0B9" : "#EA789B"} transform={`rotate(${j*51})`} />)}<circle r="3" fill="#FFD66C" /></g>)}
+          {[[38,32],[51,39],[41,51],[50,60],[26,42],[66,34]].map(([x,y],i)=><path key={i} d={`M${x} ${y} l${i%2?3:-3} -2`} stroke="#E5EBCF" strokeWidth="1.2" />)}
+        </g>
+      )}
+      {stage === 5 && variant === "bamboo" && (
+        <g className="mature-crown bamboo-crown">
+          <path d="M31 76V26M43 76V15M55 76V23" stroke="#64AA60" strokeWidth="6" strokeLinecap="round" />
+          <path d="M27 34h8M27 48h8M27 62h8M39 34h8M39 48h8M39 62h8M51 34h8M51 48h8M51 62h8" stroke="#367A43" strokeWidth="1.7" />
+          <path d="M31 31 C20 21 13 26 15 31 C21 37 27 35 31 34Z M31 44 C41 35 48 40 47 44 C41 50 35 48 31 47Z M43 22 C32 12 26 17 27 22 C33 28 39 26 43 25Z M43 38 C54 28 61 34 60 38 C54 44 47 42 43 41Z M55 31 C66 21 73 27 72 31 C66 37 59 35 55 34Z M55 47 C44 38 38 43 39 47 C45 53 51 51 55 50Z" fill="#72B96C" />
+        </g>
+      )}
+      {stage === 5 && variant === "monstera" && (
+        <g className="mature-crown monstera-crown">
+          <path d="M45 75 C43 57 43 43 44 25 M44 58 C32 50 24 40 20 29 M46 57 C58 48 67 38 71 25" fill="none" stroke="#477E55" strokeWidth="4" />
+          {[[20,27,-28],[44,22,0],[70,26,28],[31,45,-18],[59,44,18]].map(([x,y,r],i)=><g key={i} transform={`translate(${x} ${y}) rotate(${r})`}><path d="M0 17 C-15 11-18-5-7-14 C0-20 12-13 14-3 C16 8 8 14 0 17Z" fill={i%2 ? "#3E9360" : "#50A56B"} /><path d="M0 15 V-12 M-2 4 l-8-6 M2 1 l7-7 M-1 9 l-7-2 M2 7 l7-3" stroke="#C6E2C0" strokeWidth="1.4" /></g>)}
+        </g>
+      )}
+      {stage === 5 && variant === "rose" && (
+        <g className="mature-crown rose-crown">
+          <path d="M45 74 C34 62 54 53 42 43 C34 35 47 28 48 19 M43 52 C34 47 28 42 24 35 M45 42 C55 37 62 31 66 25" fill="none" stroke="#498D58" strokeWidth="4" strokeLinecap="round" />
+          <path d="M42 58 C31 51 27 55 27 59 C33 65 38 65 43 63Z M46 49 C57 41 63 45 63 49 C57 55 52 56 46 54Z" fill="#58A15F" />
+          {[[24,32,.72],[48,18,1],[67,24,.82],[43,42,.66]].map(([x,y,s],i)=><g key={i} transform={`translate(${x} ${y}) scale(${s})`}><circle r="10" fill="#E9607E" /><path d="M-8 0 Q0-12 8 0 Q0 11-8 0Z" fill="#F18BA0" /><path d="M0-8 Q10 0 0 8 Q-10 0 0-8Z" fill="#D44367" /><circle r="3.5" fill="#A92F50" /></g>)}
+        </g>
+      )}
+      <path className="plant-pot-body" d="M28 78 h34 l-4 26 a6 6 0 0 1-6 5 h-14 a6 6 0 0 1-6-5 Z" fill="#E8B98B" />
+      <path className="plant-pot-rim" d="M26 74 h38 v8 h-38 z" fill="#D9A876" rx="3" />
     </svg>
     <span className="plant-tooltip" aria-hidden="true"><span className="plant-tooltip-icon">{stage === 5 ? "🌺" : "🌱"}</span><span><b>{stageLabel}</b><small>Tiến độ giáo trình</small></span><strong>{pct}%</strong></span>
     </span>
@@ -949,13 +1110,14 @@ const NAV_TILES = [
   { id: "caidat", label: "Cài đặt", mobileLabel: "Cài đặt", icon: Settings, color: "#8B85AB", bg: "#F3F1FC" },
 ];
 
-function Sidebar({ active, setActive, setView, setLesson, goHome, onSignOut, isAdmin }) {
+function Sidebar({ active, setActive, setView, setLesson, goHome, onSignOut, isAdmin, gems = 0, onOpenShop }) {
   const handleTileClick = (id) => {
     setActive(id);
     if (id === "giaotrinh") setView("curriculum-hub");
     else if (id === "nguphap") setView("nguphap-hub");
     else if (id === "thithu") setView("mock-exam");
     else if (id === "xephanghub") setView("xephang");
+    else if (id === "cuahang") { setView("cuahang"); onOpenShop?.(); }
     else if (id === "caidat") setView("caidat");
   };
 
@@ -995,9 +1157,9 @@ function Sidebar({ active, setActive, setView, setLesson, goHome, onSignOut, isA
 
       <div className="mascot"><BunnyMascot /></div>
 
-      <button className="gem-btn">
-        <Gem size={17} color="#7C6FE4" fill="#B9AFF0" />
-        <span>{USER.gems.toLocaleString("vi-VN")}</span>
+      <button className={`gem-btn ${active === "cuahang" ? "active" : ""}`} onClick={() => { setActive("cuahang"); setView("cuahang"); onOpenShop?.(); }} aria-label={`Mở cửa hàng cây, hiện có ${gems} kim cương`}>
+        <DiamondIcon size={18} />
+        <span>{gems.toLocaleString("vi-VN")}</span>
         <ChevronRight size={16} className="gem-chev" />
       </button>
       <button className="sidebar-signout" onClick={onSignOut} aria-label="Đăng xuất khỏi tài khoản">
@@ -1039,7 +1201,10 @@ function Header({ profile, onOpenNotif }) {
   const name = profile?.displayName || "bạn";
 
   return (
-    <section className="header">
+    <section
+      className="header"
+      style={{ "--dashboard-card-background": `url("${dashboardCardBackgroundUrl}")` }}
+    >
       <button className="avatar-btn" onClick={onOpenNotif} aria-label="Thông báo">
         <Avatar />
         {hasNotif && <span className="notif-dot" title="Có thông báo mới" />}
@@ -1274,7 +1439,7 @@ function ReviewSchedule({ userId, onReview }) {
   );
 }
 
-function ContinueLearning({ onGo, textbook, lesson, hasStarted = false }) {
+function ContinueLearning({ onGo, textbook, lesson, hasStarted = false, plantVariant = "mugunghwa" }) {
   const overallPct = lesson?.progressPercent ?? textbook?.progressPercent ?? 0;
   if (!textbook || !lesson) {
     return (
@@ -1300,7 +1465,7 @@ function ContinueLearning({ onGo, textbook, lesson, hasStarted = false }) {
             <em>{overallPct}%</em>
           </div>
         </div>
-        <div className="cont-plant"><Plant progress={overallPct} /></div>
+        <div className="cont-plant"><Plant progress={overallPct} variant={plantVariant} /></div>
       </div>
       <button className="primary-btn" onClick={onGo}><Play size={16} fill="#fff" /> {hasStarted ? "Tiếp tục học" : "Bắt đầu học"}</button>
     </section>
@@ -2030,6 +2195,45 @@ function parseAIJson(value) {
   }
 }
 
+function PlantShopView({ shop, loading, notice, onBack, onBuy, onSelect }) {
+  return (
+    <section className="plant-shop-page">
+      <div className="page-toolbar plant-shop-toolbar">
+        <div className="page-back-heading">
+          <button className="fc2-back" onClick={onBack} aria-label="Về trang chủ"><ChevronLeft size={20} /></button>
+          <div>
+            <h2><DiamondIcon size={24} /> Cửa hàng cây</h2>
+            <p>Đổi kim cương lấy cây đồng hành cho tiến độ giáo trình của bạn.</p>
+          </div>
+        </div>
+        <div className="shop-balance"><DiamondIcon size={21} /><strong>{shop.balance.toLocaleString("vi-VN")}</strong><span>kim cương</span></div>
+      </div>
+      {notice && <div className={`shop-notice ${notice.type || "info"}`}>{notice.message}</div>}
+      <div className="plant-shop-grid">
+        {shop.plants.map((plant) => (
+          <article className={`plant-shop-card ${plant.selected ? "selected" : ""}`} key={plant.id}>
+            <div className="plant-shop-preview"><Plant progress={100} variant={plant.id} /></div>
+            <div className="plant-shop-info">
+              <span className="plant-shop-eyebrow">CÂY TIẾN ĐỘ</span>
+              <h3>{plant.name}</h3>
+              <p>{plant.description}</p>
+            </div>
+            {plant.selected ? (
+              <button className="plant-shop-action selected" disabled>✓ Đang sử dụng</button>
+            ) : plant.owned ? (
+              <button className="plant-shop-action" disabled={loading} onClick={() => onSelect(plant.id)}>Chọn cây này</button>
+            ) : (
+              <button className="plant-shop-action buy" disabled={loading || shop.balance < plant.price} onClick={() => onBuy(plant.id)}>
+                <DiamondIcon size={16} /> {plant.price.toLocaleString("vi-VN")}
+              </button>
+            )}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function DictationModeSelectView({ lesson, onBack, onSelect }) {
   return (
     <section className="card page dictation-mode-page">
@@ -2685,7 +2889,7 @@ function ShadowingView({ lesson, onBack, onFinish }) {
           <div className="fc2-progress-bar"><div style={{ width: `${((idx + 1) / total) * 100}%` }} /></div>
         </div>
         <span className="fc2-pill"><Flame size={13} color="#F0642E" fill="#F79A5E" /> {USER.streak}</span>
-        <span className="fc2-pill gem"><Gem size={13} color="#7C6FE4" fill="#B9AFF0" /> {USER.gems.toLocaleString("vi-VN")}</span>
+        <span className="fc2-pill gem"><DiamondIcon size={14} /> <UserGemCount /></span>
       </div>
 
       <div className="sw-body">
@@ -3902,7 +4106,7 @@ function ReviewResultView({ answers, writingResults, elapsedMs, difficulty, refl
           {writingAvg !== null && <span><Type size={13} color="#E5566B" /> Viết {writingAvg}/100</span>}
           <span>⏱ {timeLabel}</span>
           <span><Star size={13} fill="#F0C24E" color="#F0C24E" /> +{xpEarned} XP</span>
-          <span><Gem size={13} color="#7C6FE4" fill="#B9AFF0" /> +{gemEarned}</span>
+          <span><DiamondIcon size={14} /> +{gemEarned}</span>
         </div>
 
         {reflexAccuracy !== null && (
@@ -4900,7 +5104,7 @@ function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords
         </div>
         <div className="fc2-top-right">
           <span className="fc2-pill xp"><Star size={13} fill="#F0C24E" color="#F0C24E" /> {USER.xp.toLocaleString("vi-VN")} XP</span>
-          <span className="fc2-pill gem"><Gem size={13} color="#7C6FE4" fill="#B9AFF0" /> {USER.gems.toLocaleString("vi-VN")}</span>
+          <span className="fc2-pill gem"><DiamondIcon size={14} /> <UserGemCount /></span>
           <button className="fc2-gear" aria-label="Cài đặt"><Settings size={17} /></button>
         </div>
       </div>
@@ -5228,7 +5432,7 @@ function VocabTestSelectView({ lesson, onBack, onPick }) {
         <div className="fc2-top-right">
           <span className="fc2-pill"><Flame size={13} color="#F0642E" fill="#F79A5E" /> {USER.streak}</span>
           <span className="fc2-pill xp"><Star size={13} fill="#F0C24E" color="#F0C24E" /> {USER.xp.toLocaleString("vi-VN")}</span>
-          <span className="fc2-pill gem"><Gem size={13} color="#7C6FE4" fill="#B9AFF0" /> {USER.gems.toLocaleString("vi-VN")}</span>
+          <span className="fc2-pill gem"><DiamondIcon size={14} /> <UserGemCount /></span>
         </div>
       </div>
 
@@ -5779,7 +5983,7 @@ function DictationView({ lesson, initialMode = "practice", onBack, onFinish, onG
         <div className="fc2-top-mid"><span className="fc2-progress-text">Câu {idx + 1} / {total}</span></div>
         <div className="fc2-top-right">
           <span className="fc2-pill xp"><Star size={13} fill="#F0C24E" color="#F0C24E" /> {USER.xp.toLocaleString("vi-VN")}</span>
-          <span className="fc2-pill gem"><Gem size={13} color="#7C6FE4" fill="#B9AFF0" /> {USER.gems.toLocaleString("vi-VN")}</span>
+          <span className="fc2-pill gem"><DiamondIcon size={14} /> <UserGemCount /></span>
         </div>
       </div>
 
@@ -7248,6 +7452,9 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const [catalogNotice, setCatalogNotice] = useState(null);
   const [lessonCelebration, setLessonCelebration] = useState(false);
   const [reviewAllFlashcards, setReviewAllFlashcards] = useState(false);
+  const [shop, setShop] = useState({ balance: 0, selectedPlant: "mugunghwa", plants: [] });
+  const [shopLoading, setShopLoading] = useState(false);
+  const [shopNotice, setShopNotice] = useState(null);
   const goHome = () => { setView("home"); setActive("home"); };
   const openLesson = (l, backView = "tuvung-bai") => {
     if (l?.textbookId && l?.id) markLessonStarted(l.textbookId, l.id).catch(() => {});
@@ -7258,6 +7465,39 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   };
   const openVocabulary = (l, backView) => { setLesson(l); setVocabBackView(backView); setView("vocab-list"); };
   const immersive = IMMERSIVE_VIEWS.includes(view);
+
+  const refreshShop = async () => {
+    try {
+      const state = await loadShopState();
+      setShop(state);
+      return state;
+    } catch (error) {
+      setShopNotice({ type: "error", message: "Chưa tải được cửa hàng. Hãy chạy migration mới rồi thử lại." });
+      return null;
+    }
+  };
+
+  const handleBuyPlant = async (plantId) => {
+    setShopLoading(true); setShopNotice(null);
+    try {
+      await purchasePlant(plantId);
+      await refreshShop();
+      setShopNotice({ type: "success", message: "Đã đổi cây thành công. Bạn có thể chọn cây để sử dụng." });
+    } catch (error) {
+      setShopNotice({ type: "error", message: error?.message?.includes("Not enough") ? "Bạn chưa đủ kim cương để đổi cây này." : "Không thể đổi cây lúc này." });
+    } finally { setShopLoading(false); }
+  };
+
+  const handleSelectPlant = async (plantId) => {
+    setShopLoading(true); setShopNotice(null);
+    try {
+      await selectPlant(plantId);
+      await refreshShop();
+      setShopNotice({ type: "success", message: "Đã đổi cây tiến độ giáo trình." });
+    } catch (error) {
+      setShopNotice({ type: "error", message: "Không thể chọn cây này." });
+    } finally { setShopLoading(false); }
+  };
 
   const prepareLearningCatalog = (catalog) => {
     if (!catalog) return null;
@@ -7335,8 +7575,16 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
       await handleLessonProgressChange(lessonProgress, activities);
       const lessonDone = ACTIVITIES.every((activity) => (activities[activity.id] || 0) >= 100);
       if (lessonDone) {
+        let gemReward = null;
+        try {
+          gemReward = await awardLessonGems(lesson.textbookId || "2-1", lesson.id || lesson.no);
+          if (gemReward?.balance != null) setShop((current) => ({ ...current, balance: gemReward.balance }));
+        } catch (error) {}
         goHome();
-        setLessonCelebration({ title: `Bài ${lesson.no}${lesson.title ? ` · ${lesson.title}` : ""}` });
+        setLessonCelebration({
+          title: `Bài ${lesson.no}${lesson.title ? ` · ${lesson.title}` : ""}`,
+          gems: gemReward?.awarded ? 25 : 0,
+        });
         if (isCelebrationSoundEnabled()) playCelebrationSound();
         window.setTimeout(() => setLessonCelebration(false), 4500);
       } else {
@@ -7368,6 +7616,12 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     });
     return () => { alive = false; };
   }, [profile]);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    refreshShop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
 
   // Chỉ tính thời gian ở màn hình học thật và khi tab trình duyệt đang hiển thị.
   // Trang chủ, menu, cài đặt, cộng đồng, màn chọn bài/kết quả đều không tính.
@@ -7415,6 +7669,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const continueLesson = continueTextbook ? (learningCatalog?.continueLesson || catalogLessons[0]) : null;
 
   return (
+    <GemBalanceContext.Provider value={shop.balance}>
     <div className={`app ${immersive ? "no-sidebar" : ""}`}>
       <style>{css}</style>
       {lessonCelebration && (
@@ -7425,11 +7680,12 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             <span className="lesson-celebration-kicker">TUYỆT VỜI!</span>
             <strong>Bạn đã hoàn thành bài học</strong>
             <p>{lessonCelebration.title}</p>
+            {lessonCelebration.gems > 0 && <div className="lesson-gem-reward"><DiamondIcon size={21} /> +25 kim cương</div>}
           </div>
         </div>
       )}
       {!immersive && (
-        <Sidebar active={active} setActive={setActive} setView={setView} setLesson={setLesson} goHome={goHome} onSignOut={onSignOut} isAdmin={profile?.role === "admin"} />
+        <Sidebar active={active} setActive={setActive} setView={setView} setLesson={setLesson} goHome={goHome} onSignOut={onSignOut} isAdmin={profile?.role === "admin"} gems={shop.balance} onOpenShop={refreshShop} />
       )}
       <main className="main">
         {view === "home" && (
@@ -7441,6 +7697,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 textbook={continueTextbook}
                 lesson={continueLesson}
                 hasStarted={learningCatalog?.hasStarted || false}
+                plantVariant={shop.selectedPlant}
                 onGo={() => continueLesson
                   ? openLesson(continueLesson, "home")
                   : (setCatalogNotice(null), setView("curriculum-hub"), setActive("curriculum"))}
@@ -7480,6 +7737,16 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             onBack={goHome}
             onOpenBook={openGrammarBook}
             onAddBook={() => { setCatalogNotice(null); setView("curriculum-hub"); setActive("giaotrinh"); }}
+          />
+        )}
+        {view === "cuahang" && (
+          <PlantShopView
+            shop={shop}
+            loading={shopLoading}
+            notice={shopNotice}
+            onBack={goHome}
+            onBuy={handleBuyPlant}
+            onSelect={handleSelectPlant}
           />
         )}
         {view === "mock-exam" && (
@@ -7746,6 +8013,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
         )}
       </main>
     </div>
+    </GemBalanceContext.Provider>
   );
 }
 
@@ -7823,7 +8091,10 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .main{flex:1;display:flex;flex-direction:column;gap:18px;min-width:0}
 
 .header{
-  background:#fff;border-radius:24px;padding:24px 28px;
+  background-color:#fff;
+  background-image:linear-gradient(rgba(255,255,255,.78),rgba(255,255,255,.78)),var(--dashboard-card-background);
+  background-size:cover;background-position:center;background-repeat:no-repeat;
+  border-radius:24px;padding:24px 28px;
   display:flex;align-items:center;gap:26px;
   box-shadow:0 4px 20px rgba(124,111,228,.08);
 }
@@ -7902,10 +8173,25 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .lesson-celebration-card{position:relative;z-index:3;width:min(440px,calc(100vw - 36px));padding:34px 34px 30px;text-align:center;border:1px solid rgba(255,255,255,.7);border-radius:30px;background:linear-gradient(145deg,#fff,#F5F1FF);box-shadow:0 30px 90px rgba(50,35,130,.34),0 0 55px rgba(164,143,255,.5);animation:lesson-celebration-in .5s cubic-bezier(.2,.9,.3,1.2)}
 .lesson-celebration-book{width:112px;height:112px;margin:0 auto 15px;border-radius:50%;display:grid;place-items:center;color:#fff;background:linear-gradient(145deg,#9B8CF4,#6D5DDA);box-shadow:0 0 0 13px rgba(139,123,232,.12),0 0 45px rgba(124,111,228,.75);animation:book-glow 1.1s ease-in-out infinite alternate}
 .lesson-celebration-kicker{display:block;margin-bottom:5px;color:#7C6FE4;font-size:12px;font-weight:800;letter-spacing:.16em}.lesson-celebration-card strong{display:block;font:700 28px 'Baloo 2','Quicksand',sans-serif;color:#282044}.lesson-celebration-card p{margin-top:5px;color:#8177A7;font-size:15px;font-weight:700}
+.lesson-gem-reward{display:inline-flex;align-items:center;gap:7px;margin-top:14px;padding:9px 15px;border:1px solid #D9D1FA;border-radius:999px;background:#F3F0FF;color:#6354D4;font-weight:750}
 @keyframes lesson-celebration-in{from{opacity:0;transform:translateY(14px) scale(.9)}to{opacity:1;transform:none}}
 @keyframes book-glow{to{transform:translateY(-5px) scale(1.04);box-shadow:0 0 0 17px rgba(139,123,232,.1),0 0 70px rgba(124,111,228,.95)}}
 @keyframes lesson-overlay{0%{opacity:0}8%,88%{opacity:1}100%{opacity:0}}
 .settings-volume-row input[type="range"]{width:min(260px,45%);accent-color:#7C6FE4;cursor:pointer}.settings-volume-row.disabled{opacity:.55}.settings-volume-row input:disabled{cursor:not-allowed}
+
+/* ---------------- Cửa hàng cây tiến độ ---------------- */
+.plant-shop-page{display:flex;flex-direction:column;gap:18px;width:100%;max-width:1480px;margin:0 auto}
+.plant-shop-toolbar{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:22px 26px;border-radius:22px;background:#fff;box-shadow:0 4px 20px rgba(124,111,228,.08)}
+.plant-shop-toolbar h2{display:flex;align-items:center;gap:9px;margin:0;color:#2E2A4A;font:700 25px 'Baloo 2'}.plant-shop-toolbar p{margin:2px 0 0;color:#8B85AB;font-size:13.5px;font-weight:550}
+.shop-balance{display:flex;align-items:center;gap:7px;padding:11px 15px;border:1px solid #DDD7F8;border-radius:14px;background:#F8F6FF;color:#6557D6;white-space:nowrap}.shop-balance strong{font-size:18px}.shop-balance span{font-size:12px;color:#8B85AB}
+.shop-notice{padding:12px 15px;border-radius:13px;background:#F2EFFF;color:#6557D6;font-size:13px}.shop-notice.success{background:#EAF8EF;color:#258749}.shop-notice.error{background:#FFF0F1;color:#BC4051}
+.plant-shop-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.plant-shop-card{display:grid;grid-template-columns:110px minmax(0,1fr);grid-template-rows:1fr auto;gap:12px 15px;min-height:220px;padding:20px;border:1.5px solid #E7E2F7;border-radius:20px;background:#fff;box-shadow:0 8px 24px rgba(64,52,120,.06);transition:.18s ease}.plant-shop-card:hover{transform:translateY(-2px);border-color:#CFC5F7;box-shadow:0 13px 30px rgba(64,52,120,.11)}.plant-shop-card.selected{border-color:#8B7BE8;background:linear-gradient(145deg,#fff,#F5F2FF)}
+.plant-shop-preview{grid-row:1/3;display:grid;place-items:center;border-radius:17px;background:linear-gradient(145deg,#F2F8EF,#FAF5EF)}.plant-shop-preview .progress-plant{transform:scale(1.18)}.plant-shop-preview .plant-tooltip{display:none}
+.plant-shop-eyebrow{color:#8173E4;font-size:9px;font-weight:800;letter-spacing:.12em}.plant-shop-info h3{margin:3px 0;color:#302B4D;font:700 20px 'Baloo 2'}.plant-shop-info p{margin:0;color:#8B85AB;font-size:12.5px;line-height:1.5}
+.plant-shop-action{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:39px;border:1px solid #CFC6F5;border-radius:11px;background:#fff;color:#6657D8;font:700 12.5px 'Quicksand';cursor:pointer}.plant-shop-action:hover:not(:disabled){background:#F1EDFF}.plant-shop-action.buy{border:none;background:#7C6FE4;color:#fff;box-shadow:0 5px 12px rgba(124,111,228,.25)}.plant-shop-action.selected{border:none;background:#E9F7EE;color:#27834A}.plant-shop-action:disabled{cursor:not-allowed;opacity:.62}
+@media(max-width:1050px){.plant-shop-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.plant-shop-toolbar{align-items:flex-start;flex-direction:column;padding:17px}.shop-balance{width:100%;justify-content:center}.plant-shop-grid{grid-template-columns:1fr}.plant-shop-card{grid-template-columns:96px minmax(0,1fr);padding:15px}.plant-shop-preview .progress-plant{transform:scale(1.05)}}
 
 /* ---- Menu truy cập nhanh ---- */
 .qa-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;width:100%}
@@ -8002,6 +8288,26 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
 .cont-bar em,.book-bar em{font:700 12.5px 'Quicksand';font-style:normal;color:#8B85AB}
 .cont-plant{flex-shrink:0}.progress-plant-wrap{position:relative;display:inline-grid;place-items:center;outline:none;cursor:help}.plant-tooltip{position:absolute;z-index:20;right:-10px;bottom:calc(100% - 2px);display:flex;align-items:center;gap:9px;min-width:190px;padding:10px 12px;border:1px solid #ded8f3;border-radius:14px;background:rgba(255,255,255,.97);box-shadow:0 12px 30px rgba(52,42,97,.18);color:#40385f;opacity:0;pointer-events:none;transform:translateY(7px) scale(.96);transform-origin:right bottom;transition:opacity .18s ease,transform .18s ease}.plant-tooltip::after{content:"";position:absolute;right:28px;bottom:-6px;width:11px;height:11px;border-right:1px solid #ded8f3;border-bottom:1px solid #ded8f3;background:#fff;transform:rotate(45deg)}.progress-plant-wrap:hover .plant-tooltip,.progress-plant-wrap:focus-visible .plant-tooltip{opacity:1;transform:none}.plant-tooltip-icon{display:grid;place-items:center;width:32px;height:32px;border-radius:10px;background:#edf8ef;font-size:17px}.plant-tooltip>span:nth-child(2){display:flex;flex:1;flex-direction:column;line-height:1.2}.plant-tooltip b{font:650 13px 'Baloo 2';color:#373052}.plant-tooltip small{margin-top:2px;color:#938aa9;font-size:10px;white-space:nowrap}.plant-tooltip>strong{color:#6f60dc;font:700 14px 'Baloo 2'}
 .progress-plant{overflow:visible;animation:plant-grow-in .5s cubic-bezier(.2,1.25,.4,1) both;filter:drop-shadow(0 5px 5px rgba(68,113,67,.12))}
+.plant-cherry .mature-crown>circle{fill:#D98AA7}.plant-cherry .mugunghwa-flower ellipse{fill:#FFE2EC}.plant-cherry .mugunghwa-flower>circle:first-of-type{fill:#B94F78}
+.plant-sunflower .mature-crown>circle{fill:#65A557}.plant-sunflower .mugunghwa-flower ellipse{fill:#F7C842}.plant-sunflower .mugunghwa-flower>circle:first-of-type{fill:#79512C}
+.plant-lavender .plant-leaf{fill:#79936A}.plant-lavender .mature-crown>circle{fill:#8C78BC}.plant-lavender .mugunghwa-flower ellipse{fill:#B9A4E7}.plant-lavender .mugunghwa-flower>circle:first-of-type{fill:#6A4AA0}
+.plant-bonsai .plant-stem{stroke:#70513C;stroke-width:6}.plant-bonsai .plant-leaf{fill:#477D4E}.plant-bonsai .mature-crown>circle{fill:#3F7548}.plant-bonsai .mugunghwa-flower{display:none}
+.plant-cherry .plant-pot-body{fill:#F3B9C8}.plant-cherry .plant-pot-rim{fill:#DF91A8}
+.plant-sunflower .plant-pot-body{fill:#EACB62}.plant-sunflower .plant-pot-rim{fill:#D3AC37}
+.plant-lavender .plant-pot-body{fill:#B8A6D8}.plant-lavender .plant-pot-rim{fill:#927ABC}
+.plant-bonsai .plant-pot-body{fill:#7D9B8A}.plant-bonsai .plant-pot-rim{fill:#597868}
+.plant-succulent .plant-pot-body{fill:#D5B7A6}.plant-succulent .plant-pot-rim{fill:#B88F7A}
+.plant-cactus .plant-pot-body{fill:#E4A777}.plant-cactus .plant-pot-rim{fill:#C78052}
+.plant-bamboo .plant-pot-body{fill:#9CC7A0}.plant-bamboo .plant-pot-rim{fill:#6FA577}
+.plant-monstera .plant-pot-body{fill:#E4C27A}.plant-monstera .plant-pot-rim{fill:#C79C4E}
+.plant-rose .plant-pot-body{fill:#D8A2AE}.plant-rose .plant-pot-rim{fill:#B97889}
+.stage-5 .sunflower-crown{animation:sunflower-bloom .65s .2s cubic-bezier(.2,1.35,.4,1) both}.stage-5 .succulent-crown{transform-origin:45px 57px;animation:rosette-open .75s .15s cubic-bezier(.2,1.3,.4,1) both}.stage-5 .cactus-crown{animation:cactus-rise .65s ease-out both}.stage-5 .bamboo-crown{animation:bamboo-rise .7s ease-out both}.stage-5 .monstera-crown{animation:monstera-open .7s cubic-bezier(.2,1.25,.4,1) both}.stage-5 .rose-crown{animation:rose-bloom .75s .15s cubic-bezier(.2,1.3,.4,1) both}
+@keyframes sunflower-bloom{from{opacity:.3;transform:translateY(13px) scale(.55) rotate(-8deg)}to{opacity:1;transform:none}}
+@keyframes rosette-open{from{opacity:.2;transform:scale(.25) rotate(-35deg)}to{opacity:1;transform:scale(1) rotate(0)}}
+@keyframes cactus-rise{from{opacity:.3;transform:translateY(25px) scaleY(.55)}to{opacity:1;transform:none}}
+@keyframes bamboo-rise{from{opacity:.2;transform:translateY(35px) scaleY(.4)}to{opacity:1;transform:none}}
+@keyframes monstera-open{from{opacity:.25;transform:scale(.45) rotate(8deg)}to{opacity:1;transform:none}}
+@keyframes rose-bloom{from{opacity:.25;transform:translateY(15px) scale(.55)}to{opacity:1;transform:none}}
 .plant-stem{stroke-dasharray:70;stroke-dashoffset:70;animation:plant-stem-grow .55s .08s ease-out forwards}
 .plant-leaf{opacity:0;transform-box:fill-box;transform-origin:center;animation:plant-leaf-open .35s cubic-bezier(.2,1.4,.5,1) forwards}
 .leaf-one{animation-delay:.25s}.leaf-two{animation-delay:.34s}.leaf-three{animation-delay:.42s}.leaf-four{animation-delay:.5s}.leaf-five{animation-delay:.56s}
@@ -10142,7 +10448,10 @@ b,h1,.pcard-pct,.logo-text{font-family:'Baloo 2','Quicksand',sans-serif}
     align-items:stretch;gap:3px;border-radius:18px;
     box-shadow:0 8px 30px rgba(54,45,110,.2);
   }
-  .sidebar .logo-row,.sidebar .mascot,.sidebar .gem-btn{display:none}
+  .sidebar .logo-row,.sidebar .mascot{display:none}
+  .sidebar .gem-btn{display:flex;flex:1 1 0;min-width:0;width:auto;height:52px;margin:0;padding:0;border:0;border-radius:11px;justify-content:center;background:#F3F0FF}
+  .sidebar .gem-btn span,.sidebar .gem-btn .gem-chev{display:none}.sidebar .gem-btn svg{width:22px;height:22px}
+  .sidebar .gem-btn.active{background:#7C6FE4}.sidebar .gem-btn.active svg path{stroke:#fff}
   .sidebar .home-pill{
     flex:1;min-width:0;width:auto;height:52px;margin:0;padding:4px 2px;
     flex-direction:column;justify-content:center;gap:0;border-radius:12px;
