@@ -17,7 +17,40 @@ services:
         sync: false
       - key: ALLOWED_ORIGINS
         sync: false
-      - key: GOOGLE_CLOUD_PROJECT_ID
+      - key: GROQ_API_KEY
         sync: false
-      - key: GOOGLE_APPLICATION_CREDENTIALS_JSON
+      - key: GROQ_GRADER_API_KEY
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: 587
+      - key: SMTP_SECURE
+        value: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: REMINDER_JOB_SECRET
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+
+  - type: cron
+    name: korean-study-reminders
+    runtime: node
+    rootDir: backend
+    schedule: "*/10 * * * *"
+    buildCommand: npm ci && npm run build
+    startCommand: node dist/scripts/run-reminder-job.js
+    envVars:
+      - key: REMINDER_API_URL
+        value: https://korean-study-api.onrender.com
+      - key: REMINDER_JOB_SECRET
         sync: false

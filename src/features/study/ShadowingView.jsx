@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, Headphones, Target, Volume2, Mic, Sparkles, Lightbulb, CheckCircle2, RotateCcw, AlertTriangle,
-  BookOpen, Flame, Play, Scissors, Smile, Square, XCircle
+  BookOpen, Download, Flame, Play, Scissors, Smile, Square, XCircle
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { requestAIJson, transcribeShadowRecording, parseAIJson } from '../../services/aiService';
@@ -15,8 +15,9 @@ import {
   readScopedProgress,
   saveScopedProgress
 } from '../../services/storageShim';
-import { markRemoteActivityCompleted } from '../../lib/activityProgress';
+import { loadRemoteActivityProgress, saveRemoteActivityProgress } from '../../lib/activityProgress';
 import { SkillCompletionView } from '../review/ReviewViews';
+import { compareSpeech, feedbackFor, toneForScore } from './speechAssessment';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
 
@@ -27,14 +28,14 @@ export function DictationModeSelectView({ lesson, onBack, onSelect }) {
         <button className="fc2-back" onClick={onBack} aria-label="Quay lại"><ChevronLeft size={20} /></button>
         <div>
           <div className="card-title"><Headphones size={19} color="#3FA95C" /> Nghe chép chính tả · Bài {lesson.no}</div>
-          <p className="dictation-mode-note">Chọn tuyến học phù hợp. Chỉ kết quả trong tuyến Kiểm tra được lưu vào tiến trình.</p>
+          <p className="dictation-mode-note">Chọn tuyến học phù hợp. Cả Luyện tập và Kiểm tra đều được lưu vào tiến trình.</p>
         </div>
       </div>
       <div className="dictation-mode-grid">
         <button className="dictation-mode-card practice" onClick={() => onSelect("practice")}>
           <span className="dictation-mode-icon"><Headphones size={27} /></span>
           <strong>Luyện tập</strong>
-          <p>Nghe không giới hạn, dùng gợi ý và luyện từng câu. Không ảnh hưởng tiến trình.</p>
+          <p>Nghe không giới hạn, dùng gợi ý và luyện từng câu. Câu đúng được lưu vào tiến trình.</p>
           <span>Bắt đầu luyện <ChevronRight size={16} /></span>
         </button>
         <button className="dictation-mode-card test" onClick={() => onSelect("test")}>
@@ -125,33 +126,6 @@ Trả lời CHỈ bằng JSON, không thêm markdown hay chữ nào khác ngoài
 /* ------------------------------------------------------------------ */
 
 
-const correctDictationResults = (saved = {}) => Object.fromEntries(
-  Object.entries(saved).filter(([, value]) => value === "correct"),
-);
-const activityCompletionKey = (lesson, userId) =>
-  lessonProgressKey("activity-completion", lesson, userId);
-
-async function markActivityCompleted(lesson, userId, activityId) {
-  const key = activityCompletionKey(lesson, userId);
-  let completed = {};
-  try {
-    const saved = await window.storage.get(key);
-    if (saved?.value) completed = JSON.parse(saved.value);
-  } catch (e) { }
-  completed[activityId] = { completedAt: new Date().toISOString() };
-  await window.storage.set(key, JSON.stringify(completed));
-  await markRemoteActivityCompleted(lesson?.textbookId, lesson?.id, activityId);
-  return completed;
-}
-
-async function isActivityMarkedCompleted(lesson, userId, activityId) {
-  try {
-    const saved = await window.storage.get(activityCompletionKey(lesson, userId));
-    return !!(saved?.value && JSON.parse(saved.value)?.[activityId]);
-  } catch (e) { return false; }
-}
-
-
 /* ------------------------------------------------------------------ */
 /*  SHADOWING — thiết kế theo mẫu: câu + dịch, Nghe câu/Mic/Ghi âm lại, */
 /*  kết quả mới nhất (waveform + Accuracy + chip từng từ + gợi ý AI),   */
@@ -162,6 +136,12 @@ const swFormatTime = (s) => {
   const m = Math.floor(s / 60).toString().padStart(2, "0");
   const sec = Math.floor(s % 60).toString().padStart(2, "0");
   return `${m}:${sec}`;
+};
+
+const recordingExtension = (mimeType = "") => {
+  if (mimeType.includes("mp4")) return "m4a";
+  if (mimeType.includes("ogg")) return "ogg";
+  return "webm";
 };
 
 function SwWaveBars() {
@@ -190,6 +170,7 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
   const [recordingElapsed, setRecordingElapsed] = useState(0);
   const [recordedUrls, setRecordedUrls] = useState({}); // { [idx]: blob url } — bản ghi âm THẬT của người dùng để nghe lại
   const [recordedDurations, setRecordedDurations] = useState({});
+  const [recordedMimeTypes, setRecordedMimeTypes] = useState({});
   const [showCompletion, setShowCompletion] = useState(false);
   const [finalAssessment, setFinalAssessment] = useState(null);
   const [assessingFinal, setAssessingFinal] = useState(false);
@@ -208,7 +189,6 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
   const recordingStartedAtRef = useRef(0);
   const recordingIntervalRef = useRef(null);
   const recordingTimeoutRef = useRef(null);
-  const autoAdvanceRef = useRef(null);
   const recognizedTextRef = useRef("");
   const recognitionBaseTextRef = useRef("");
   const recognitionRestartTimerRef = useRef(null);
@@ -261,7 +241,6 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
     setRecordingElapsed(0);
     clearInterval(recordingIntervalRef.current);
     clearTimeout(recordingTimeoutRef.current);
-    clearTimeout(autoAdvanceRef.current);
     clearTimeout(recognitionRestartTimerRef.current);
     recordingFinishingRef.current = false;
     recognizedTextRef.current = "";
@@ -271,7 +250,6 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
   useEffect(() => () => {
     clearInterval(recordingIntervalRef.current);
     clearTimeout(recordingTimeoutRef.current);
-    clearTimeout(autoAdvanceRef.current);
     clearTimeout(recognitionRestartTimerRef.current);
     try { recognitionRef.current?.abort(); } catch (e) { }
     Object.values(recordedUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
@@ -302,7 +280,10 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
     if (!myRecAudioRef.current) myRecAudioRef.current = new Audio();
     myRecAudioRef.current.src = url;
     myRecAudioRef.current.currentTime = 0;
-    myRecAudioRef.current.play().catch(() => { });
+    myRecAudioRef.current.play().catch(() => {
+      setErrMsg("Không thể phát bản ghi này. Bạn có thể tải file xuống để kiểm tra.");
+      setStatus("error");
+    });
   };
 
   // Ghi âm THẬT giọng người dùng (khác với nhận diện giọng nói để AI chấm
@@ -345,7 +326,8 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
       const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data); };
       mr.onstop = () => {
-        const blob = new Blob(recordedChunksRef.current, { type: mr.mimeType || "audio/webm" });
+        const recordedMimeType = mr.mimeType || "audio/webm";
+        const blob = new Blob(recordedChunksRef.current, { type: recordedMimeType });
         if (blob.size > 0) {
           const url = URL.createObjectURL(blob);
           const recordedDuration = Math.max(0, (Date.now() - recordingStartedAtRef.current) / 1000);
@@ -356,6 +338,9 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
             return next;
           });
           setRecordedDurations((prev) => ({ ...prev, [idx]: recordedDuration }));
+          setRecordedMimeTypes((prev) => ({ ...prev, [idx]: recordedMimeType }));
+        } else {
+          setErrMsg("Trình duyệt không tạo được file ghi âm. Hãy kiểm tra micro rồi thử lại.");
         }
         stream.getTracks().forEach((t) => t.stop());
         if (mediaStreamRef.current === stream) mediaStreamRef.current = null;
@@ -394,7 +379,12 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
   const stopMediaRecording = () => {
     const recorder = mediaRecorderRef.current;
     try {
-      if (recorder?.state === "recording" || recorder?.state === "paused") recorder.stop();
+      if (recorder?.state === "recording" || recorder?.state === "paused") {
+        // Safari/Chromium đôi lúc chưa phát dataavailable nếu bản ghi ngắn.
+        // Yêu cầu đẩy chunk hiện tại trước khi đóng để luôn tạo được file nghe lại.
+        try { recorder.requestData(); } catch (error) { }
+        recorder.stop();
+      }
     } catch (e) {
       mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
@@ -405,17 +395,7 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
     return recordingBlobPromiseRef.current || Promise.resolve(null);
   };
 
-  const releaseRecordedAudio = () => {
-    setRecordedUrls((current) => {
-      Object.values(current).forEach((url) => { try { URL.revokeObjectURL(url); } catch (error) { } });
-      return {};
-    });
-    recordedChunksRef.current = [];
-    try { myRecAudioRef.current?.pause(); } catch (error) { }
-    if (myRecAudioRef.current) myRecAudioRef.current.src = "";
-  };
-
-  const finishAndAssess = async (completedResults) => {
+  async function finishAndAssess(completedResults) {
     setShowCompletion(true);
     setAssessingFinal(true);
     setFinalAssessment(null);
@@ -434,9 +414,8 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
       });
     } finally {
       setAssessingFinal(false);
-      releaseRecordedAudio();
     }
-  };
+  }
 
   useEffect(() => () => {
     stopMediaRecording();
@@ -458,7 +437,6 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
       graded.warning = "Dịch vụ AI đang bận nên kết quả này được chấm dự phòng trên thiết bị.";
     }
     const gradedResult = { transcript: said, ...graded, recordingDuration: recordingElapsed, gradedAt: new Date().toISOString() };
-    const nextResults = { ...results, [idx]: gradedResult };
     if (graded.score >= 80 && !(results[idx]?.score >= 80)) playCorrectSound();
     else if (graded.score < 80) playIncorrectSound();
     setResults((current) => {
@@ -476,16 +454,6 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
     });
     setHistory((h) => [{ no: line.no, ko: line.ko, score: graded.score }, ...h].slice(0, 12));
     setStatus("done");
-    if (graded.score >= 80) {
-      clearTimeout(autoAdvanceRef.current);
-      autoAdvanceRef.current = window.setTimeout(() => {
-        if (idx < total - 1) {
-          setIdx(idx + 1);
-        } else if (lines.every((_, questionIndex) => nextResults[questionIndex]?.score >= 80)) {
-          finishAndAssess(nextResults);
-        }
-      }, 900);
-    }
   };
 
   const finishRecording = async (reason = "manual") => {
@@ -503,17 +471,20 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
     // luôn được gửi qua backend để Chrome, Edge và Safari có cùng kết quả.
     await new Promise((resolve) => window.setTimeout(resolve, 220));
     const recordingBlob = await recordingBlobPromise;
+    if (!recordingBlob?.size) {
+      setErrMsg("Không tạo được file ghi âm. Hãy kiểm tra quyền micro và thử ghi lâu hơn một chút.");
+      setStatus("error");
+      return;
+    }
     let said = recognizedTextRef.current.trim();
-    if (recordingBlob?.size) {
-      try {
-        const cloudResult = await transcribeShadowRecording(recordingBlob);
-        if (cloudResult?.transcript?.trim()) said = cloudResult.transcript.trim();
-      } catch (error) {
-        if (!said) {
-          setErrMsg(error?.message || "Không thể nhận diện bản ghi âm. Hãy thử lại nhé.");
-          setStatus("error");
-          return;
-        }
+    try {
+      const cloudResult = await transcribeShadowRecording(recordingBlob);
+      if (cloudResult?.transcript?.trim()) said = cloudResult.transcript.trim();
+    } catch (error) {
+      if (!said) {
+        setErrMsg(error?.message || "Không thể nhận diện bản ghi âm. Hãy thử lại nhé.");
+        setStatus("error");
+        return;
       }
     }
     if (!said) {
@@ -726,6 +697,11 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
             <p className={`sw-timer ${status === "recording" ? "is-recording" : ""} ${status === "recording" && recordingLimit - recordingElapsed <= 2 ? "is-ending" : ""}`}>
               {swFormatTime(recordingElapsed)} / {swFormatTime(recordingLimit)}
             </p>
+            {recordedUrls[idx] && status !== "recording" && (
+              <p className="sw-recording-ready">
+                <CheckCircle2 size={14} /> Đã lưu bản ghi {swFormatTime(recordedDurations[idx] || 0)} trong phiên này
+              </p>
+            )}
 
             {status === "unsupported" && (
               <div className="sw-unsupported">
@@ -769,6 +745,15 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
                   <button className="sw-compare-btn mine" onClick={playMyRecording} disabled={!recordedUrls[idx]}>
                     <Mic size={14} /> {recordedUrls[idx] ? "Giọng của tôi" : micBlocked ? "Không có quyền micro để ghi lại" : "Chưa có bản ghi"}
                   </button>
+                  {recordedUrls[idx] && (
+                    <a
+                      className="sw-compare-btn download"
+                      href={recordedUrls[idx]}
+                      download={`shadowing-bai-${lesson.no}-cau-${idx + 1}.${recordingExtension(recordedMimeTypes[idx])}`}
+                    >
+                      <Download size={14} /> Tải bản ghi
+                    </a>
+                  )}
                 </div>
                 <div className="sw-word-chips">
                   {(result.words || []).map((w, i) => (

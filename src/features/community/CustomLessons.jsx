@@ -49,6 +49,14 @@ Mảng "items" phải có đúng ${words.length} phần tử, theo đúng thứ 
   return parsed.items;
 }
 
+function fallbackLessonContent(words) {
+  return words.map((word) => ({
+    example: `저는 오늘 **${word.ko}** 단어를 공부해요.`,
+    exampleVi: `Hôm nay tôi học từ “${word.ko}” (${word.vi}).`,
+    mnemonic: `Liên tưởng “${word.ko}” với hình ảnh hoặc tình huống quen thuộc mang nghĩa “${word.vi}”.`,
+  }));
+}
+
 export function ShareCodeBox({ code, onCreateAnother }) {
   const [copied, setCopied] = useState(false);
   const taRef = useRef(null);
@@ -211,7 +219,9 @@ export function CustomLessonHub({ profile, onStudy }) {
       const items = await generateLessonContent(enrichedWords);
       enrichedWords = enrichedWords.map((w, i) => ({ ...w, example: items[i]?.example, exampleVi: items[i]?.exampleVi, mnemonic: items[i]?.mnemonic }));
     } catch (e) {
-      setGenError('AI không tạo được câu ví dụ/mẹo ghi nhớ lúc này — bài học vẫn được lưu, chỉ thiếu phần này.');
+      const items = fallbackLessonContent(enrichedWords);
+      enrichedWords = enrichedWords.map((w, i) => ({ ...w, ...items[i], enrichmentSource: 'fallback' }));
+      setGenError('AI đang bận nên hệ thống đã dùng câu ví dụ và mẹo ghi nhớ dự phòng. Bạn vẫn có thể tạo và làm bài kiểm tra đầy đủ.');
     }
 
     setGenStep('saving');

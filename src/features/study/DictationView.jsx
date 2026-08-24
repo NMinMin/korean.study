@@ -16,8 +16,33 @@ import {
   readScopedProgress,
   saveScopedProgress
 } from '../../services/storageShim';
-import { markRemoteActivityCompleted } from '../../lib/activityProgress';
+import { loadRemoteActivityProgress, saveRemoteActivityProgress } from '../../lib/activityProgress';
+import { correctDictationResults } from '../dashboard/progressService';
 import { SkillCompletionView } from '../review/ReviewViews';
+
+const FILL_BLANK_ITEMS = [
+  { word: '꽃다발', pre: '생일이라 친구에게 예쁜 ', post: ' 선물했어요.', hint: '을/를', particle: '을' },
+  { word: '만년필', pre: '졸업 선물로 ', post: ' 받았어요.', hint: '을/를', particle: '을' },
+  { word: '목도리', pre: '날씨가 추워서 ', post: ' 했어요.', hint: '을/를', particle: '를' },
+  { word: '상품권', pre: '백화점에서 쓸 수 있는 ', post: ' 선물했어요.', hint: '을/를', particle: '을' },
+  { word: '향수', pre: '', post: ' 너무 좋아서 하나 더 샀어요.', hint: '이/가', particle: '가' },
+];
+
+const MATCH_ITEMS = [
+  { word: '꽃다발', meaning: 'Bó hoa' },
+  { word: '만년필', meaning: 'Bút máy' },
+  { word: '목도리', meaning: 'Khăn quàng cổ' },
+  { word: '상품권', meaning: 'Phiếu mua hàng' },
+  { word: '향수', meaning: 'Nước hoa' },
+];
+
+const buildImageQuizItems = () => VOCAB_SAMPLE.map((word, index) => {
+  const distractors = shuffleArr(VOCAB_SAMPLE.filter((_, candidateIndex) => candidateIndex !== index)).slice(0, 3);
+  return {
+    answer: word.word,
+    options: shuffleArr([word, ...distractors]).map((option) => ({ word: option.word, img: option.img })),
+  };
+});
 
 export function FillBlankListenView({ onBack }) {
   const [answers, setAnswers] = useState({});
@@ -298,7 +323,6 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
   const storageKey = dictationProgressKey(lesson, userId);
 
   useEffect(() => {
-    if (mode !== "test") return undefined;
     let alive = true;
     Promise.all([
       readScopedProgress(storageKey, legacyDictationProgressKey(lesson), userId),
@@ -401,8 +425,8 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
     setCheckedValues((c) => ({ ...c, [idx]: value }));
     setAttempted((a) => ({ ...a, [idx]: true }));
     setRetryQueue((queue) => ok ? queue.filter((item) => item !== idx) : (queue.includes(idx) ? queue : [...queue, idx]));
-    const nextVerified = mode === "test" && ok ? { ...verified, [idx]: "correct" } : verified;
-    if (mode === "test" && ok) {
+    const nextVerified = ok ? { ...verified, [idx]: "correct" } : verified;
+    if (ok) {
       setVerified(nextVerified);
       const fullyCorrect = Array.from({ length: total }).every((_, questionIndex) => nextVerified[questionIndex] === "correct");
       if (!isRecheck || fullyCorrect) {
@@ -534,9 +558,9 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
     return (
       <SkillCompletionView
         title={mode === "test" ? "Bạn đã hoàn thành Kiểm tra nghe chép!" : "Bạn đã hoàn thành Luyện tập nghe chép!"}
-        description={mode === "test" ? "Kết quả đúng đã được lưu vào tiến trình. Bạn có muốn kiểm tra lại không?" : "Lượt luyện tập không tính vào tiến trình. Bạn có muốn luyện lại không?"}
+        description={mode === "test" ? "Kết quả đúng đã được lưu vào tiến trình. Bạn có muốn kiểm tra lại không?" : "Kết quả luyện tập đã được lưu vào tiến trình. Bạn có muốn luyện lại không?"}
         retryLabel={mode === "test" ? "Kiểm tra lại" : "Luyện lại"}
-        onBack={mode === "test" && !isRecheck ? (onFinish || onBack) : onBack}
+        onBack={!isRecheck ? (onFinish || onBack) : onBack}
         onRetry={retryDictation}
       />
     );
@@ -560,7 +584,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
       <div className={`dc-route-banner ${mode}`}>
         {mode === "practice" ? <Headphones size={15} /> : <Target size={15} />}
         <strong>{mode === "practice" ? "Tuyến Luyện tập" : "Tuyến Kiểm tra"}</strong>
-        <span>{mode === "practice" ? "Không giới hạn lượt nghe · không tính tiến trình" : "Tối đa 2 lượt nghe/câu · có lưu tiến trình"}</span>
+        <span>{mode === "practice" ? "Không giới hạn lượt nghe · có lưu tiến trình" : "Tối đa 2 lượt nghe/câu · có lưu tiến trình"}</span>
       </div>
       {retryNotice && (
         <div className="dc-retry-notice"><RotateCcw size={15} /> <span>{retryNotice}</span><small>Lượt làm lại {retryRound}</small></div>

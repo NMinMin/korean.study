@@ -18,6 +18,10 @@ export async function reminderRoutes(app: FastifyInstance) {
     if (!config.REMINDER_JOB_SECRET || request.headers['x-job-secret'] !== config.REMINDER_JOB_SECRET) {
       return reply.code(401).send({ code: 'UNAUTHORIZED', message: 'Job secret không hợp lệ.' })
     }
+    // Streak maintenance must keep running even when email delivery is
+    // temporarily unavailable or SMTP has not been configured yet.
+    const { error: streakError } = await supabaseAdmin.rpc('expire_inactive_streaks')
+    if (streakError) request.log.warn({ streakError }, 'Could not expire inactive streaks')
     if (!config.SMTP_HOST || !config.SMTP_FROM_EMAIL) {
       return reply.code(503).send({ code: 'SMTP_NOT_CONFIGURED', message: 'Chưa cấu hình SMTP.' })
     }
@@ -27,8 +31,6 @@ export async function reminderRoutes(app: FastifyInstance) {
     })
     // The same scheduled tick expires chains after two full missed dates and
     // refreshes the per-user dashboard shortcut through database triggers.
-    const { error: streakError } = await supabaseAdmin.rpc('expire_inactive_streaks')
-    if (streakError) request.log.warn({ streakError }, 'Could not expire inactive streaks')
     const { data: settings, error } = await supabaseAdmin.from('user_settings')
       .select('user_id, weekly_schedule, reminder_time, profiles!user_settings_user_id_fkey(display_name, timezone)')
       .eq('reminder_enabled', true)

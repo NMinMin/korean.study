@@ -11,7 +11,7 @@ import { renderKo } from '../../utils/textUtils';
 import { todayStr } from '../../utils/streakUtils';
 import { FcBunny, SwBunnyEmpty, MiniBear } from '../../components/common/Mascots';
 import { Bar, ProgressIcon } from '../../components/common/ProgressBar';
-import { VOCAB_SAMPLE, GRAMMAR_SAMPLE, SHADOW_LINES, DiamondIcon, UserGemCount, UserXpCount, UserStreakCount } from '../../data/fallbackData';
+import { VOCAB_SAMPLE, GRAMMAR_SAMPLE, SHADOW_LINES, FALLBACK_LESSONS, DiamondIcon, UserGemCount, UserXpCount, UserStreakCount } from '../../data/fallbackData';
 import {
   vocabProgressKey,
   legacyVocabProgressKey,
@@ -21,7 +21,7 @@ import {
   saveScopedProgress
 } from '../../services/storageShim';
 import { markRemoteActivityCompleted } from '../../lib/activityProgress';
-import { ACTIVITIES, loadActivityProgress as loadLessonActivityProgress } from './activityHelpers';
+import { ACTIVITIES, loadActivityProgress as loadLessonActivityProgress, mergeVocabStates } from './activityHelpers';
 import { SkillCompletionView } from '../review/ReviewViews';
 import {
   loadRemoteVocabularyState,
@@ -29,6 +29,8 @@ import {
   saveRemoteVocabularyState,
   saveRemoteVocabularyStateForWords
 } from '../../lib/vocabularyProgress';
+
+const cleanKo = (text) => String(text || '').replace(/\*\*/g, '').replaceAll('[', '').replaceAll(']', '');
 
 export function LessonDetailView({ lesson, userId, textbookTitle, onBack, onStartActivity, onProgressChange }) {
   const [pcts, setPcts] = useState({ tuvung: 0, shadowing: 0, nghechep: 0, ontap: 0 });

@@ -28,13 +28,10 @@ export default function LeaderboardView({ profile, onBack, hideHeader, textbooks
     loadData();
   }, [profile, selectedTextbookId, page]);
 
-  useEffect(() => {
-    if (!selectedTextbookId && textbooks.length) setSelectedTextbookId(textbooks[0].id);
-  }, [textbooks, selectedTextbookId]);
-
   const totalPages = Math.max(1, Math.ceil((lb?.total || 0) / pageSize));
 
   const textbookOptions = [
+    { value: '', label: 'Tất cả giáo trình' },
     ...textbooks.map((b) => ({ value: b.id, label: b.title })),
   ];
 
@@ -62,7 +59,7 @@ export default function LeaderboardView({ profile, onBack, hideHeader, textbooks
             onChange={(val) => { setSelectedTextbookId(val); setPage(1); }}
           />
         </div>
-        {lb && selectedTextbookId && (
+        {lb && (
           <div className="lb-summary-count">
             Tổng cộng <b>{lb.total || 0}</b> học viên có XP
           </div>

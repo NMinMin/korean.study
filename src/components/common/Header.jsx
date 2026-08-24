@@ -50,9 +50,9 @@ export default function Header({ profile, stats, onOpenNotif }) {
         '--dashboard-card-mobile-background': `url("${dashboardCardMobileBackgroundUrl}")`,
       }}
     >
-      <button className="avatar-btn" onClick={handleOpenNotifications} aria-label="Mở thông báo">
+      <div className="avatar-btn avatar-display" aria-label="Ảnh đại diện">
         <Avatar />
-      </button>
+      </div>
       <div className="hello">
         <h1>{getGreeting()}, <span>{name}!</span> 👋</h1>
         <p>Hôm nay học một chút,<br />ngày mai tiến bộ hơn nhé! 💜</p>

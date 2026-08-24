@@ -1,19 +1,11 @@
 -- Keep lesson/card progress, curriculum ranking, streak and dashboard shortcut
 -- derived from the same canonical learning rows.
 
-do $$
-begin
-  if to_regprocedure('public.refresh_user_dashboard_snapshot(uuid)') is not null then
-    alter function public.refresh_user_dashboard_snapshot(uuid) set safeupdate = 'off';
-  end if;
-end $$;
-
 create or replace function public.refresh_learning_rollups(p_user_id uuid, p_lesson_id uuid)
 returns void
 language plpgsql
 security definer
 set search_path = public
-set safeupdate = 'off'
 as $$
 declare
   v_textbook_id uuid;
@@ -83,7 +75,6 @@ returns void
 language plpgsql
 security definer
 set search_path = public
-set safeupdate = 'off'
 as $$
 declare
   v_minutes numeric := 0;
@@ -138,7 +129,6 @@ returns integer
 language plpgsql
 security definer
 set search_path = public
-set safeupdate = 'off'
 as $$
 declare v_count integer;
 begin

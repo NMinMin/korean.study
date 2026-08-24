@@ -9,14 +9,29 @@ import { requestAIJson } from '../../services/aiService';
 import { speakKo, playCorrectSound, playIncorrectSound, playCelebrationSound } from '../../services/audioService';
 import { renderKo, shuffleArr } from '../../utils/textUtils';
 import { SwBunnyEmpty, BunnyMascot, FcBunny } from '../../components/common/Mascots';
-import { VOCAB_SAMPLE, GRAMMAR_SAMPLE, SHADOW_LINES, DiamondIcon } from '../../data/fallbackData';
+import { VOCAB_SAMPLE, GRAMMAR_SAMPLE, SHADOW_LINES, FALLBACK_LESSONS, DiamondIcon } from '../../data/fallbackData';
 import {
+  lessonProgressKey,
+  legacyTextbookProgressKey,
   reviewHistoryKey,
+  vocabProgressKey,
+  legacyVocabProgressKey,
+  shadowProgressKey,
+  legacyShadowProgressKey,
+  dictationProgressKey,
+  legacyDictationProgressKey,
   legacyLessonProgressKey,
   readScopedProgress,
   saveScopedProgress
 } from '../../services/storageShim';
-import { markRemoteActivityCompleted } from '../../lib/activityProgress';
+import { loadRemoteActivityProgress, saveRemoteActivityProgress } from '../../lib/activityProgress';
+import { loadRemoteVocabularyState } from '../../lib/vocabularyProgress';
+import { activityCompletionKey, mergeVocabStates } from '../study/activityHelpers';
+import { correctDictationResults } from '../dashboard/progressService';
+import { gradeSpeechLocally, gradeSpeechWithAI, toneForScore } from '../study/speechAssessment';
+
+const gradeWithAI = (target, said, realPron, timing) => gradeSpeechWithAI(requestAIJson, target, said, realPron, timing);
+const gradeLocally = gradeSpeechLocally;
 
 function pickDistractors(all, excludeIdx, n, getter) {
   const pool = all.map((_, i) => i).filter((i) => i !== excludeIdx);

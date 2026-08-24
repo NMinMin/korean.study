@@ -102,5 +102,13 @@ export async function loadActivityProgress(lesson, userId) {
       out.ontap = Math.max(out.ontap, Math.round((mastered / totalReviewable) * 100));
     }
   } catch (e) { }
+  try {
+    const completed = await window.storage.get(activityCompletionKey(lesson, userId));
+    if (completed?.value) {
+      Object.keys(JSON.parse(completed.value)).forEach((activityId) => {
+        if (Object.prototype.hasOwnProperty.call(out, activityId)) out[activityId] = 100;
+      });
+    }
+  } catch (e) { }
   return out;
 }

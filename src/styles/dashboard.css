@@ -256,6 +256,10 @@ h1,
   border-radius: 50%
 }
 
+.avatar-display {
+  cursor: default;
+}
+
 .notif-dot {
   position: absolute;
   top: 6px;
@@ -5484,6 +5488,16 @@ textarea.fc2-note {
   animation: swTimerPulse .65s ease-in-out infinite alternate
 }
 
+.sw-recording-ready {
+  margin: 8px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: #2F9650;
+  font: 700 12.5px 'Quicksand'
+}
+
 @keyframes swTimerPulse {
   to {
     opacity: .48;
@@ -5775,6 +5789,7 @@ textarea.fc2-note {
   padding: 9px 10px;
   font: 700 12.5px 'Quicksand';
   cursor: pointer;
+  text-decoration: none;
 }
 
 .sw-compare-btn:hover:not(:disabled) {
@@ -5788,6 +5803,15 @@ textarea.fc2-note {
 
 .sw-compare-btn.mine:hover:not(:disabled) {
   background: #EBF7EE
+}
+
+.sw-compare-btn.download {
+  border-color: #DCD6F5;
+  color: #6659C9
+}
+
+.sw-compare-btn.download:hover {
+  background: #F3F1FC
 }
 
 .sw-compare-btn:disabled {
@@ -8733,6 +8757,132 @@ textarea.fc2-note {
   min-width: 190px;
   cursor: pointer;
 }
+
+.target-date-picker {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.target-date-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  font-family: 'Quicksand';
+}
+
+.target-date-trigger span {
+  flex: 1;
+  text-align: left;
+}
+
+.target-date-trigger.open {
+  border-color: #7C6FE4;
+  box-shadow: 0 0 0 4px rgba(124, 111, 228, .1);
+}
+
+.target-date-popover {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 9px);
+  right: 0;
+  width: 310px;
+  padding: 15px;
+  border: 1px solid #e4def5;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 18px 45px rgba(67, 51, 118, .18);
+}
+
+.target-date-nav,
+.target-date-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.target-date-nav b {
+  color: #2E2A4A;
+  font-size: 14px;
+}
+
+.target-date-nav button,
+.target-date-actions button {
+  border: 0;
+  border-radius: 9px;
+  color: #6f61d6;
+  background: #f1eeff;
+  font: 800 12px 'Quicksand';
+  cursor: pointer;
+}
+
+.target-date-nav button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  padding: 0;
+}
+
+.target-date-weekdays,
+.target-date-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+
+.target-date-weekdays {
+  margin: 13px 0 6px;
+  color: #9991b4;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.target-date-grid button,
+.target-date-grid > span {
+  aspect-ratio: 1;
+}
+
+.target-date-grid button {
+  border: 0;
+  border-radius: 10px;
+  color: #4B4564;
+  background: transparent;
+  font: 800 12px 'Quicksand';
+  cursor: pointer;
+}
+
+.target-date-grid button:hover {
+  background: #f2efff;
+}
+
+.target-date-grid button.today {
+  box-shadow: inset 0 0 0 1.5px #b9afea;
+}
+
+.target-date-grid button.selected {
+  color: #fff;
+  background: #7C6FE4;
+  box-shadow: none;
+}
+
+.target-date-actions {
+  justify-content: flex-end;
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid #eeeaf8;
+}
+
+.target-date-actions button {
+  padding: 8px 11px;
+}
+
+.target-date-actions button.clear {
+  color: #c54d63;
+  background: #fff0f3;
+}
 .settings-date-input::-webkit-calendar-picker-indicator {
   padding: 8px;
   border-radius: 9px;
@@ -8890,6 +9040,16 @@ textarea.fc2-note {
   .settings-date-input,
   .settings-time-input {
     width: 100%
+  }
+
+  .target-date-picker {
+    width: 100%;
+  }
+
+  .target-date-popover {
+    right: auto;
+    left: 0;
+    width: min(310px, calc(100vw - 48px));
   }
 
   .settings-minute-input input {

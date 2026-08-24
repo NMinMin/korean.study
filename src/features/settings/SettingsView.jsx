@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
-  ChevronLeft, Settings, Target, CalendarDays, Lightbulb, CheckCircle2,
+  ChevronLeft, ChevronRight, Settings, Target, CalendarDays, Lightbulb, CheckCircle2,
   Bell, XCircle
 } from 'lucide-react';
 import { todayStr } from '../../utils/streakUtils';
@@ -18,6 +18,69 @@ import {
   getStudyPlan,
   saveStudyPlan,
 } from './studyPlanService';
+
+const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+function TargetDatePicker({ value, onChange }) {
+  const initialDate = value ? new Date(`${value}T00:00:00`) : new Date();
+  const [open, setOpen] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState(() => new Date(initialDate.getFullYear(), initialDate.getMonth(), 1));
+  const rootRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, [open]);
+
+  const year = visibleMonth.getFullYear();
+  const month = visibleMonth.getMonth();
+  const mondayOffset = (new Date(year, month, 1).getDay() + 6) % 7;
+  const totalDays = new Date(year, month + 1, 0).getDate();
+  const cells = [
+    ...Array.from({ length: mondayOffset }, () => null),
+    ...Array.from({ length: totalDays }, (_, index) => new Date(year, month, index + 1)),
+  ];
+  const selectedDate = value ? new Date(`${value}T00:00:00`) : null;
+  const displayValue = selectedDate
+    ? selectedDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : 'Chọn ngày';
+
+  return (
+    <div className="target-date-picker" ref={rootRef}>
+      <button type="button" className={`settings-date-input target-date-trigger ${open ? 'open' : ''}`} onClick={() => setOpen((shown) => !shown)} aria-expanded={open}>
+        <CalendarDays size={17} /> <span>{displayValue}</span>
+      </button>
+      {open && (
+        <div className="target-date-popover" role="dialog" aria-label="Chọn ngày mục tiêu hoàn thành">
+          <div className="target-date-nav">
+            <button type="button" onClick={() => setVisibleMonth(new Date(year, month - 1, 1))} aria-label="Tháng trước"><ChevronLeft size={17} /></button>
+            <b>Tháng {month + 1}, {year}</b>
+            <button type="button" onClick={() => setVisibleMonth(new Date(year, month + 1, 1))} aria-label="Tháng sau"><ChevronRight size={17} /></button>
+          </div>
+          <div className="target-date-weekdays">{['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((day) => <span key={day}>{day}</span>)}</div>
+          <div className="target-date-grid">
+            {cells.map((date, index) => date ? (
+              <button
+                type="button"
+                key={dateKey(date)}
+                className={`${value === dateKey(date) ? 'selected' : ''} ${todayStr() === dateKey(date) ? 'today' : ''}`}
+                onClick={() => { onChange(dateKey(date)); setOpen(false); }}
+              >{date.getDate()}</button>
+            ) : <span key={`empty-${index}`} />)}
+          </div>
+          <div className="target-date-actions">
+            <button type="button" onClick={() => setVisibleMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}>Hôm nay</button>
+            {value && <button type="button" className="clear" onClick={() => { onChange(null); setOpen(false); }}>Xóa ngày</button>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function SettingsView({ onBack, userId, lesson, vocabulary, textbookTitle, computeHomeProgress }) {
   const [goal, setGoal] = useState(null);
@@ -103,10 +166,7 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
             <b>Ngày mục tiêu hoàn thành</b>
             <span>Đặt hạn để hoàn thành {textbookTitle || 'giáo trình đang học'}</span>
           </div>
-          <input
-            type="date" className="settings-date-input" value={plan.targetDate || ''}
-            onChange={(e) => update({ targetDate: e.target.value || null })}
-          />
+          <TargetDatePicker value={plan.targetDate} onChange={(targetDate) => update({ targetDate })} />
         </div>
         {plan.targetDate && (
           <div className={`settings-projection ${daysLeft < 0 ? 'overdue' : ''}`}>

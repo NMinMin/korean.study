@@ -754,7 +754,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                   if (actId === 'nghechep') { setDictationEntryBackView('lesson-detail'); setView('dictation-mode-select'); }
                   if (actId === 'ontap') {
                     setReviewMode('bylesson');
-                    setReviewSelectedLessons([lesson]);
+                    setReviewSelectedLessons([lesson.no]);
                     setReviewSeed(null);
                     setReviewIntroBackView('lesson-detail');
                     setView('review-intro');

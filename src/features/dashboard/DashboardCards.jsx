@@ -198,8 +198,8 @@ export function ContinueLearning({ onGo, textbook, lesson, hasStarted = false, p
     const hasTextbook = Boolean(textbook);
     return (
       <section className="card continue continue-empty">
-        <div className="card-title">{hasTextbook ? 'Tạm nghỉ ngơi' : 'Bắt đầu học'}</div>
-        <div className="continue-empty-body">{hasTextbook ? <Coffee size={30} /> : <BookOpen size={28} />}<div><b>{hasTextbook ? 'Tạm chưa có bài học mới' : 'Chưa có giáo trình để học'}</b><span>{hasTextbook ? 'Bạn đã hoàn thành các bài hiện có. Nghỉ một chút nhé!' : 'Thêm một giáo trình vào danh sách của bạn để bắt đầu.'}</span></div></div>
+        <div className="card-title">Tạm nghỉ ngơi</div>
+        <div className="continue-empty-body"><Coffee size={30} /><div><b>{hasTextbook ? 'Tạm chưa có bài học mới' : 'Chưa có bài học nào'}</b><span>{hasTextbook ? 'Bạn đã hoàn thành các bài hiện có. Nghỉ một chút nhé!' : 'Thêm một giáo trình vào danh sách của bạn khi sẵn sàng bắt đầu.'}</span></div></div>
         {!hasTextbook && <button className="primary-btn" onClick={onGo}><Plus size={16} /> Thêm giáo trình</button>}
       </section>
     );

@@ -45,6 +45,18 @@ function daysBetween(from: string, to: string) {
   return Math.round((parse(to) - parse(from)) / DAY_MS)
 }
 
+// Stable daily shuffle: the same learner sees a consistent list during the
+// day, while words are still randomly distributed instead of following the
+// vocabulary sort order.
+function randomRank(seed: string) {
+  let hash = 2166136261
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
+}
+
 export async function loadVocabularyReviewSchedule(userId: string, numberOfDays = 14): Promise<VocabularyReviewDay[]> {
   const todayKey = localDateKey()
   const emptyDays = Array.from({ length: numberOfDays }, (_, index) => ({ dateKey: shiftDateKey(todayKey, index), words: [] as ReviewWord[] }))
@@ -91,6 +103,7 @@ export async function loadVocabularyReviewSchedule(userId: string, numberOfDays 
     return {
       desiredKey,
       priority,
+      randomOrder: randomRank(`${todayKey}:${desiredKey}:${item.id}`),
       word: {
         id: item.id,
         lessonId: item.lesson_id,
@@ -105,7 +118,7 @@ export async function loadVocabularyReviewSchedule(userId: string, numberOfDays 
         sortOrder: item.sort_order,
       } satisfies ReviewWord,
     }
-  }).sort((a, b) => a.desiredKey.localeCompare(b.desiredKey) || b.priority - a.priority || a.word.sortOrder - b.word.sortOrder)
+  }).sort((a, b) => a.desiredKey.localeCompare(b.desiredKey) || a.randomOrder - b.randomOrder || b.priority - a.priority)
 
   const scheduledIds = emptyDays.map(() => new Set<string>())
   const placeWord = (word: ReviewWord, desiredIndex: number) => {
