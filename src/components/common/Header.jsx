@@ -17,6 +17,11 @@ export function getGreeting() {
 export default function Header({ profile, stats, onOpenNotif }) {
   const [hasNotif, setHasNotif] = useState(false);
 
+  const handleOpenNotifications = () => {
+    setHasNotif(false);
+    onOpenNotif?.();
+  };
+
   useEffect(() => {
     let alive = true;
     if (!profile) return;
@@ -45,7 +50,7 @@ export default function Header({ profile, stats, onOpenNotif }) {
         '--dashboard-card-mobile-background': `url("${dashboardCardMobileBackgroundUrl}")`,
       }}
     >
-      <button className="avatar-btn" onClick={onOpenNotif} aria-label="Thông báo">
+      <button className="avatar-btn" onClick={handleOpenNotifications} aria-label="Mở thông báo">
         <Avatar />
       </button>
       <div className="hello">
@@ -56,7 +61,7 @@ export default function Header({ profile, stats, onOpenNotif }) {
             <div className="chip-ico" style={{ background: '#FDEDE3' }}><Flame size={20} color="#F0642E" fill="#F79A5E" /></div>
             <div><b>{streak}</b><small>Ngày streak</small></div>
           </div>
-          <button className="chip chip-btn" onClick={onOpenNotif}>
+          <button className="chip chip-btn" onClick={handleOpenNotifications} aria-label={hasNotif ? 'Mở thông báo mới' : 'Mở thông báo'}>
             <div className="chip-ico" style={{ background: '#EBF4FD', position: 'relative' }}>
               <Bell size={20} color="#4A90E2" />
               {hasNotif && <span className="notif-dot notif-dot-sm" />}

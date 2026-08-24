@@ -269,11 +269,22 @@ h1,
 
 .notif-dot-sm {
   position: absolute;
-  top: -2px;
-  right: -2px;
-  width: 10px;
-  height: 10px;
-  border: 2px solid #fff
+  top: -5px;
+  right: -5px;
+  width: 16px;
+  height: 16px;
+  border: 3px solid #fff;
+  box-shadow: 0 2px 7px rgba(229, 86, 107, .48);
+  animation: notification-pulse 1.8s ease-in-out infinite
+}
+
+@keyframes notification-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 2px 7px rgba(229, 86, 107, .42); }
+  50% { transform: scale(1.18); box-shadow: 0 2px 12px rgba(229, 86, 107, .65); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notif-dot-sm { animation: none; }
 }
 
 .chip-btn {
