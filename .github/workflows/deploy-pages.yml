@@ -51,7 +51,12 @@ jobs:
         shell: bash
         run: |
           touch dist/.nojekyll
-          cp dist/index.html dist/404.html
+          # Vite copies public/404.html into dist. Keep that redirect page intact;
+          # copying index.html over it breaks direct SPA routes such as /admin.
+          if ! grep -q "location.replace" dist/404.html; then
+            echo "::error::dist/404.html không chứa SPA redirect của GitHub Pages."
+            exit 1
+          fi
           entry_file="$(grep -oE 'assets/index-[^"]+\.js' dist/index.html | head -n 1)"
           if [ -z "$entry_file" ] || [ ! -f "dist/$entry_file" ]; then
             echo "::error::Bundle JavaScript được index.html tham chiếu không tồn tại trong dist."
