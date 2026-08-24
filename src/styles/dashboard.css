@@ -42,7 +42,50 @@ h1,
   display: flex;
   flex-direction: column;
   box-shadow: 0 4px 20px rgba(124, 111, 228, .08);
+  position: sticky;
+  top: 16px;
+  height: calc(100vh - 32px);
+  overflow-y: auto;
+  transition: width .2s ease, padding .2s ease;
 }
+
+.sidebar-collapse-toggle {
+  align-self: flex-end;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #E7E3F6;
+  border-radius: 10px;
+  background: #FBFAFF;
+  color: #7469C8;
+  cursor: pointer;
+  margin: -4px 0 8px;
+}
+
+.sidebar.collapsed {
+  width: 76px;
+  padding-inline: 10px;
+}
+
+.sidebar.collapsed .logo-text,
+.sidebar.collapsed .logo-row > svg,
+.sidebar.collapsed .home-pill-label,
+.sidebar.collapsed .nav-tile-label,
+.sidebar.collapsed .mascot,
+.sidebar.collapsed .gem-btn span,
+.sidebar.collapsed .gem-chev,
+.sidebar.collapsed .sidebar-signout span {
+  display: none;
+}
+
+.sidebar.collapsed .logo-row { padding-inline: 8px; justify-content: center; }
+.sidebar.collapsed .nav-grid { grid-template-columns: 1fr; gap: 7px; }
+.sidebar.collapsed .nav-tile { padding: 7px; min-height: 50px; }
+.sidebar.collapsed .nav-tile-ico { width: 38px; height: 38px; }
+.sidebar.collapsed .home-pill,
+.sidebar.collapsed .gem-btn,
+.sidebar.collapsed .sidebar-signout { justify-content: center; padding-inline: 6px; }
 
 .logo-row {
   display: flex;
@@ -254,6 +297,22 @@ h1,
   cursor: pointer;
   flex-shrink: 0;
   border-radius: 50%
+}
+
+.home-pill-ico {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  border: 1.5px solid #E7E3F6;
+  background: #fff;
+}
+
+.home-pill.active .home-pill-ico {
+  background: rgba(255,255,255,.2);
+  border-color: rgba(255,255,255,.32);
 }
 
 .avatar-display {
@@ -5489,13 +5548,35 @@ textarea.fc2-note {
 }
 
 .sw-recording-ready {
-  margin: 8px 0 0;
+  margin: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
   color: #2F9650;
   font: 700 12.5px 'Quicksand'
+}
+
+.sw-recording-saved {
+  margin: 10px auto 0;
+  max-width: 430px;
+  padding: 11px 12px;
+  border: 1px solid #D7EEDC;
+  border-radius: 13px;
+  background: #F5FBF6
+}
+
+.sw-recording-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 9px
+}
+
+.sw-recording-help {
+  margin: 8px 0 0;
+  text-align: center;
+  color: #766F91;
+  font: 600 11.5px/1.45 'Quicksand'
 }
 
 @keyframes swTimerPulse {
@@ -8619,6 +8700,7 @@ textarea.fc2-note {
 
 /* ---- Cài đặt: Kế hoạch học tập ---- */
 .settings-card {
+  position: relative;
   width: 100%;
   max-width: none;
   background: #fff;
@@ -8756,6 +8838,23 @@ textarea.fc2-note {
 .settings-date-input {
   min-width: 190px;
   cursor: pointer;
+}
+
+.settings-sync-note {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 3;
+  width: fit-content;
+  margin: 0;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #F3F1FC;
+  color: #7B73A5;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 5px 14px rgba(74, 65, 128, .12);
+  pointer-events: none;
 }
 
 .target-date-picker {
@@ -10574,7 +10673,11 @@ textarea.fc2-note {
 /* ---------------- Refined fixed navigation + balanced dashboard ---------------- */
 @media (min-width:861px) {
   .app:not(.no-sidebar) {
-    padding-left: 226px
+    padding-left: 262px
+  }
+
+  .app.sidebar-collapsed {
+    padding-left: 108px
   }
 
   .app.no-sidebar {
@@ -10587,9 +10690,9 @@ textarea.fc2-note {
     left: 16px;
     top: 16px;
     bottom: 16px;
-    width: 194px;
+    width: 230px;
     height: auto;
-    padding: 16px 12px 14px;
+    padding: 18px 14px 15px;
     border-radius: 22px;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -10601,19 +10704,19 @@ textarea.fc2-note {
   }
 
   .logo-row {
-    padding: 0 6px 14px;
-    gap: 7px
+    padding: 0 7px 16px;
+    gap: 9px
   }
 
   .logo-badge {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    font-size: 17px
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+    font-size: 18px
   }
 
   .logo-text {
-    font-size: 15px;
+    font-size: 16px;
     white-space: nowrap
   }
 
@@ -10622,43 +10725,68 @@ textarea.fc2-note {
   }
 
   .home-pill {
-    min-height: 48px;
-    margin-bottom: 6px;
-    padding: 7px 12px;
-    border-radius: 13px;
-    font-size: 13px
+    min-height: 52px;
+    margin-bottom: 8px;
+    padding: 7px 10px;
+    border: 1.5px solid #F0EEFA;
+    border-radius: 14px;
+    background: #FBFAFF;
+    font-size: 12.5px
+  }
+
+  .home-pill:hover:not(.active) {
+    background: #FBFAFF;
+    border-color: #C9BCF2;
+    transform: translateY(-1px)
+  }
+
+  .home-pill .home-pill-ico {
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+    border: 0;
+    border-radius: 11px;
+    background: #F3F1FC
+  }
+
+  .home-pill.active {
+    border-color: #7C6FE4
+  }
+
+  .home-pill.active .home-pill-ico {
+    background: rgba(255, 255, 255, .2)
   }
 
   .nav-grid {
     display: flex;
     flex-direction: column;
-    gap: 6px
+    gap: 7px
   }
 
   .nav-tile {
-    min-height: 48px;
+    min-height: 52px;
     flex-direction: row;
     justify-content: flex-start;
-    gap: 10px;
-    padding: 7px 9px;
-    border-radius: 13px;
+    gap: 11px;
+    padding: 7px 10px;
+    border-radius: 14px;
     text-align: left;
   }
 
   .nav-tile-ico {
-    width: 34px;
-    height: 34px;
-    border-radius: 10px;
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
     flex-shrink: 0
   }
 
   .nav-tile-ico svg {
-    width: 19px;
-    height: 19px
+    width: 20px;
+    height: 20px
   }
 
   .nav-tile-label {
-    font-size: 11.5px;
+    font-size: 12.5px;
     text-align: left
   }
 
@@ -10704,10 +10832,45 @@ textarea.fc2-note {
 
   .main {
     width: 100%;
-    max-width: 1440px;
+    max-width: 1480px;
     margin: 0 auto
   }
 }
+
+.app-page-header {
+  min-height: 78px;
+  padding: 12px 18px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 4px 20px rgba(124,111,228,.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.app-page-heading h1 { font: 800 22px/1.15 'Baloo 2'; color: #302B50; }
+.app-page-heading p { margin-top: 2px; color: #8882A7; font-size: 12.5px; font-weight: 600; }
+.app-page-status { display: flex; align-items: center; gap: 10px; }
+.app-header-streak,
+.app-header-user { display: flex; align-items: center; gap: 7px; padding: 7px 11px; border: 1px solid #ECE9F7; border-radius: 13px; background: #FBFAFF; font-size: 13px; }
+.app-header-user .avatar-ring,
+.app-header-user .avatar-ring svg { width: 30px; height: 30px; }
+.app-header-notification { position: relative; width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid #ECE9F7; border-radius: 13px; background: #FBFAFF; color: #6E65BA; cursor: pointer; }
+
+.shared-page .main > section > .fc2-topbar:first-child,
+.shared-page .main > div > .fc2-topbar:first-child { display: none; }
+
+.cl-generated-preview { margin-top: 12px; padding: 16px; border: 1.5px solid #DCD7F4; border-radius: 18px; background: #FAF9FF; }
+.cl-preview-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 10px; margin-top: 12px; }
+.cl-preview-word { display: grid; gap: 5px; padding: 13px; border: 1px solid #ECE9F7; border-radius: 14px; background: #fff; }
+.cl-preview-word img { width: 100%; height: 110px; object-fit: cover; border-radius: 10px; }
+.cl-preview-word b { font-size: 18px; color: #39345B; }
+.cl-preview-word > span { color: #756E98; font-weight: 700; }
+.cl-preview-word p { color: #4D486B; font-size: 13px; line-height: 1.5; }
+.cl-preview-word small { display: flex; align-items: flex-start; gap: 5px; color: #9A7125; line-height: 1.4; }
+.cl-preview-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+.cl-visibility-types .cl-quiz-chip { flex: 1 1 240px; }
 
 .dashboard-grid {
   display: grid;
@@ -11158,6 +11321,10 @@ textarea.fc2-note {
     box-shadow: 0 8px 30px rgba(54, 45, 110, .2);
   }
 
+  .sidebar-collapse-toggle { display: none; }
+  .app-page-header { min-height: auto; padding: 14px 16px; }
+  .app-page-heading p, .app-header-user span, .app-header-streak { display: none; }
+
   .sidebar .logo-row,
   .sidebar .mascot {
     display: none
@@ -11495,6 +11662,11 @@ textarea.fc2-note {
   display: flex !important;
   flex-direction: column !important;
   gap: 16px !important;
+}
+
+.community-view-container {
+  max-width: 1050px !important;
+  margin: 0 auto !important;
 }
 
 .community-wide-page,

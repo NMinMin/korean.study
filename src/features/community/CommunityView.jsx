@@ -153,7 +153,7 @@ export default function CommunityView({ profile, onBack, onStudyCustomLesson, hi
           <MessageSquare size={16} /> <span>Bảng tin</span>
         </button>
         <button className={`cg-tab ${tab === 'lessons' ? 'on' : ''}`} onClick={() => setTab('lessons')}>
-          <BookOpen size={16} /> <span>Bài học tự tạo</span>
+          <BookOpen size={16} /> <span>Bộ từ vựng</span>
         </button>
       </div>
 

@@ -19,8 +19,8 @@ const dayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 
 async function currentUserId() {
   if (!supabase) return null
-  const { data } = await supabase.auth.getUser()
-  return data.user?.id ?? null
+  const { data } = await supabase.auth.getSession()
+  return data.session?.user?.id ?? null
 }
 
 export async function loadRemoteDailyGoal(date: string): Promise<DailyGoalData | null> {

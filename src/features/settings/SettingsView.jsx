@@ -17,6 +17,8 @@ import {
   saveDailyGoal,
   getStudyPlan,
   saveStudyPlan,
+  getCachedDailyGoal,
+  getCachedStudyPlan,
 } from './studyPlanService';
 
 const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -83,35 +85,45 @@ function TargetDatePicker({ value, onChange }) {
 }
 
 export default function SettingsView({ onBack, userId, lesson, vocabulary, textbookTitle, computeHomeProgress }) {
-  const [goal, setGoal] = useState(null);
-  const [plan, setPlan] = useState(null);
+  const [goal, setGoal] = useState(() => getCachedDailyGoal(userId));
+  const [plan, setPlan] = useState(() => getCachedStudyPlan(userId));
   const [overallPct, setOverallPct] = useState(0);
+  const [syncing, setSyncing] = useState(true);
   const [saved, setSaved] = useState(false);
   const [notifPermNote, setNotifPermNote] = useState('');
   const [celebrationSound, setCelebrationSound] = useState(isCelebrationSoundEnabled);
   const [soundVolume, setSoundVolume] = useState(getSoundVolume);
+  const goalDirtyRef = useRef(false);
+  const planDirtyRef = useRef(false);
+  const soundDirtyRef = useRef(false);
 
   useEffect(() => {
     let alive = true;
     const compute = computeHomeProgress ? computeHomeProgress(lesson, userId, vocabulary) : Promise.resolve([]);
-    Promise.all([getDailyGoal(userId), getStudyPlan(userId), compute]).then(([g, p, prog]) => {
-      if (!alive) return;
-      setGoal(g);
-      setPlan(p);
-      if (prog && prog.length) {
-        setOverallPct(Math.round(prog.reduce((s, x) => s + x.pct, 0) / prog.length));
-      }
-    });
+    setSyncing(true);
+    Promise.all([getDailyGoal(userId), getStudyPlan(userId), compute])
+      .then(([g, p, prog]) => {
+        if (!alive) return;
+        if (!goalDirtyRef.current) setGoal(g);
+        if (!planDirtyRef.current) setPlan(p);
+        if (!soundDirtyRef.current) setCelebrationSound(isCelebrationSoundEnabled());
+        if (prog && prog.length) {
+          setOverallPct(Math.round(prog.reduce((s, x) => s + x.pct, 0) / prog.length));
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => { if (alive) setSyncing(false); });
     return () => { alive = false; };
   }, [userId, lesson, vocabulary, computeHomeProgress]);
-
-  if (!goal || !plan) return <div className="cg-empty">Đang tải...</div>;
 
   const daysLeft = plan.targetDate
     ? Math.ceil((new Date(plan.targetDate + 'T00:00:00') - new Date(todayStr() + 'T00:00:00')) / 86400000)
     : null;
 
-  const update = (patch) => setPlan((p) => ({ ...p, ...patch }));
+  const update = (patch) => {
+    planDirtyRef.current = true;
+    setPlan((p) => ({ ...p, ...patch }));
+  };
   const toggleDay = (key) => update({ weeklySchedule: { ...plan.weeklySchedule, [key]: !plan.weeklySchedule[key] } });
 
   const save = async () => {
@@ -119,6 +131,9 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
     setGoal(clampedGoal);
     await saveDailyGoal(clampedGoal, userId);
     await saveStudyPlan(plan, celebrationSound, userId);
+    goalDirtyRef.current = false;
+    planDirtyRef.current = false;
+    soundDirtyRef.current = false;
     localStorage.setItem(SOUND_VOLUME_KEY, String(soundVolume));
     if (plan.reminderEnabled && typeof window !== 'undefined' && 'Notification' in window) {
       try {
@@ -143,6 +158,7 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
       </div>
 
       <div className="settings-card">
+        {syncing && <div className="settings-sync-note" role="status">Đang đồng bộ cài đặt…</div>}
         <div className="settings-card-title"><span><Target size={20} /></span><div>Kế hoạch học tập<small>Tạo nhịp học phù hợp với bạn</small></div></div>
         <p className="settings-hint">Đặt mục tiêu và lịch học để duy trì động lực lâu dài — tất cả đều dựa trên tiến độ thật của bạn.</p>
 
@@ -154,8 +170,8 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
           <div className="settings-minute-input">
             <input
               type="number" min={5} max={180} value={goal.targetMinutes}
-              onChange={(e) => setGoal((g) => ({ ...g, targetMinutes: e.target.value === '' ? '' : parseInt(e.target.value, 10) }))}
-              onBlur={(e) => setGoal((g) => ({ ...g, targetMinutes: Math.max(5, Math.min(180, parseInt(e.target.value, 10) || 15)) }))}
+              onChange={(e) => { goalDirtyRef.current = true; setGoal((g) => ({ ...g, targetMinutes: e.target.value === '' ? '' : parseInt(e.target.value, 10) })); }}
+              onBlur={(e) => { goalDirtyRef.current = true; setGoal((g) => ({ ...g, targetMinutes: Math.max(5, Math.min(180, parseInt(e.target.value, 10) || 15)) })); }}
             />
             <span>phút</span>
           </div>
@@ -209,7 +225,7 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
             <b>Âm thanh hiệu ứng</b>
             <span>Phát khi trả lời đúng/sai, đạt mục tiêu và hoàn thành bài học</span>
           </div>
-          <button className={`settings-toggle ${celebrationSound ? 'on' : ''}`} onClick={() => setCelebrationSound((enabled) => !enabled)} aria-label="Bật/tắt âm thanh chúc mừng" aria-pressed={celebrationSound}>
+          <button className={`settings-toggle ${celebrationSound ? 'on' : ''}`} onClick={() => { soundDirtyRef.current = true; setCelebrationSound((enabled) => !enabled); }} aria-label="Bật/tắt âm thanh chúc mừng" aria-pressed={celebrationSound}>
             <span className="settings-toggle-knob" />
           </button>
         </div>

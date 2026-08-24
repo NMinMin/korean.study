@@ -222,16 +222,17 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     let postsQuery = supabaseAdmin.from('posts').select('*').order('created_at', { ascending: false })
     if (request.query.status === 'visible' || request.query.status === 'hidden') postsQuery = postsQuery.eq('status', request.query.status)
     let reportsQuery = supabaseAdmin.from('content_reports').select('*').order('created_at', { ascending: false })
+    const customLessonsQuery = supabaseAdmin.from('custom_lessons').select('id, creator_id, title, code, words, visibility, status, created_at').order('created_at', { ascending: false })
     if (['pending', 'resolved', 'dismissed'].includes(request.query.reportStatus || '')) reportsQuery = reportsQuery.eq('status', request.query.reportStatus as ReportStatus)
-    const [{ data: posts, error: postsError }, { data: reports, error: reportsError }] = await Promise.all([postsQuery, reportsQuery])
-    if (postsError || reportsError) {
-      const databaseError = postsError ?? reportsError
+    const [{ data: posts, error: postsError }, { data: reports, error: reportsError }, { data: customLessons, error: customLessonsError }] = await Promise.all([postsQuery, reportsQuery, customLessonsQuery])
+    if (postsError || reportsError || customLessonsError) {
+      const databaseError = postsError ?? reportsError ?? customLessonsError
       request.log.error({ databaseError }, 'Admin community query failed')
       const migrationMissing = databaseError?.code === '42P01' || databaseError?.code === '42703' || databaseError?.code === 'PGRST205'
       return reply.code(migrationMissing ? 503 : 500).send({
         code: migrationMissing ? 'COMMUNITY_SCHEMA_NOT_READY' : 'COMMUNITY_READ_FAILED',
         message: migrationMissing
-          ? 'Cơ sở dữ liệu cộng đồng chưa được cập nhật. Hãy chạy migration 20260822150000_community_moderation.sql.'
+          ? 'Cơ sở dữ liệu cộng đồng chưa được cập nhật. Hãy chạy các migration cộng đồng mới nhất, gồm 20260824140000_vocabulary_sets_visibility.sql.'
           : 'Không thể tải dữ liệu quản trị cộng đồng.',
         requestId: request.id,
       })
@@ -239,6 +240,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const profileIds = [...new Set([
       ...(posts ?? []).map((post) => post.user_id),
       ...(reports ?? []).map((report) => report.reporter_id),
+      ...(customLessons ?? []).map((lesson) => lesson.creator_id),
     ].filter(Boolean))]
     const { data: profiles, error: profilesError } = profileIds.length
       ? await supabaseAdmin.from('profiles').select('id, display_name, avatar_url').in('id', profileIds)
@@ -258,8 +260,19 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       data: {
         posts: (posts ?? []).map((post) => ({ ...post, profiles: profilesById.get(post.user_id) ?? null, reports: reportsByPost.get(post.id) ?? [] })),
         reports: (reports ?? []).map((report) => ({ ...report, profiles: profilesById.get(report.reporter_id) ?? null })),
+        customLessons: (customLessons ?? []).map((lesson) => ({ ...lesson, profiles: profilesById.get(lesson.creator_id) ?? null })),
       },
     }
+  })
+
+  app.patch<{ Params: { id: string }; Body: { hidden: boolean } }>('/admin/community/custom-lessons/:id', async (request, reply) => {
+    const { data, error } = await supabaseAdmin.from('custom_lessons')
+      .update({ status: request.body.hidden ? 'hidden' : 'visible', updated_at: new Date().toISOString() })
+      .eq('id', request.params.id)
+      .select()
+      .single()
+    if (error) return reply.code(400).send({ code: 'CUSTOM_LESSON_MODERATION_FAILED', message: 'Không thể cập nhật bộ từ vựng.', requestId: request.id })
+    return { data }
   })
 
   app.patch<{ Params: { id: string }; Body: { hidden?: boolean; commentsLocked?: boolean; reason?: string } }>('/admin/community/posts/:id', async (request, reply) => {

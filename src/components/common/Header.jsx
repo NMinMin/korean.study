@@ -14,7 +14,7 @@ export function getGreeting() {
   return 'Chào buổi tối';
 }
 
-export default function Header({ profile, stats, onOpenNotif }) {
+export default function Header({ profile, stats, onOpenNotif, pageTitle, pageSubtitle }) {
   const [hasNotif, setHasNotif] = useState(false);
 
   const handleOpenNotifications = () => {
@@ -41,6 +41,24 @@ export default function Header({ profile, stats, onOpenNotif }) {
   const xpPct = xpMax ? ((xp % 200) / 200) * 100 : 0;
   const streak = stats?.streak ?? 0;
   const name = profile?.displayName || 'bạn';
+
+  if (pageTitle) {
+    return (
+      <header className="app-page-header">
+        <div className="app-page-heading">
+          <h1>{pageTitle}</h1>
+          {pageSubtitle && <p>{pageSubtitle}</p>}
+        </div>
+        <div className="app-page-status">
+          <span className="app-header-streak"><Flame size={19} color="#F0642E" fill="#F79A5E" /><b>{streak}</b> ngày</span>
+          <button className="app-header-notification" onClick={handleOpenNotifications} aria-label="Mở thông báo">
+            <Bell size={19} />{hasNotif && <span className="notif-dot notif-dot-sm" />}
+          </button>
+          <div className="app-header-user"><Avatar /><span>{name}</span></div>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <section

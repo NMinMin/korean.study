@@ -13,9 +13,10 @@ type Textbook = { id: string; slug: string; title_ko: string; title_vi: string |
 type Lesson = { id: string; textbook_id: string; lesson_number: number; title_ko: string; title_vi: string | null; status: Status; textbooks?: { title_ko?: string } }
 type AdminUser = { id: string; email?: string; display_name?: string; role: 'user' | 'admin'; level?: number; xp?: number; emailConfirmedAt?: string; lastSignInAt?: string; is_locked?: boolean; locked_at?: string }
 type DashboardData = { days: number; activeUsers: number; averageCompletedLessons: number; averageMinutes: number; retentionRate: number; pendingReports: number; totalTextbooks: number; totalLessons: number; totalUsers: number; chart: { date: string; minutes: number }[]; courses: { title: string; percent: number }[]; hardVocabulary: { word: string; meaning: string; course: string; errorRate: number }[] }
-type CommunityReport = { id: string; post_id: string | null; reason: string; status: 'pending' | 'resolved' | 'dismissed'; created_at: string; profiles?: { display_name?: string } }
+type CommunityReport = { id: string; post_id: string | null; custom_lesson_id?: string | null; reason: string; status: 'pending' | 'resolved' | 'dismissed'; created_at: string; profiles?: { display_name?: string } }
 type CommunityPost = { id: string; user_id: string; content: string; status: 'visible' | 'hidden'; comments_locked: boolean; moderation_reason?: string | null; created_at: string; profiles?: { display_name?: string; avatar_url?: string }; reports: CommunityReport[] }
-type CommunityData = { posts: CommunityPost[]; reports: CommunityReport[] }
+type CommunityVocabularySet = { id: string; creator_id: string; title: string; code: string; words: unknown[]; visibility: 'public' | 'private'; status: 'visible' | 'hidden'; created_at: string; profiles?: { display_name?: string } }
+type CommunityData = { posts: CommunityPost[]; reports: CommunityReport[]; customLessons: CommunityVocabularySet[] }
 
 const statuses: { value: Status; label: string }[] = [
   { value: 'draft', label: 'Bản nháp' }, { value: 'published', label: 'Đã xuất bản' },
@@ -62,7 +63,7 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false)
   const [range, setRange] = useState<7 | 30>(7)
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
-  const [community, setCommunity] = useState<CommunityData>({ posts: [], reports: [] })
+  const [community, setCommunity] = useState<CommunityData>({ posts: [], reports: [], customLessons: [] })
   const [communityStatus, setCommunityStatus] = useState('all')
   const [communityDay, setCommunityDay] = useState('all')
   const [communityMonth, setCommunityMonth] = useState('all')
@@ -188,18 +189,27 @@ export default function AdminPage() {
     if (!window.confirm('Xóa vĩnh viễn bài viết này và toàn bộ bình luận, báo cáo liên quan?')) return
     try {
       await adminApi(`/community/posts/${post.id}`, { method: 'DELETE' })
-      setCommunity((current) => ({ posts: current.posts.filter((item) => item.id !== post.id), reports: current.reports.filter((report) => report.post_id !== post.id) }))
+      setCommunity((current) => ({ ...current, posts: current.posts.filter((item) => item.id !== post.id), reports: current.reports.filter((report) => report.post_id !== post.id) }))
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể xóa bài viết.') }
   }
   const resolveReport = async (report: CommunityReport, status: 'resolved' | 'dismissed') => {
     try {
       await adminApi(`/community/reports/${report.id}`, { method: 'PATCH', body: JSON.stringify({ status }) })
       setCommunity((current) => ({
+        ...current,
         reports: current.reports.map((item) => item.id === report.id ? { ...item, status } : item),
         posts: current.posts.map((post) => ({ ...post, reports: post.reports.map((item) => item.id === report.id ? { ...item, status } : item) })),
       }))
       if (report.status === 'pending') setDashboard((current) => current ? { ...current, pendingReports: Math.max(0, current.pendingReports - 1) } : current)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể xử lý báo cáo.') }
+  }
+
+  const moderateVocabularySet = async (lesson: CommunityVocabularySet) => {
+    try {
+      const hidden = lesson.status !== 'hidden'
+      await adminApi(`/community/custom-lessons/${lesson.id}`, { method: 'PATCH', body: JSON.stringify({ hidden }) })
+      setCommunity((current) => ({ ...current, customLessons: current.customLessons.map((item) => item.id === lesson.id ? { ...item, status: hidden ? 'hidden' : 'visible' } : item) }))
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể kiểm duyệt bộ từ vựng.') }
   }
 
   const query = search.trim().toLocaleLowerCase('vi')
@@ -344,6 +354,15 @@ export default function AdminPage() {
             </article>
           })}</div>
           {!filteredCommunityPosts.length && <div className="admin-empty">Không có bài viết phù hợp với bộ lọc.</div>}
+          <div className="admin-panel-title admin-vocabulary-moderation-title"><div><h2>Bộ từ vựng cộng đồng</h2><p>Các bộ được đăng trực tiếp; quản trị viên có thể ẩn khi có báo cáo.</p></div></div>
+          <div className="admin-community-list">{community.customLessons.map((lesson) => {
+            const pendingReports = community.reports.filter((report) => report.custom_lesson_id === lesson.id && report.status === 'pending')
+            return <article className={`admin-community-post ${lesson.status === 'hidden' ? 'is-hidden' : ''}`} key={lesson.id}>
+              <div className="admin-community-head"><div className="admin-community-author"><span>{(lesson.profiles?.display_name || '?').slice(0, 1).toUpperCase()}</span><div><b>{lesson.title}</b><small>{lesson.profiles?.display_name || 'Người học'} · {lesson.words?.length || 0} từ · mã {lesson.code}</small></div></div><div className="admin-community-badges"><span>{lesson.visibility === 'private' ? 'Riêng tư' : 'Công khai'}</span>{lesson.status === 'hidden' && <span className="hidden"><EyeOff size={13} /> Đã ẩn</span>}{pendingReports.length > 0 && <span className="reported"><Flag size={13} /> {pendingReports.length} báo cáo</span>}</div></div>
+              {pendingReports.length > 0 && <div className="admin-report-list">{pendingReports.map((report) => <div className="admin-report-item" key={report.id}><div><b>{report.profiles?.display_name || 'Người dùng'} báo cáo</b><p>{report.reason}</p><small>{new Date(report.created_at).toLocaleString('vi-VN')}</small></div><div><button onClick={() => void resolveReport(report, 'dismissed')}>Bỏ qua</button><button className="resolve" onClick={() => void resolveReport(report, 'resolved')}><Check size={15} /> Đã xử lý</button></div></div>)}</div>}
+              <div className="admin-community-actions"><button onClick={() => void moderateVocabularySet(lesson)}>{lesson.status === 'hidden' ? <Eye size={16} /> : <EyeOff size={16} />}{lesson.status === 'hidden' ? 'Hiện lại' : 'Ẩn bộ từ vựng'}</button></div>
+            </article>
+          })}</div>
         </>}
         {tab === 'users' && <><div className="admin-panel-title"><div><h2>Người dùng</h2><p>Quản lý vai trò và khóa tài khoản vi phạm.</p></div></div><div className="admin-table-wrap"><table><thead><tr><th>Học viên</th><th>Email</th><th>Vai trò</th><th>Cấp / XP</th><th>Trạng thái</th><th>Đăng nhập gần nhất</th><th>Thao tác</th></tr></thead><tbody>{users.map((user) => <tr key={user.id} className={user.is_locked ? 'admin-user-locked' : ''}><td><b>{user.display_name || 'Người học'}</b></td><td>{user.email || '—'}</td><td><AdminSelect value={user.role} options={[{ value: 'user', label: 'Học viên' }, { value: 'admin', label: 'Admin' }]} label={`Vai trò của ${user.display_name || user.email}`} onChange={(value) => void updateRole(user.id, value as 'user' | 'admin')} /></td><td>Lv. {user.level || 1} · {user.xp || 0} XP</td><td><span className={`admin-account-state ${user.is_locked ? 'locked' : 'active'}`}>{user.is_locked ? <Lock size={14}/> : <ShieldCheck size={14}/>} {user.is_locked ? 'Đã khóa' : 'Hoạt động'}</span></td><td>{user.lastSignInAt ? new Date(user.lastSignInAt).toLocaleString('vi-VN') : 'Chưa có'}</td><td><button className={`admin-lock-action ${user.is_locked ? 'unlock' : ''}`} onClick={() => void updateAccountLock(user)}>{user.is_locked ? <Unlock size={16}/> : <Lock size={16}/>} {user.is_locked ? 'Mở khóa' : 'Khóa'}</button></td></tr>)}</tbody></table></div></>}
       </section>}

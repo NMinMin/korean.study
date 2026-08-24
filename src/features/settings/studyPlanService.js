@@ -39,6 +39,38 @@ export const DEFAULT_STUDY_PLAN = {
   lastReminderShownDate: null,
 };
 
+const readLocalJson = (key) => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const value = localStorage.getItem(`kstudy:${key}`);
+    return value ? JSON.parse(value) : null;
+  } catch (error) {
+    return null;
+  }
+};
+
+export function getCachedDailyGoal(userId) {
+  const cached = readLocalJson(dailyGoalKey(userId));
+  return {
+    targetMinutes: Number(cached?.targetMinutes) || 15,
+    todayMinutes: cached?.todayDate === todayStr() ? Number(cached?.todayMinutes) || 0 : 0,
+    todayDate: todayStr(),
+    trackingVersion: 2,
+  };
+}
+
+export function getCachedStudyPlan(userId) {
+  const cached = readLocalJson(studyPlanKey(userId));
+  return {
+    ...DEFAULT_STUDY_PLAN,
+    ...(cached || {}),
+    weeklySchedule: {
+      ...DEFAULT_STUDY_PLAN.weeklySchedule,
+      ...(cached?.weeklySchedule || {}),
+    },
+  };
+}
+
 export async function touchStudyLog(userId) {
   let dates = [];
   try {

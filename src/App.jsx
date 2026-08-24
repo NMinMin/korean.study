@@ -62,6 +62,7 @@ import {
 import PlantShopView from './features/shop/PlantShopView';
 import SettingsView, { ReminderBanner } from './features/settings/SettingsView';
 import RankingCommunityView from './features/leaderboard/RankingCommunityView';
+import CommunityView from './features/community/CommunityView';
 import MyTextbooks from './features/curriculum/MyTextbooks';
 import CurriculumHubView from './features/curriculum/CurriculumHubView';
 import LessonsView, { ActivityLessonSelectView } from './features/curriculum/LessonsView';
@@ -96,14 +97,22 @@ import {
 // Auth
 import AuthView, { profileStorageKey } from './features/auth/AuthView';
 
-const IMMERSIVE_VIEWS = [
+const FOCUS_VIEWS = [
   'lesson-detail', 'vocab-list', 'vocab-notebook', 'flashcards', 'flashcards-notebook', 'flashcards-schedule',
   'flashcards-grammar', 'shadowing', 'dictation', 'review-hub', 'review-lesson-select',
   'review-intro', 'review-quiz', 'review-result', 'aiquiz', 'study-custom-lesson', 'test-custom-lesson',
   'vocab-test-select', 'vocab-test-fillblank', 'vocab-test-match', 'vocab-test-image',
-  'dictation-mode-select', 'tuvung-bai', 'tuvung-chude', 'nguphap-hub', 'nguphap-book',
-  'cuahang', 'caidat', 'curriculum-hub', 'mock-exam',
+  'dictation-mode-select', 'nguphap-book', 'mock-exam',
 ];
+
+const ROOT_PAGE_META = {
+  'curriculum-hub': ['Giáo trình', 'Quản lý giáo trình của tôi và tiếp tục lộ trình đang học.'],
+  'nguphap-hub': ['Ngữ pháp', 'Tra cứu và luyện ngữ pháp theo từng giáo trình.'],
+  'mock-exam': ['Thi thử', 'Luyện tập trong giao diện tập trung.'],
+  xephang: ['Xếp hạng', 'Theo dõi thành tích của bạn theo từng giáo trình.'],
+  congdong: ['Cộng đồng', 'Chia sẻ cùng người học và khám phá các bộ từ vựng.'],
+  caidat: ['Cài đặt', 'Điều chỉnh kế hoạch học tập và tài khoản.'],
+};
 
 const ACTIVE_STUDY_VIEWS = new Set([
   'lesson-detail', 'vocab-list', 'vocab-notebook', 'flashcards', 'flashcards-notebook', 'flashcards-schedule',
@@ -116,6 +125,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const [profile, setProfile] = useState(authenticatedProfile || undefined);
   const [active, setActive] = useState('home');
   const [view, setView] = useState('home');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [lesson, setLesson] = useState(null);
   const [reviewAnswers, setReviewAnswers] = useState([]);
   const [reviewWriting, setReviewWriting] = useState([]);
@@ -126,7 +136,6 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const [reviewSelectedLessons, setReviewSelectedLessons] = useState([]);
   const [reviewSeed, setReviewSeed] = useState(null);
   const [reviewIsRecheck, setReviewIsRecheck] = useState(false);
-  const [rankTab, setRankTab] = useState('xephang');
   const [customLessonData, setCustomLessonData] = useState(null);
   const [reviewDeck, setReviewDeck] = useState(null);
   const [vocabBackView, setVocabBackView] = useState('vocab-lessons');
@@ -220,7 +229,11 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     setView('vocab-list');
   };
 
-  const immersive = IMMERSIVE_VIEWS.includes(view);
+  const focusMode = FOCUS_VIEWS.includes(view);
+
+  useEffect(() => {
+    setSidebarCollapsed(focusMode);
+  }, [focusMode, view]);
 
   const refreshShop = async () => {
     try {
@@ -432,12 +445,10 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
 
   const openNotif = async () => {
     await markNotifSeen(profile.id);
-    setRankTab('congdong');
-    setView('xephang');
-    setActive('xephanghub');
+    setView('congdong');
+    setActive('congdong');
   };
   const openLeaderboard = () => {
-    setRankTab('xephang');
     setView('xephang');
     setActive('xephanghub');
   };
@@ -485,7 +496,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   return (
     <UserStatsContext.Provider value={userStats}>
       <GemBalanceContext.Provider value={shop.balance}>
-        <div className={`app ${immersive ? 'no-sidebar' : ''}`}>
+        <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${ROOT_PAGE_META[view] ? 'shared-page' : ''}`}>
           {lessonCelebration && (
             <div className="lesson-celebration" role="status" aria-live="polite">
               <ConfettiBurst />
@@ -498,8 +509,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
               </div>
             </div>
           )}
-          {!immersive && (
-            <Sidebar
+          <Sidebar
               active={active}
               setActive={setActive}
               setView={setView}
@@ -508,9 +518,19 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
               isAdmin={profile?.role === 'admin'}
               gems={shop.balance}
               onOpenShop={refreshShop}
+              collapsed={sidebarCollapsed}
+              onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
             />
-          )}
           <main className="main">
+            {ROOT_PAGE_META[view] && (
+              <Header
+                profile={profile}
+                stats={userStats}
+                onOpenNotif={openNotif}
+                pageTitle={ROOT_PAGE_META[view][0]}
+                pageSubtitle={ROOT_PAGE_META[view][1]}
+              />
+            )}
             {view === 'home' && (
               <div className="dashboard-grid">
                 <Header profile={profile} stats={userStats} onOpenNotif={openNotif} />
@@ -523,7 +543,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                     plantVariant={shop.selectedPlant}
                     onGo={() => continueLesson
                       ? openLesson(continueLesson, 'home')
-                      : (setCatalogNotice(null), setView('curriculum-hub'), setActive('curriculum'))}
+                      : (setCatalogNotice(null), setView('curriculum-hub'), setActive('giaotrinh'))}
                   />
                   <WordOfDayWidget vocabulary={catalogVocabulary} onOpen={() => openVocabulary(primaryLesson, 'home')} />
                   <RecentActivityCard profile={profile} lesson={primaryLesson} vocabulary={catalogVocabulary} />
@@ -540,7 +560,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                   <MyTextbooks
                     books={learningCatalog?.myTextbooks || []}
                     onOpenBook={(book) => openLearningBook(book, 'home')}
-                    onAddBook={() => { setCatalogNotice(null); setView('curriculum-hub'); setActive('curriculum'); }}
+                    onAddBook={() => { setCatalogNotice(null); setView('curriculum-hub'); setActive('giaotrinh'); }}
                   />
                 </div>
               </div>
@@ -549,8 +569,14 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
               <RankingCommunityView
                 profile={profile}
                 onBack={goHome}
-                initialTab={rankTab}
                 textbooks={learningCatalog?.textbooks || learningCatalog?.myTextbooks || []}
+              />
+            )}
+            {view === 'congdong' && (
+              <CommunityView
+                profile={profile}
+                onBack={goHome}
+                hideHeader
                 onStudyCustomLesson={(l) => { setCustomLessonData(l); setView('study-custom-lesson'); }}
               />
             )}
@@ -622,7 +648,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             {view === 'study-custom-lesson' && customLessonData && (
               <CustomLessonStudyView
                 lessonData={customLessonData}
-                onBack={() => { setRankTab('congdong'); setView('xephang'); }}
+                onBack={() => { setView('congdong'); setActive('congdong'); }}
                 onStartQuiz={(l) => { setCustomLessonData(l); setView('test-custom-lesson'); }}
               />
             )}

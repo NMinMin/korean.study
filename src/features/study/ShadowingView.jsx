@@ -698,9 +698,26 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
               {swFormatTime(recordingElapsed)} / {swFormatTime(recordingLimit)}
             </p>
             {recordedUrls[idx] && status !== "recording" && (
-              <p className="sw-recording-ready">
-                <CheckCircle2 size={14} /> Đã lưu bản ghi {swFormatTime(recordedDurations[idx] || 0)} trong phiên này
-              </p>
+              <div className="sw-recording-saved">
+                <p className="sw-recording-ready">
+                  <CheckCircle2 size={14} /> Đã lưu bản ghi {swFormatTime(recordedDurations[idx] || 0)} trong phiên này
+                </p>
+                <div className="sw-recording-actions">
+                  <button type="button" className="sw-compare-btn mine" onClick={playMyRecording}>
+                    <Play size={14} /> Nghe giọng của tôi
+                  </button>
+                  <a
+                    className="sw-compare-btn download"
+                    href={recordedUrls[idx]}
+                    download={`shadowing-bai-${lesson.no}-cau-${idx + 1}.${recordingExtension(recordedMimeTypes[idx])}`}
+                  >
+                    <Download size={14} /> Tải bản ghi
+                  </a>
+                </div>
+                {status === "error" && (
+                  <p className="sw-recording-help">Hãy nghe lại file để kiểm tra micro có thu được tiếng hay không, sau đó bấm mic để ghi lại.</p>
+                )}
+              </div>
             )}
 
             {status === "unsupported" && (
@@ -745,15 +762,6 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
                   <button className="sw-compare-btn mine" onClick={playMyRecording} disabled={!recordedUrls[idx]}>
                     <Mic size={14} /> {recordedUrls[idx] ? "Giọng của tôi" : micBlocked ? "Không có quyền micro để ghi lại" : "Chưa có bản ghi"}
                   </button>
-                  {recordedUrls[idx] && (
-                    <a
-                      className="sw-compare-btn download"
-                      href={recordedUrls[idx]}
-                      download={`shadowing-bai-${lesson.no}-cau-${idx + 1}.${recordingExtension(recordedMimeTypes[idx])}`}
-                    >
-                      <Download size={14} /> Tải bản ghi
-                    </a>
-                  )}
                 </div>
                 <div className="sw-word-chips">
                   {(result.words || []).map((w, i) => (

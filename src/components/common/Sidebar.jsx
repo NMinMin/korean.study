@@ -1,6 +1,7 @@
 import React from 'react';
 import {
-  BookOpen, NotebookPen, Target, Trophy, Settings, Home, Sparkles, ChevronRight, LogOut
+  BookOpen, NotebookPen, Target, Trophy, Settings, Home, Sparkles, ChevronRight, LogOut,
+  MessageCircle, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 import { DiamondIcon } from '../../data/fallbackData';
 import { BunnyMascot } from './Mascots';
@@ -10,30 +11,35 @@ export const NAV_TILES = [
   { id: 'nguphap', label: 'Ngữ pháp', mobileLabel: 'Ngữ pháp', icon: NotebookPen, color: '#7C6FE4', bg: '#F0EEFC' },
   { id: 'thithu', label: 'Thi thử', mobileLabel: 'Thi thử', icon: Target, color: '#D15A87', bg: '#FBEAF2' },
   { id: 'xephanghub', label: 'Xếp hạng', mobileLabel: 'Xếp hạng', icon: Trophy, color: '#F0912E', bg: '#FDF3E7' },
+  { id: 'congdong', label: 'Cộng đồng', mobileLabel: 'Cộng đồng', icon: MessageCircle, color: '#3FA95C', bg: '#EAF8EE' },
   { id: 'caidat', label: 'Cài đặt', mobileLabel: 'Cài đặt', icon: Settings, color: '#8B85AB', bg: '#F3F1FC' },
 ];
 
-export default function Sidebar({ active, setActive, setView, goHome, onSignOut, isAdmin, gems = 0, onOpenShop }) {
+export default function Sidebar({ active, setActive, setView, goHome, onSignOut, isAdmin, gems = 0, onOpenShop, collapsed = false, onToggleCollapse }) {
   const handleTileClick = (id) => {
     setActive(id);
     if (id === 'giaotrinh') setView('curriculum-hub');
     else if (id === 'nguphap') setView('nguphap-hub');
     else if (id === 'thithu') setView('mock-exam');
     else if (id === 'xephanghub') setView('xephang');
+    else if (id === 'congdong') setView('congdong');
     else if (id === 'cuahang') { setView('cuahang'); onOpenShop?.(); }
     else if (id === 'caidat') setView('caidat');
   };
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
+      <button className="sidebar-collapse-toggle" onClick={onToggleCollapse} aria-label={collapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'} title={collapsed ? 'Mở rộng' : 'Thu gọn'}>
+        {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+      </button>
       <button className="logo-row logo-row-btn" onClick={goHome} aria-label="Về trang chủ">
         <div className="logo-badge">한</div>
         <div className="logo-text">Korean <span>Study</span></div>
         <Sparkles size={16} color="#C9BCF2" />
       </button>
 
-      <button className={`home-pill ${active === 'home' ? 'active' : ''}`} onClick={goHome}>
-        <Home size={18} strokeWidth={2.2} /> Trang chủ
+      <button className={`home-pill ${active === 'home' ? 'active' : ''}`} onClick={goHome} title="Trang chủ">
+        <span className="home-pill-ico"><Home size={22} strokeWidth={2.2} /></span><span className="home-pill-label">Trang chủ</span>
       </button>
 
       <div className="nav-grid">
