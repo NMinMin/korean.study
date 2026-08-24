@@ -1,5 +1,5 @@
 import { useEffect, type ComponentType } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import LegacyDashboard from './App.jsx'
 import { AuthProvider, useAuth, type AppProfile } from './contexts/AuthContext'
 import AuthPage from './pages/AuthPage'
@@ -47,5 +47,9 @@ function AppRoutes() {
 }
 
 export default function App() {
-  return <BrowserRouter basename={import.meta.env.BASE_URL}><AuthProvider><AppRoutes /></AuthProvider></BrowserRouter>
+  const isStaticSubpathDeploy = import.meta.env.BASE_URL !== '/'
+  if (isStaticSubpathDeploy) {
+    return <HashRouter><AuthProvider><AppRoutes /></AuthProvider></HashRouter>
+  }
+  return <BrowserRouter><AuthProvider><AppRoutes /></AuthProvider></BrowserRouter>
 }
