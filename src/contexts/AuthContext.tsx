@@ -11,14 +11,14 @@ export type AppProfile = {
   role: 'user' | 'admin'
 }
 
-type SignUpInput = { displayName: string; email: string; password: string }
+type SignUpInput = { displayName: string; email: string; password: string; remember?: boolean }
 
 type AuthContextValue = {
   loading: boolean
   configured: boolean
   session: Session | null
   profile: AppProfile | null
-  signIn: (email: string, password: string) => Promise<void>
+  signIn: (email: string, password: string, remember?: boolean) => Promise<void>
   signUp: (input: SignUpInput) => Promise<{ needsEmailConfirmation: boolean }>
   requestPasswordReset: (email: string) => Promise<void>
   updatePassword: (password: string) => Promise<void>
@@ -31,6 +31,24 @@ const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000
 
 function sessionStore() {
   return localStorage.getItem('kstudy:session-preference') === 'persistent' ? localStorage : sessionStorage
+}
+
+function setSessionPreference(persistent: boolean) {
+  clearSessionExpiry()
+  if (persistent) {
+    sessionStorage.removeItem('kstudy:session-preference')
+    localStorage.setItem('kstudy:session-preference', 'persistent')
+    return
+  }
+  // Không để lại bất kỳ lựa chọn lưu phiên nào sau khi đóng trình duyệt.
+  localStorage.removeItem('kstudy:session-preference')
+  sessionStorage.setItem('kstudy:session-preference', 'session-only')
+}
+
+function clearSessionPreference() {
+  localStorage.removeItem('kstudy:session-preference')
+  sessionStorage.removeItem('kstudy:session-preference')
+  clearSessionExpiry()
 }
 
 function clearSessionExpiry() {
@@ -162,15 +180,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     configured: isSupabaseConfigured,
     session,
     profile,
-    async signIn(email, password) {
+    async signIn(email, password, remember = false) {
       if (!supabase) throw new Error('Supabase chưa được cấu hình.')
+      setSessionPreference(remember)
       const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) throw error
+      if (error) {
+        clearSessionPreference()
+        throw error
+      }
       clearSessionExpiry()
       sessionStore().setItem(SESSION_EXPIRES_KEY, String(Date.now() + SESSION_LIFETIME_MS))
     },
-    async signUp({ displayName, email, password }) {
+    async signUp({ displayName, email, password, remember = false }) {
       if (!supabase) throw new Error('Supabase chưa được cấu hình.')
+      setSessionPreference(remember)
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -179,10 +202,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           emailRedirectTo: `${window.location.origin}${import.meta.env.BASE_URL}auth/callback`,
         },
       })
-      if (error) throw error
+      if (error) {
+        clearSessionPreference()
+        throw error
+      }
       if (data.session) {
         clearSessionExpiry()
         sessionStore().setItem(SESSION_EXPIRES_KEY, String(Date.now() + SESSION_LIFETIME_MS))
+      } else {
+        clearSessionPreference()
       }
       return { needsEmailConfirmation: !data.session }
     },
@@ -206,7 +234,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } finally {
         clearAuthState()
         if (signingOutUserId) localStorage.removeItem(`kstudy:${userStorageKey('user-profile', signingOutUserId)}`)
-        localStorage.removeItem('kstudy:session-preference')
+        clearSessionPreference()
       }
     },
   }), [clearAuthState, loading, profile, session])

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Target, Edit2, Sparkles, Headphones, Mic, Trophy, ChevronRight,
   TrendingUp, BookOpen, Plus, Play, CalendarDays, Coffee, BookMarked,
-  Lightbulb, Type, Flame
+  Lightbulb, Type, Flame, Check
 } from 'lucide-react';
 import { Bar } from '../../components/common/ProgressBar';
 import { Plant } from '../../components/common/Mascots';
@@ -193,6 +193,7 @@ export function RecentActivityCard({ profile, lesson, vocabulary, computeHomePro
 
 export function ContinueLearning({ onGo, textbook, lesson, hasStarted = false, plantVariant = 'mugunghwa' }) {
   const overallPct = lesson?.progressPercent ?? textbook?.progressPercent ?? 0;
+  const isCompleted = overallPct >= 100 || lesson?.status === 'done';
   if (!textbook || !lesson) {
     const hasTextbook = Boolean(textbook);
     return (
@@ -206,7 +207,7 @@ export function ContinueLearning({ onGo, textbook, lesson, hasStarted = false, p
   return (
     <section className="card continue">
       <div className="card-title-row">
-        <div className="card-title">{hasStarted ? 'Tiếp tục học' : 'Bắt đầu học'}</div>
+        <div className="card-title">{isCompleted ? 'Đã hoàn thành' : hasStarted ? 'Tiếp tục học' : 'Bắt đầu học'}</div>
       </div>
       <div className="cont-body">
         <div className="book-3d" style={{ '--bk': '#7C6FE4' }}>{lesson.no}과</div>
@@ -220,7 +221,10 @@ export function ContinueLearning({ onGo, textbook, lesson, hasStarted = false, p
         </div>
         <div className="cont-plant"><Plant progress={overallPct} variant={plantVariant} /></div>
       </div>
-      <button className="primary-btn" onClick={onGo}><Play size={16} fill="#fff" /> {hasStarted ? 'Tiếp tục học' : 'Bắt đầu học'}</button>
+      <button className="primary-btn" onClick={onGo}>
+        {isCompleted ? <Check size={16} /> : <Play size={16} fill="#fff" />}
+        {isCompleted ? 'Đã hoàn thành hôm nay' : hasStarted ? 'Tiếp tục học' : 'Bắt đầu học'}
+      </button>
     </section>
   );
 }

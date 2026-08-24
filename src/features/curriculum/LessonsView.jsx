@@ -37,7 +37,7 @@ export default function LessonsView({
           </label>
         ) : <span className="book-chip">{textbookTitle}</span>}
         <span className="lesson-count">{lessons.length} bài</span>
-        {continueLesson && <span className="current-study-chip">Đang học · Bài {continueLesson.no}</span>}
+        {continueLesson && <span className="current-study-chip">{continueLesson.status === 'done' || (continueLesson.progressPercent || 0) >= 100 ? 'Hoàn thành' : 'Đang học'} · Bài {continueLesson.no}</span>}
       </div>
       <div className="lesson-list">
         {lessons.map((l) => {
@@ -92,10 +92,11 @@ export function ActivityLessonSelectView({
         <span className="lesson-count">{lessons.length} bài</span>
       </div>
       <div className="lesson-list">
-        {lessons.map((l) => (
-          <button
+        {lessons.map((l) => {
+          const isDone = l.status === 'done' || (l.progressPercent || 0) >= 100;
+          return <button
             key={l.no}
-            className={`lesson-row ${l.status}`}
+            className={`lesson-row ${isDone ? 'done' : l.status}`}
             disabled={l.status === 'locked'}
             onClick={() => onSelect(l)}
           >
@@ -104,11 +105,11 @@ export function ActivityLessonSelectView({
               <b>Bài {l.no}</b>
               <em>{l.title}</em>
             </span>
-            {l.status === 'done' && <span className="lesson-badge done-b"><Check size={11} /> Hoàn thành</span>}
-            {l.status === 'current' && <span className="lesson-badge cur-b">Đang học</span>}
-            {l.status === 'locked' && <span className="lesson-badge lock-b"><Lock size={11} /> Chưa có nội dung</span>}
+            {isDone && <span className="lesson-badge done-b"><Check size={11} /> Hoàn thành</span>}
+            {!isDone && l.status === 'current' && <span className="lesson-badge cur-b">Đang học</span>}
+            {!isDone && l.status === 'locked' && <span className="lesson-badge lock-b"><Lock size={11} /> Chưa có nội dung</span>}
           </button>
-        ))}
+        })}
       </div>
     </section>
   );

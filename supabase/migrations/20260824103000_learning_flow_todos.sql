@@ -133,6 +133,27 @@ drop trigger if exists refresh_streak_after_daily_minutes on public.daily_study_
 create trigger refresh_streak_after_daily_minutes after insert or update of minutes
 on public.daily_study_stats for each row execute function public.refresh_streak_from_daily_goal_trigger();
 
+create or replace function public.expire_inactive_streaks()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+set safeupdate = 'off'
+as $$
+declare v_count integer;
+begin
+  update public.streak_states
+  set current_streak = 0, updated_at = now()
+  where current_streak > 0
+    and last_study_date is not null
+    and current_date - last_study_date >= 2;
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$$;
+revoke all on function public.expire_inactive_streaks() from public;
+grant execute on function public.expire_inactive_streaks() to service_role;
+
 -- Backfill all existing activity rows so users such as Mai Anh appear in the
 -- correct curriculum ranking and completed lessons feed the review calendar.
 do $$
@@ -143,8 +164,6 @@ begin
   end loop;
 end $$;
 
-notify pgrst, 'reload schema';
-
 create table if not exists public.reminder_email_deliveries (
   user_id uuid not null references public.profiles(id) on delete cascade,
   study_date date not null,
@@ -152,3 +171,5 @@ create table if not exists public.reminder_email_deliveries (
   primary key (user_id, study_date)
 );
 alter table public.reminder_email_deliveries enable row level security;
+
+notify pgrst, 'reload schema';

@@ -279,8 +279,12 @@ h1,
 .chip-btn {
   border: 1.5px solid #EEEBF8;
   cursor: pointer;
-  font-family: 'Quicksand'
+  font-family: 'Quicksand';
+  min-width: 164px;
+  padding: 11px 18px 11px 11px;
 }
+.chip-btn .chip-ico { width: 44px; height: 44px; border-radius: 13px; }
+.chip-btn .chip-ico svg { width: 23px; height: 23px; }
 
 .chip-btn:hover {
   border-color: #4A90E2

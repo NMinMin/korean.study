@@ -62,11 +62,10 @@ export default function AuthPage() {
     }
     setBusy(true)
     try {
-      localStorage.setItem('kstudy:session-preference', remember ? 'persistent' : 'session-only')
       if (mode === 'login') {
-        await auth.signIn(cleanEmail, password)
+        await auth.signIn(cleanEmail, password, remember)
       } else {
-        const result = await auth.signUp({ displayName: displayName.trim(), email: cleanEmail, password })
+        const result = await auth.signUp({ displayName: displayName.trim(), email: cleanEmail, password, remember })
         if (result.needsEmailConfirmation) {
           setNotice('Đăng ký thành công. Hãy mở email để xác minh tài khoản trước khi đăng nhập.')
           setMode('login')

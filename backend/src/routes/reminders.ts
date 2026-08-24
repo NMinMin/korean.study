@@ -25,6 +25,10 @@ export async function reminderRoutes(app: FastifyInstance) {
       host: config.SMTP_HOST, port: config.SMTP_PORT, secure: config.SMTP_SECURE,
       auth: config.SMTP_USER && config.SMTP_PASSWORD ? { user: config.SMTP_USER, pass: config.SMTP_PASSWORD } : undefined,
     })
+    // The same scheduled tick expires chains after two full missed dates and
+    // refreshes the per-user dashboard shortcut through database triggers.
+    const { error: streakError } = await supabaseAdmin.rpc('expire_inactive_streaks')
+    if (streakError) request.log.warn({ streakError }, 'Could not expire inactive streaks')
     const { data: settings, error } = await supabaseAdmin.from('user_settings')
       .select('user_id, weekly_schedule, reminder_time, profiles!user_settings_user_id_fkey(display_name, timezone)')
       .eq('reminder_enabled', true)
@@ -35,7 +39,7 @@ export async function reminderRoutes(app: FastifyInstance) {
       const profile = Array.isArray(setting.profiles) ? setting.profiles[0] : setting.profiles
       const local = localParts(profile?.timezone || 'Asia/Ho_Chi_Minh')
       if (!(setting.weekly_schedule || []).includes(local.weekday)) continue
-      const [hour, minute] = String(setting.reminder_time || '20:00').slice(0, 5).split(':').map(Number)
+      const [hour = 20, minute = 0] = String(setting.reminder_time || '20:00').slice(0, 5).split(':').map(Number)
       if (Math.abs(local.minutes - (hour * 60 + minute)) > 7) continue
       const { data: studied } = await supabaseAdmin.from('daily_study_stats').select('minutes')
         .eq('user_id', setting.user_id).eq('study_date', local.date).maybeSingle()

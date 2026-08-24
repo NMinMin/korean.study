@@ -16,7 +16,7 @@ const schema = z.object({
   SMTP_FROM_EMAIL: z.string().email().optional(),
   SMTP_HOST: z.string().min(1).optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
-  SMTP_SECURE: z.coerce.boolean().default(false),
+  SMTP_SECURE: z.preprocess((value) => value === true || value === 'true' || value === '1', z.boolean()).default(false),
   SMTP_USER: z.string().min(1).optional(),
   SMTP_PASSWORD: z.string().min(1).optional(),
   REMINDER_JOB_SECRET: z.string().min(24).optional(),
