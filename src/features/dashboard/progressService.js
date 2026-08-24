@@ -11,8 +11,6 @@ import {
   legacyLessonProgressKey,
   readScopedProgress,
 } from '../../services/storageShim';
-import { loadStudyGoalDates } from '../settings/studyPlanService';
-import { computeStreak } from '../../utils/streakUtils';
 import { loadRemoteActivityProgress } from '../../lib/activityProgress';
 
 export const correctDictationResults = (saved = {}) =>
@@ -21,35 +19,62 @@ export const correctDictationResults = (saved = {}) =>
   );
 
 export async function computeAndSyncUserStats(profile, lesson) {
-  if (!lesson) return { displayName: profile?.displayName || 'Người học', xp: 0, streak: 0, updatedAt: Date.now() };
   const userId = profile?.id;
-  let xp = 0;
-  try {
-    const v = await readScopedProgress(vocabProgressKey(lesson, userId), legacyVocabProgressKey(lesson), userId);
-    xp += Object.keys(JSON.parse(v.value)).length * 10;
-  } catch (e) { }
-  try {
-    const d = await readScopedProgress(dictationProgressKey(lesson, userId), legacyDictationProgressKey(lesson), userId);
-    xp += Object.keys(correctDictationResults(JSON.parse(d.value))).length * 12;
-  } catch (e) { }
-  try {
-    const s = await readScopedProgress(shadowProgressKey(lesson, userId), legacyShadowProgressKey(lesson), userId);
-    xp += Object.keys(JSON.parse(s.value)).length * 12;
-  } catch (e) { }
-  try {
-    const r = await readScopedProgress(reviewHistoryKey(lesson, userId), legacyLessonProgressKey('review-history', lesson.no), userId);
-    const h = JSON.parse(r.value);
-    xp += Object.values(h).filter((x) => x.correct > 0).length * 5;
-  } catch (e) { }
+  if (!userId) return { displayName: profile?.displayName || 'Người học', xp: 0, streak: 0, updatedAt: Date.now() };
 
-  const dates = await loadStudyGoalDates(userId);
-  const streak = computeStreak(dates);
+  // Normal path: the learner dashboard reads exactly one precomputed row.
+  if (supabase) {
+    try {
+      const { data: snapshot, error } = await supabase
+        .from('user_dashboard_snapshots')
+        .select('xp, level, streak, updated_at')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (!error && snapshot) {
+        return {
+          userId,
+          displayName: profile?.displayName || 'Người học',
+          xp: Number(snapshot.xp || 0),
+          level: Number(snapshot.level || 1),
+          streak: Number(snapshot.streak || 0),
+          updatedAt: snapshot.updated_at || Date.now(),
+        };
+      }
+    } catch (e) { }
+  }
+
+  // Compatibility fallback until the snapshot migration has been applied.
+  // curriculum_leaderboard_stats là sổ cái XP theo giáo trình. XP tài khoản
+  // là tổng XP ở tất cả giáo trình; tiến trình bài học không được tự quy đổi
+  // thành XP vì sẽ làm số trên giao diện lệch với dữ liệu Supabase.
+  let xp = 0;
+  let storedLeaderboardXp = 0;
+  let storedLeaderboardStreak = 0;
+  let storedStreakState = 0;
+  let storedProfileXp = 0;
+  let curriculumXp = 0;
+  let curriculumStreak = 0;
+  let hasCurriculumStats = false;
+  if (supabase) {
+    try {
+      const [{ data: profileRow }, { data: leaderboardRow }, { data: curriculumRows }, { data: streakRow }] = await Promise.all([
+        supabase.from('profiles').select('xp').eq('id', userId).maybeSingle(),
+        supabase.from('leaderboard_stats').select('xp, streak').eq('user_id', userId).maybeSingle(),
+        supabase.from('curriculum_leaderboard_stats').select('xp, streak').eq('user_id', userId),
+        supabase.from('streak_states').select('current_streak').eq('user_id', userId).maybeSingle(),
+      ]);
+      storedProfileXp = Number(profileRow?.xp || 0);
+      storedLeaderboardXp = Number(leaderboardRow?.xp || 0);
+      storedLeaderboardStreak = Number(leaderboardRow?.streak || 0);
+      storedStreakState = Number(streakRow?.current_streak || 0);
+      hasCurriculumStats = Array.isArray(curriculumRows) && curriculumRows.length > 0;
+      curriculumXp = (curriculumRows || []).reduce((sum, row) => sum + Number(row?.xp || 0), 0);
+      curriculumStreak = (curriculumRows || []).reduce((highest, row) => Math.max(highest, Number(row?.streak || 0)), 0);
+    } catch (e) { }
+  }
+  xp = hasCurriculumStats ? curriculumXp : Math.max(storedProfileXp, storedLeaderboardXp);
+  const streak = Math.max(storedStreakState, storedLeaderboardStreak, curriculumStreak);
   const stats = { userId, displayName: profile?.displayName || 'Người học', xp, streak, updatedAt: Date.now() };
-  try {
-    if (supabase && userId) {
-      await supabase.from('leaderboard_stats').upsert({ user_id: userId, xp, streak, updated_at: new Date().toISOString() });
-    }
-  } catch (e) { }
   return stats;
 }
 

@@ -2,14 +2,16 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ChevronLeft, ChevronRight, Volume2, Star, BookOpen, Headphones, Mic, Sparkles,
   BookMarked, Lightbulb, CheckCircle2, RotateCcw, Plus, XCircle, ArrowLeft, ArrowRight,
-  Play, RotateCw, Check, Link2, Image as ImageIcon, NotebookPen
+  Play, RotateCw, Check, Link2, Image as ImageIcon, NotebookPen,
+  AlertTriangle, Bot, Flame, MessageCircle, MessageSquare, PencilLine, Settings, Target, Type
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { speakKo, playVocabularyAudio, playCorrectSound, playIncorrectSound, playCelebrationSound } from '../../services/audioService';
 import { renderKo } from '../../utils/textUtils';
 import { todayStr } from '../../utils/streakUtils';
 import { FcBunny, SwBunnyEmpty, MiniBear } from '../../components/common/Mascots';
-import { VOCAB_SAMPLE, GRAMMAR_SAMPLE, SHADOW_LINES } from '../../data/fallbackData';
+import { Bar, ProgressIcon } from '../../components/common/ProgressBar';
+import { VOCAB_SAMPLE, GRAMMAR_SAMPLE, SHADOW_LINES, DiamondIcon, UserGemCount, UserXpCount, UserStreakCount } from '../../data/fallbackData';
 import {
   vocabProgressKey,
   legacyVocabProgressKey,
@@ -19,7 +21,8 @@ import {
   saveScopedProgress
 } from '../../services/storageShim';
 import { markRemoteActivityCompleted } from '../../lib/activityProgress';
-import { ACTIVITIES } from './activityHelpers';
+import { ACTIVITIES, loadActivityProgress as loadLessonActivityProgress } from './activityHelpers';
+import { SkillCompletionView } from '../review/ReviewViews';
 import {
   loadRemoteVocabularyState,
   loadRemoteVocabularyStateForWords,
@@ -32,7 +35,7 @@ export function LessonDetailView({ lesson, userId, textbookTitle, onBack, onStar
 
   useEffect(() => {
     let alive = true;
-    loadActivityProgress(lesson, userId).then((p) => {
+    loadLessonActivityProgress(lesson, userId).then((p) => {
       if (!alive) return;
       setPcts(p);
       const overall = Math.round(Object.values(p).reduce((sum, value) => sum + value, 0) / Object.keys(p).length);

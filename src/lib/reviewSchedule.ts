@@ -21,7 +21,9 @@ export type VocabularyReviewDay = {
 
 const DAY_MS = 86_400_000
 const DAILY_LIMIT = 10
-const REVIEW_OFFSETS = [0, 3, 7]
+// The first review is one day after lesson completion. Subsequent placements
+// are day 3 and day 7 relative to that completion date.
+const REVIEW_OFFSETS = [0, 2, 6]
 
 function localDateKey(date = new Date()) {
   const year = date.getFullYear()

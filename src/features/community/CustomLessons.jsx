@@ -394,9 +394,9 @@ export function CustomLessonHub({ profile, onStudy }) {
           <p className="cg-sub" style={{ marginTop: -6, marginBottom: 2 }}>AI sẽ tự soạn câu ví dụ + mẹo ghi nhớ cho từng từ, và tạo sẵn bài kiểm tra theo các thể thức bạn chọn.</p>
           <div className="cl-quiz-types">
             {[
-              { id: 'fillblank', label: 'Điền từ vào câu' },
-              { id: 'matching', label: 'Nối từ - nghĩa' },
-              { id: 'listening', label: 'Nghe và chọn nghĩa' },
+              { id: 'fillblank', label: 'Điền từ vào câu', note: 'Điền từ Hàn còn thiếu trong câu ví dụ' },
+              { id: 'matching', label: 'Chọn từ - nghĩa', note: 'Chọn nghĩa tiếng Việt chính xác' },
+              { id: 'listening', label: 'Nghe và chọn nghĩa', note: 'Nghe phát âm rồi chọn đáp án' },
             ].map((qt) => (
               <button
                 key={qt.id}
@@ -404,7 +404,7 @@ export function CustomLessonHub({ profile, onStudy }) {
                 className={`cl-quiz-chip ${quizTypes.includes(qt.id) ? 'on' : ''}`}
                 onClick={() => toggleQuizType(qt.id)}
               >
-                {quizTypes.includes(qt.id) && <CheckCircle2 size={13} />} {qt.label}
+                {quizTypes.includes(qt.id) && <CheckCircle2 size={13} />} <span>{qt.label}<small>{qt.note}</small></span>
               </button>
             ))}
           </div>
@@ -506,29 +506,26 @@ export function buildCustomQuizQuestions(lessonData) {
     return shuffleArr([correct, ...distractors]);
   };
 
-  if (types.includes('fillblank')) {
-    words.forEach((w, i) => {
+  // Mỗi từ chỉ được gán vào một template. Khi chọn nhiều template, các từ
+  // được chia lần lượt theo đúng thứ tự lựa chọn rồi toàn bộ câu được xáo trộn.
+  words.forEach((w, i) => {
+    const type = types[i % Math.max(1, types.length)];
+    if (type === 'fillblank') {
       if (!w.example || !w.example.includes('**')) return;
       const blanked = w.example.replace(/\*\*(.+?)\*\*/, 'ـــــ');
       const distractors = shuffleArr(words.filter((x) => x.ko !== w.ko).map((x) => x.ko)).slice(0, 3);
       if (distractors.length < 1) return;
       pool.push({ type: 'fillblank', prompt: blanked, promptVi: w.exampleVi, correct: w.ko, options: shuffleArr([w.ko, ...distractors]), key: `fb:${i}` });
-    });
-  }
-  if (types.includes('matching')) {
-    words.forEach((w, i) => {
+    } else if (type === 'matching') {
       const options = viOptionsFor(w.vi);
       if (options.length < 2) return;
       pool.push({ type: 'matching', prompt: w.ko, correct: w.vi, options, key: `mt:${i}` });
-    });
-  }
-  if (types.includes('listening')) {
-    words.forEach((w, i) => {
+    } else if (type === 'listening') {
       const options = viOptionsFor(w.vi);
       if (options.length < 2) return;
       pool.push({ type: 'listening', audio: w.ko, correct: w.vi, options, key: `ls:${i}` });
-    });
-  }
+    }
+  });
   return shuffleArr(pool);
 }
 

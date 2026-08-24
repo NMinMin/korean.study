@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, BookOpen, Sparkles, Target, RotateCcw, CheckCircle2,
-  XCircle, Volume2, Lightbulb, Trophy, Star, Award, Check, NotebookPen
+  XCircle, Volume2, Lightbulb, Trophy, Star, Award, Check, NotebookPen,
+  AlertTriangle, Headphones, Home, Lock, MessageCircle, Mic, Type
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { requestAIJson } from '../../services/aiService';
 import { speakKo, playCorrectSound, playIncorrectSound, playCelebrationSound } from '../../services/audioService';
 import { renderKo, shuffleArr } from '../../utils/textUtils';
-import { SwBunnyEmpty, BunnyMascot } from '../../components/common/Mascots';
-import { VOCAB_SAMPLE, GRAMMAR_SAMPLE, SHADOW_LINES } from '../../data/fallbackData';
+import { SwBunnyEmpty, BunnyMascot, FcBunny } from '../../components/common/Mascots';
+import { VOCAB_SAMPLE, GRAMMAR_SAMPLE, SHADOW_LINES, DiamondIcon } from '../../data/fallbackData';
 import {
   reviewHistoryKey,
   legacyLessonProgressKey,
@@ -243,7 +244,7 @@ async function generateReviewFeedback(wrongLabels) {
   return `Bạn cần ôn lại thêm: ${wrongLabels.slice(0, 3).join(", ")}. Làm lại các câu này một lượt để ghi nhớ chắc hơn nhé.`;
 }
 
-function SkillCompletionView({ title, description, assessment, loading, onBack, onRetry, retryLabel = "Kiểm tra lại" }) {
+export function SkillCompletionView({ title, description, assessment, loading, onBack, onRetry, retryLabel = "Kiểm tra lại" }) {
   return (
     <section className="skill-complete-card">
       <div className="skill-complete-icon"><CheckCircle2 size={42} /></div>

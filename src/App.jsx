@@ -30,6 +30,9 @@ import {
 } from './services/audioService';
 
 import { computeAndSyncUserStats } from './features/dashboard/progressService';
+import { supabase } from './lib/supabase';
+import notificationSoundUrl from '../Sound Effect/Notification.mp3';
+import { playEffect } from './services/audioService';
 import { getDailyGoal, saveDailyGoal, markNotifSeen } from './features/settings/studyPlanService';
 import { mapDatabaseGrammar, mapDatabaseLines } from './features/curriculum/curriculumMappers';
 import {
@@ -157,6 +160,44 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   useEffect(() => {
     refreshUserStats();
   }, [profile, lesson, learningCatalog]);
+
+  useEffect(() => {
+    if (!supabase || !profile?.id) return undefined;
+    const channel = supabase
+      .channel(`dashboard-snapshot:${profile.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_dashboard_snapshots',
+          filter: `user_id=eq.${profile.id}`,
+        },
+        (change) => {
+          const snapshot = change.new;
+          if (!snapshot || snapshot.user_id !== profile.id) return;
+          setUserStats({
+            xp: Number(snapshot.xp || 0),
+            streak: Number(snapshot.streak || 0),
+          });
+        },
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [profile?.id]);
+
+  useEffect(() => {
+    if (!supabase || !profile?.id) return undefined;
+    const channel = supabase.channel(`notifications:${profile.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}`,
+      }, () => {
+        playEffect(notificationSoundUrl);
+        window.dispatchEvent(new CustomEvent('kstudy:notification-received'));
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [profile?.id]);
 
   const goHome = () => {
     setView('home');
@@ -439,7 +480,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const reviewLines = reviewLinesFromDatabase.length ? reviewLinesFromDatabase : lessonShadowLines;
   const activeTextbookTitle = learningCatalog?.activeTextbook?.title || 'Giáo trình tiếng Hàn';
   const continueTextbook = learningCatalog?.activeTextbook?.isAdded ? learningCatalog.activeTextbook : null;
-  const continueLesson = continueTextbook ? (learningCatalog?.continueLesson || catalogLessons[0]) : null;
+  const continueLesson = continueTextbook ? (learningCatalog?.continueLesson || null) : null;
 
   return (
     <UserStatsContext.Provider value={userStats}>

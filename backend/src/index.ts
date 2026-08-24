@@ -6,6 +6,7 @@ import { uploadRoutes } from './routes/uploads.js'
 import { adminRoutes } from './routes/admin.js'
 import { shadowingRoutes } from './routes/shadowing.js'
 import { aiRoutes } from './routes/ai.js'
+import { reminderRoutes } from './routes/reminders.js'
 
 const app = Fastify({ logger: true, requestIdHeader: 'x-request-id' })
 
@@ -44,6 +45,7 @@ await app.register(uploadRoutes, { prefix: '/v1' })
 await app.register(adminRoutes, { prefix: '/v1' })
 await app.register(shadowingRoutes, { prefix: '/v1' })
 await app.register(aiRoutes, { prefix: '/v1' })
+await app.register(reminderRoutes, { prefix: '/v1' })
 
 app.setNotFoundHandler((request, reply) => reply.code(404).send({ code: 'NOT_FOUND', message: 'Không tìm thấy API.', requestId: request.id }))
 app.setErrorHandler((error, request, reply) => {

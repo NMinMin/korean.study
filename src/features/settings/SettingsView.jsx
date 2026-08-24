@@ -132,7 +132,7 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
         <div className="settings-row settings-reminder-row">
           <div className="settings-row-label">
             <b>Nhắc nhở học mỗi ngày</b>
-            <span>Nhắc bạn vào khung giờ cố định nếu hôm nay chưa học</span>
+            <span>Gửi email vào khung giờ cố định nếu hôm nay chưa học</span>
           </div>
           <button className={`settings-toggle ${plan.reminderEnabled ? 'on' : ''}`} onClick={() => update({ reminderEnabled: !plan.reminderEnabled })} aria-label="Bật/tắt nhắc nhở">
             <span className="settings-toggle-knob" />
@@ -176,7 +176,7 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
         </div>
         {plan.reminderEnabled && (
           <p className="settings-note">
-            <Lightbulb size={13} color="#E8A93D" /> App web nên nhắc nhở chỉ hoạt động khi bạn đang mở app trên trình duyệt (hiện banner ngay trong app) — chưa gửi được thông báo khi đã đóng trình duyệt.
+            <Lightbulb size={13} color="#E8A93D" /> Hệ thống sẽ gửi email nhắc học theo múi giờ tài khoản và vẫn hiện banner khi bạn đang mở ứng dụng.
           </p>
         )}
         {notifPermNote && <p className="settings-note">{notifPermNote}</p>}

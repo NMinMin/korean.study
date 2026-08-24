@@ -546,6 +546,23 @@ h1,
   position: relative
 }
 
+.goal-rest-day {
+  min-height: 88px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 14px 18px;
+  border: 1px dashed #cfc8f4;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #faf9ff, #f1effc);
+  color: #5f587f;
+}
+.goal-rest-day div { display: grid; gap: 3px; }
+.goal-rest-day b { color: #2e2a4a; font-size: 16px; }
+.goal-rest-day span { font-size: 13px; }
+
 .goal-msg {
   font-size: 14px;
   font-weight: 700;
@@ -8697,6 +8714,17 @@ textarea.fc2-note {
   flex-shrink: 0;
 }
 
+.settings-date-input {
+  min-width: 190px;
+  cursor: pointer;
+}
+.settings-date-input::-webkit-calendar-picker-indicator {
+  padding: 8px;
+  border-radius: 9px;
+  background-color: #f0edff;
+  cursor: pointer;
+}
+
 .settings-minute-input input:focus,
 .settings-date-input:focus,
 .settings-time-input:focus {
@@ -12440,3 +12468,6 @@ textarea.fc2-note {
   font-size: 14px;
   padding: 0 4px;
 }
+.cl-quiz-chip > span { display: grid; gap: 2px; text-align: left; }
+.cl-quiz-chip small { color: #918aaa; font-size: 10px; font-weight: 500; }
+.cl-quiz-chip.on small { color: rgba(255,255,255,.82); }

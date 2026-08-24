@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   MessageCircle, MessageSquare, BookOpen, ChevronLeft, Plus, Sparkles,
-  Heart, MessageCircle as MessageCircleIcon, Flag, Trash2, CheckCircle2
+  Heart, MessageCircle as MessageCircleIcon, Flag, Trash2, CheckCircle2, Lock
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { timeAgo } from '../../utils/timeAgo';

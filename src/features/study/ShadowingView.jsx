@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  ChevronLeft, ChevronRight, Headphones, Target, Volume2, Mic, Sparkles, Lightbulb, CheckCircle2, RotateCcw, AlertTriangle
+  ChevronLeft, ChevronRight, Headphones, Target, Volume2, Mic, Sparkles, Lightbulb, CheckCircle2, RotateCcw, AlertTriangle,
+  BookOpen, Flame, Play, Scissors, Smile, Square, XCircle
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { requestAIJson, transcribeShadowRecording, parseAIJson } from '../../services/aiService';
 import { speakKo, playCorrectSound, playIncorrectSound, playCelebrationSound } from '../../services/audioService';
 import { renderKo } from '../../utils/textUtils';
 import { SwBunnyEmpty, MiniBear } from '../../components/common/Mascots';
-import { SHADOW_LINES } from '../../data/fallbackData';
+import { SHADOW_LINES, DiamondIcon, UserGemCount, UserStreakCount } from '../../data/fallbackData';
 import {
   shadowProgressKey,
   legacyShadowProgressKey,
@@ -15,6 +16,7 @@ import {
   saveScopedProgress
 } from '../../services/storageShim';
 import { markRemoteActivityCompleted } from '../../lib/activityProgress';
+import { SkillCompletionView } from '../review/ReviewViews';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
 

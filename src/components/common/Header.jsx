@@ -24,6 +24,12 @@ export default function Header({ profile, stats, onOpenNotif }) {
     return () => { alive = false; };
   }, [profile]);
 
+  useEffect(() => {
+    const receive = () => setHasNotif(true);
+    window.addEventListener('kstudy:notification-received', receive);
+    return () => window.removeEventListener('kstudy:notification-received', receive);
+  }, []);
+
   const xp = stats?.xp ?? 0;
   const xpMax = Math.max(200, Math.ceil((xp + 1) / 200) * 200);
   const level = Math.max(1, Math.floor(xp / 200) + 1);
@@ -41,7 +47,6 @@ export default function Header({ profile, stats, onOpenNotif }) {
     >
       <button className="avatar-btn" onClick={onOpenNotif} aria-label="Thông báo">
         <Avatar />
-        {hasNotif && <span className="notif-dot" title="Có thông báo mới" />}
       </button>
       <div className="hello">
         <h1>{getGreeting()}, <span>{name}!</span> 👋</h1>

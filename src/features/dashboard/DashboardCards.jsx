@@ -7,7 +7,7 @@ import {
 import { Bar } from '../../components/common/ProgressBar';
 import { Plant } from '../../components/common/Mascots';
 import {
-  getDailyGoal,
+  getDailyGoal, getStudyPlan, WEEK_DAYS,
 } from '../settings/studyPlanService';
 import {
   isCelebrationSoundEnabled,
@@ -32,10 +32,14 @@ export function ConfettiBurst() {
 
 export function DailyGoalRing({ userId, onChangeGoal }) {
   const [goal, setGoal] = useState(null);
+  const [plan, setPlan] = useState(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const celebratedRef = useRef(false);
 
-  const refresh = () => getDailyGoal(userId).then((g) => setGoal(g));
+  const refresh = () => Promise.all([getDailyGoal(userId), getStudyPlan(userId)]).then(([g, p]) => {
+    setGoal(g);
+    setPlan(p);
+  });
   useEffect(() => {
     const syncImmediately = (event) => event.detail ? setGoal(event.detail) : refresh();
     refresh();
@@ -62,7 +66,9 @@ export function DailyGoalRing({ userId, onChangeGoal }) {
     if (!done) celebratedRef.current = false;
   }, [goal]);
 
-  if (!goal) return null;
+  if (!goal || !plan) return null;
+  const weekdayKey = WEEK_DAYS[(new Date().getDay() + 6) % 7]?.key;
+  const isRestDay = plan.weeklySchedule?.[weekdayKey] === false;
   const pct = Math.min(100, Math.round((goal.todayMinutes / Math.max(1, goal.targetMinutes)) * 100));
   const r = 40, c = 2 * Math.PI * r;
   const dash = c * (pct / 100);
@@ -76,6 +82,12 @@ export function DailyGoalRing({ userId, onChangeGoal }) {
       </div>
       <div className="goal-ring-row">
         {showConfetti && <ConfettiBurst />}
+        {isRestDay ? (
+          <div className="goal-rest-day" aria-label="Hôm nay là ngày nghỉ">
+            <Coffee size={34} color="#8B7BE8" />
+            <div><b>Nay là ngày nghỉ</b><span>Nghỉ ngơi để mai học thật tốt nhé.</span></div>
+          </div>
+        ) : <>
         <svg viewBox="0 0 100 100" width="88" height="88">
           <circle cx="50" cy="50" r={r} fill="none" stroke="#EEEBF8" strokeWidth="9" />
           <circle
@@ -90,6 +102,7 @@ export function DailyGoalRing({ userId, onChangeGoal }) {
             ? <span>🎉 Chúc mừng, bạn đã đạt mục tiêu học hôm nay!</span>
             : <span>Còn khoảng {Math.max(0, Math.round(goal.targetMinutes - goal.todayMinutes))} phút nữa là đạt mục tiêu hôm nay!</span>}
         </div>
+        </>}
       </div>
     </section>
   );
@@ -181,11 +194,12 @@ export function RecentActivityCard({ profile, lesson, vocabulary, computeHomePro
 export function ContinueLearning({ onGo, textbook, lesson, hasStarted = false, plantVariant = 'mugunghwa' }) {
   const overallPct = lesson?.progressPercent ?? textbook?.progressPercent ?? 0;
   if (!textbook || !lesson) {
+    const hasTextbook = Boolean(textbook);
     return (
       <section className="card continue continue-empty">
-        <div className="card-title">Bắt đầu học</div>
-        <div className="continue-empty-body"><BookOpen size={28} /><div><b>Chưa có giáo trình để học</b><span>Thêm một giáo trình vào danh sách của bạn để bắt đầu.</span></div></div>
-        <button className="primary-btn" onClick={onGo}><Plus size={16} /> Thêm giáo trình</button>
+        <div className="card-title">{hasTextbook ? 'Tạm nghỉ ngơi' : 'Bắt đầu học'}</div>
+        <div className="continue-empty-body">{hasTextbook ? <Coffee size={30} /> : <BookOpen size={28} />}<div><b>{hasTextbook ? 'Tạm chưa có bài học mới' : 'Chưa có giáo trình để học'}</b><span>{hasTextbook ? 'Bạn đã hoàn thành các bài hiện có. Nghỉ một chút nhé!' : 'Thêm một giáo trình vào danh sách của bạn để bắt đầu.'}</span></div></div>
+        {!hasTextbook && <button className="primary-btn" onClick={onGo}><Plus size={16} /> Thêm giáo trình</button>}
       </section>
     );
   }

@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, Volume2, Sparkles, CheckCircle2, RotateCcw, AlertTriangle,
-  Lightbulb, XCircle, Check, Link2, Image as ImageIcon
+  Lightbulb, XCircle, Check, Link2, Image as ImageIcon,
+  BookMarked, BookOpen, Eraser, Headphones, Lock, Play, Square, Star, Target
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { requestAIJson } from '../../services/aiService';
 import { speakKo, playCorrectSound, playIncorrectSound, playCelebrationSound } from '../../services/audioService';
 import { renderKo, shuffleArr } from '../../utils/textUtils';
-import { MiniBear, SwBunnyEmpty } from '../../components/common/Mascots';
-import { VOCAB_SAMPLE, SHADOW_LINES } from '../../data/fallbackData';
+import { MiniBear, SwBunnyEmpty, BunnyMascot } from '../../components/common/Mascots';
+import { VOCAB_SAMPLE, SHADOW_LINES, DiamondIcon, UserGemCount, UserXpCount } from '../../data/fallbackData';
 import {
   dictationProgressKey,
   legacyDictationProgressKey,
@@ -16,6 +17,7 @@ import {
   saveScopedProgress
 } from '../../services/storageShim';
 import { markRemoteActivityCompleted } from '../../lib/activityProgress';
+import { SkillCompletionView } from '../review/ReviewViews';
 
 export function FillBlankListenView({ onBack }) {
   const [answers, setAnswers] = useState({});

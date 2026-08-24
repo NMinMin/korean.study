@@ -190,9 +190,19 @@ export async function loadLearningCatalog(preferredTextbookId?: string): Promise
   }))
   const myTextbooks = textbooks.filter((book) => book.isAdded)
   const availableTextbooks = textbooks.filter((book) => book.status === 'published' && !book.isAdded)
+  const todayKey = localDateKey()
+  const bookHasUnfinishedLesson = (bookId: string) => (lessonResult.data ?? []).some(
+    (item) => item.textbook_id === bookId && item.status === 'published' && (effectiveLessonProgress.get(item.id) || 0) < 100,
+  )
+  const bookCompletedToday = (bookId: string) => (lessonResult.data ?? []).some(
+    (item) => item.textbook_id === bookId && lessonCompletionDates.get(item.id) === todayKey,
+  )
+  const latestBook = textbooks.find((book) => book.id === progressResult.data?.[0]?.textbook_id && book.isAdded)
   const activeTextbook =
     textbooks.find((book) => book.id === preferredTextbookId)
-    ?? textbooks.find((book) => book.id === progressResult.data?.[0]?.textbook_id && book.isAdded)
+    ?? (latestBook && (bookHasUnfinishedLesson(latestBook.id) || bookCompletedToday(latestBook.id)) ? latestBook : undefined)
+    ?? myTextbooks.find((book) => book.hasContent && bookHasUnfinishedLesson(book.id))
+    ?? latestBook
     ?? myTextbooks.find((book) => book.hasContent)
     ?? textbooks.find((book) => book.status === 'published' && book.hasContent)
     ?? textbooks[0]
@@ -213,7 +223,6 @@ export async function loadLearningCatalog(preferredTextbookId?: string): Promise
   const latestProgress = (progressResult.data ?? []).find((progress) => progress.textbook_id === activeTextbook.id)
   const hasStarted = (progressResult.data ?? []).some((progress) => progress.textbook_id === activeTextbook.id)
     || lessons.some((lesson) => lesson.progressPercent > 0)
-  const todayKey = localDateKey()
   const completedTodayLesson = [...lessons]
     .filter((lesson) => lessonCompletionDates.get(lesson.id) === todayKey)
     .sort((a, b) => b.no - a.no)[0]
