@@ -2,7 +2,9 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { adminApi } from '../lib/adminApi'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { BookOpen, BookText, Users, LayoutDashboard, LogOut, X, ShieldCheck, GraduationCap, Plus, Search, Eye, EyeOff, Lock, Unlock, Flag, MessageSquare, Pencil, Trash2, ChevronDown, ChevronUp, Save, Check, Clock3, Star, Download, TrendingUp, ClipboardList } from 'lucide-react'
+import { BookOpen, BookText, Users, LayoutDashboard, LogOut, X, ShieldCheck, GraduationCap, Plus, Search, Eye, EyeOff, Lock, Unlock, Flag, MessageSquare, Pencil, Trash2, ChevronDown, ChevronUp, Save, Check, Clock3, Star, Download, TrendingUp, ClipboardList, CalendarDays, RotateCcw, Bell } from 'lucide-react'
+import { playEffect } from '../services/audioService'
+import notificationSoundUrl from '../../Sound Effect/Notification.mp3'
 import AdminExercises from './AdminExercises'
 import './admin.css'
 
@@ -10,7 +12,7 @@ type Status = 'draft' | 'published' | 'locked' | 'no_content'
 type Textbook = { id: string; slug: string; title_ko: string; title_vi: string | null; description?: string | null; sort_order?: number; status: Status }
 type Lesson = { id: string; textbook_id: string; lesson_number: number; title_ko: string; title_vi: string | null; status: Status; textbooks?: { title_ko?: string } }
 type AdminUser = { id: string; email?: string; display_name?: string; role: 'user' | 'admin'; level?: number; xp?: number; emailConfirmedAt?: string; lastSignInAt?: string; is_locked?: boolean; locked_at?: string }
-type DashboardData = { days: number; activeUsers: number; averageCompletedLessons: number; averageMinutes: number; retentionRate: number; totalTextbooks: number; totalLessons: number; totalUsers: number; chart: { date: string; minutes: number }[]; courses: { title: string; percent: number }[]; hardVocabulary: { word: string; meaning: string; course: string; errorRate: number }[] }
+type DashboardData = { days: number; activeUsers: number; averageCompletedLessons: number; averageMinutes: number; retentionRate: number; pendingReports: number; totalTextbooks: number; totalLessons: number; totalUsers: number; chart: { date: string; minutes: number }[]; courses: { title: string; percent: number }[]; hardVocabulary: { word: string; meaning: string; course: string; errorRate: number }[] }
 type CommunityReport = { id: string; post_id: string | null; reason: string; status: 'pending' | 'resolved' | 'dismissed'; created_at: string; profiles?: { display_name?: string } }
 type CommunityPost = { id: string; user_id: string; content: string; status: 'visible' | 'hidden'; comments_locked: boolean; moderation_reason?: string | null; created_at: string; profiles?: { display_name?: string; avatar_url?: string }; reports: CommunityReport[] }
 type CommunityData = { posts: CommunityPost[]; reports: CommunityReport[] }
@@ -62,6 +64,9 @@ export default function AdminPage() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [community, setCommunity] = useState<CommunityData>({ posts: [], reports: [] })
   const [communityStatus, setCommunityStatus] = useState('all')
+  const [communityDay, setCommunityDay] = useState('all')
+  const [communityMonth, setCommunityMonth] = useState('all')
+  const [communityYear, setCommunityYear] = useState('all')
 
   const refreshDashboard = useCallback(async () => {
     const data = await adminApi<DashboardData>(`/dashboard?days=${range}&refresh=true`)
@@ -101,6 +106,18 @@ export default function AdminPage() {
       .subscribe()
     return () => { clearTimeout(timer); void supabase.removeChannel(channel) }
   }, [range, refreshDashboard])
+
+  useEffect(() => {
+    if (!supabase) return
+    const channel = supabase.channel('admin-community-report-alerts')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'content_reports' }, () => {
+        setDashboard((current) => current ? { ...current, pendingReports: current.pendingReports + 1 } : current)
+        playEffect(notificationSoundUrl)
+        if (tab === 'community') void adminApi<CommunityData>('/community').then(setCommunity).catch(() => undefined)
+      })
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
+  }, [tab])
 
   const updateStatus = async (kind: 'textbooks' | 'lessons', id: string, status: Status) => {
     try {
@@ -181,6 +198,7 @@ export default function AdminPage() {
         reports: current.reports.map((item) => item.id === report.id ? { ...item, status } : item),
         posts: current.posts.map((post) => ({ ...post, reports: post.reports.map((item) => item.id === report.id ? { ...item, status } : item) })),
       }))
+      if (report.status === 'pending') setDashboard((current) => current ? { ...current, pendingReports: Math.max(0, current.pendingReports - 1) } : current)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể xử lý báo cáo.') }
   }
 
@@ -216,9 +234,18 @@ export default function AdminPage() {
     setExpandedTextbookGroups((current) => new Set(current).add(textbookId))
   }
   useEffect(() => () => { groupAnimationTimers.current.forEach((timer) => window.clearTimeout(timer)) }, [])
-  const filteredCommunityPosts = community.posts.filter((post) =>
+  const communityYears = Array.from(new Set(community.posts.map((post) => new Date(post.created_at).getFullYear()).filter(Number.isFinite))).sort((a, b) => b - a)
+  const filteredCommunityPosts = community.posts.filter((post) => {
+    const createdAt = new Date(post.created_at)
+    const matchesDate = !Number.isNaN(createdAt.getTime())
+      && (communityDay === 'all' || createdAt.getDate() === Number(communityDay))
+      && (communityMonth === 'all' || createdAt.getMonth() + 1 === Number(communityMonth))
+      && (communityYear === 'all' || createdAt.getFullYear() === Number(communityYear))
+    return matchesDate
+    &&
     (communityStatus === 'all' || communityStatus === post.status || (communityStatus === 'reported' && post.reports.some((report) => report.status === 'pending')))
-    && [post.content, post.profiles?.display_name].some((value) => value?.toLocaleLowerCase('vi').includes(query)))
+    && [post.content, post.profiles?.display_name].some((value) => value?.toLocaleLowerCase('vi').includes(query))
+  })
   const maxChart = Math.max(1, ...(dashboard?.chart.map((item) => item.minutes) || [1]))
   const exportDashboard = () => {
     if (!dashboard) return
@@ -235,14 +262,14 @@ export default function AdminPage() {
         <button className={tab === 'textbooks' ? 'active' : ''} onClick={() => setTab('textbooks')}><BookOpen size={20} /><span>Giáo trình</span><b>{textbooks.length || dashboard?.totalTextbooks || 0}</b></button>
         <button className={tab === 'lessons' ? 'active' : ''} onClick={() => setTab('lessons')}><BookText size={20} /><span>Bài học</span><b>{lessons.length || dashboard?.totalLessons || 0}</b></button>
         <button className={tab === 'exercises' ? 'active' : ''} onClick={() => setTab('exercises')}><ClipboardList size={20} /><span>Bài tập</span></button>
-        <button className={tab === 'community' ? 'active' : ''} onClick={() => setTab('community')}><MessageSquare size={20} /><span>Cộng đồng</span><b>{community.reports.filter((report) => report.status === 'pending').length || ''}</b></button>
+        <button className={tab === 'community' ? 'active' : ''} onClick={() => setTab('community')}><MessageSquare size={20} /><span>Cộng đồng</span><b>{dashboard?.pendingReports || community.reports.filter((report) => report.status === 'pending').length || ''}</b></button>
         <button className={tab === 'users' ? 'active' : ''} onClick={() => setTab('users')}><Users size={20} /><span>Người dùng</span><b>{users.length || dashboard?.totalUsers || 0}</b></button>
       </nav>
       <div className="admin-account"><div className="admin-avatar">{(profile?.displayName || 'A').slice(0, 1).toUpperCase()}</div><div><b>{profile?.displayName || 'Quản trị viên'}</b><small>Quản trị viên</small></div></div>
       <button className="admin-signout" onClick={() => void signOut()}><LogOut size={18} /><span>Đăng xuất</span></button>
     </aside>
     <main className="admin-page">
-      {tab === 'dashboard' ? <header className="admin-header admin-welcome"><div className="admin-welcome-avatar">{(profile?.displayName || 'A').slice(0, 1).toUpperCase()}</div><div className="admin-welcome-copy"><span className="admin-kicker">KOREAN STUDY ADMIN</span><h1>Chào {profile?.displayName || 'Quản trị viên'}! <span>👋</span></h1><p>Chúc bạn một ngày quản lý hệ thống thật hiệu quả.</p><div className="admin-welcome-chips"><span><Users size={17} /><b>{dashboard?.activeUsers || 0}</b> học viên hoạt động</span><span><ShieldCheck size={17} /> Hệ thống an toàn</span></div></div></header> : <header className="admin-header"><div><span className="admin-kicker">KOREAN STUDY ADMIN</span><h1>{tab === 'textbooks' ? 'Quản lý giáo trình' : tab === 'lessons' ? 'Quản lý bài học' : tab === 'exercises' ? 'Quản lý bài tập' : tab === 'community' ? 'Quản lý cộng đồng' : 'Quản lý người dùng'}</h1><p>Dữ liệu và quyền quản trị được xử lý an toàn qua backend.</p></div></header>}
+      {tab === 'dashboard' ? <header className="admin-header admin-welcome"><div className="admin-welcome-avatar">{(profile?.displayName || 'A').slice(0, 1).toUpperCase()}</div><div className="admin-welcome-copy"><span className="admin-kicker">KOREAN STUDY ADMIN</span><h1>Chào {profile?.displayName || 'Quản trị viên'}! <span>👋</span></h1><p>Chúc bạn một ngày quản lý hệ thống thật hiệu quả.</p><div className="admin-welcome-chips"><span><Users size={17} /><b>{dashboard?.activeUsers || 0}</b> học viên hoạt động</span><span><ShieldCheck size={17} /> Hệ thống an toàn</span></div></div><button type="button" className="admin-report-bell" aria-label={`${dashboard?.pendingReports || 0} báo cáo đang chờ xử lý`} onClick={() => setTab('community')}><Bell size={27}/>{Boolean(dashboard?.pendingReports) && <><i /><b>{dashboard?.pendingReports}</b></>}</button></header> : <header className="admin-header"><div><span className="admin-kicker">KOREAN STUDY ADMIN</span><h1>{tab === 'textbooks' ? 'Quản lý giáo trình' : tab === 'lessons' ? 'Quản lý bài học' : tab === 'exercises' ? 'Quản lý bài tập' : tab === 'community' ? 'Quản lý cộng đồng' : 'Quản lý người dùng'}</h1><p>Dữ liệu và quyền quản trị được xử lý an toàn qua backend.</p></div></header>}
       {error && <div className="admin-error">{error}<button onClick={() => setError('')} aria-label="Đóng thông báo"><X size={20} /></button></div>}
       {loading ? <div className="admin-loading">Đang tải dữ liệu quản trị…</div> : <section className="admin-panel">
         {tab === 'dashboard' && dashboard && <div className="admin-dashboard">
@@ -251,7 +278,7 @@ export default function AdminPage() {
             <article className="admin-stat purple"><span><GraduationCap size={25} /></span><div><small>Học viên đang học</small><strong>{dashboard.activeUsers}</strong></div><em><TrendingUp size={14} /> {range} ngày</em></article>
             <article className="admin-stat blue"><span><BookOpen size={25} /></span><div><small>Bài học hoàn thành (TB)</small><strong>{dashboard.averageCompletedLessons.toFixed(1)}<i> / học viên</i></strong></div></article>
             <article className="admin-stat pink"><span><Clock3 size={25} /></span><div><small>Thời gian học trung bình</small><strong>{Math.round(dashboard.averageMinutes)}<i> phút/ngày</i></strong></div></article>
-            <article className="admin-stat orange"><span><Star size={25} /></span><div><small>Tỷ lệ quay lại</small><strong>{Math.round(dashboard.retentionRate)}%</strong></div></article>
+            <article className="admin-stat orange" title={`Tỷ lệ học viên của ${range} ngày trước quay lại học trong ${range} ngày gần đây`}><span><Star size={25} /></span><div><small>Tỷ lệ quay lại</small><strong>{Math.round(dashboard.retentionRate)}%</strong><i> so với kỳ trước</i></div></article>
           </div>
           <div className="admin-analytics-grid"><article className="admin-chart-card"><div className="admin-card-heading"><h3>Tiến độ học tập tổng quan</h3><span>{range} ngày</span></div><div className="admin-bar-chart">{dashboard.chart.map((item) => <div className="admin-bar-column" key={item.date}><div className="admin-bar-value">{Math.round(item.minutes)}</div><div className="admin-bar-track"><div style={{ height: `${Math.max(3, item.minutes / maxChart * 100)}%` }} /></div><small>{new Date(`${item.date}T00:00:00`).toLocaleDateString('vi-VN', { weekday: 'short' })}</small></div>)}</div><p className="admin-chart-note">Tổng số phút học được ghi nhận theo ngày.</p></article><article className="admin-course-card"><h3>Tỷ lệ hoàn thành theo giáo trình</h3><div className="admin-course-list">{dashboard.courses.length ? dashboard.courses.map((course, index) => <div key={`${course.title}-${index}`}><span><b>{course.title}</b><strong>{Math.round(course.percent)}%</strong></span><div><i style={{ width: `${Math.min(100, course.percent)}%` }} /></div></div>) : <p>Chưa có dữ liệu tiến độ.</p>}</div><button onClick={() => setTab('textbooks')}>Xem tất cả giáo trình</button></article></div>
           <article className="admin-hard-words"><div className="admin-card-heading"><div><h3>Thống kê từ vựng khó nhớ</h3><p>Các từ có tỷ lệ trả lời sai cao nhất.</p></div></div><div className="admin-table-wrap"><table><thead><tr><th>Từ vựng (Tiếng Hàn)</th><th>Nghĩa (Tiếng Việt)</th><th>Giáo trình</th><th>Tỷ lệ sai</th></tr></thead><tbody>{dashboard.hardVocabulary.map((word) => <tr key={`${word.word}-${word.course}`}><td><b>{word.word}</b></td><td>{word.meaning}</td><td>{word.course}</td><td><strong className="admin-error-rate">{Math.round(word.errorRate)}%</strong></td></tr>)}</tbody></table></div>{!dashboard.hardVocabulary.length && <div className="admin-empty">Chưa có dữ liệu từ vựng sai.</div>}</article>
@@ -300,6 +327,13 @@ export default function AdminPage() {
         {tab === 'community' && <>
           <div className="admin-panel-title"><div><h2>Kiểm duyệt cộng đồng</h2><p>Ẩn hoặc xóa nội dung vi phạm, khóa bình luận và xử lý báo cáo.</p></div><span className="admin-report-summary"><Flag size={17} /> {community.reports.filter((report) => report.status === 'pending').length} báo cáo chờ xử lý</span></div>
           <div className="admin-toolbar admin-toolbar-with-filters"><label><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm nội dung hoặc người đăng…" /></label><div className="admin-filter-controls"><AdminSelect value={communityStatus} options={[{ value: 'all', label: 'Tất cả bài viết' }, { value: 'reported', label: 'Có báo cáo chờ xử lý' }, { value: 'visible', label: 'Đang hiển thị' }, { value: 'hidden', label: 'Đã ẩn' }]} label="Lọc bài viết cộng đồng" onChange={setCommunityStatus} /><span>{filteredCommunityPosts.length} bài viết</span></div></div>
+          <div className="admin-community-date-filters">
+            <span className="admin-date-filter-label"><CalendarDays size={17} /> Thời gian đăng</span>
+            <AdminSelect value={communityDay} options={[{ value: 'all', label: 'Tất cả ngày' }, ...Array.from({ length: 31 }, (_, index) => ({ value: String(index + 1), label: `Ngày ${index + 1}` }))]} label="Lọc theo ngày đăng" onChange={setCommunityDay} />
+            <AdminSelect value={communityMonth} options={[{ value: 'all', label: 'Tất cả tháng' }, ...Array.from({ length: 12 }, (_, index) => ({ value: String(index + 1), label: `Tháng ${index + 1}` }))]} label="Lọc theo tháng đăng" onChange={setCommunityMonth} />
+            <AdminSelect value={communityYear} options={[{ value: 'all', label: 'Tất cả năm' }, ...communityYears.map((year) => ({ value: String(year), label: `Năm ${year}` }))]} label="Lọc theo năm đăng" onChange={setCommunityYear} />
+            {(communityDay !== 'all' || communityMonth !== 'all' || communityYear !== 'all') && <button type="button" className="admin-clear-date-filter" onClick={() => { setCommunityDay('all'); setCommunityMonth('all'); setCommunityYear('all') }}><RotateCcw size={15} /> Xóa lọc</button>}
+          </div>
           <div className="admin-community-list">{filteredCommunityPosts.map((post) => {
             const pendingReports = post.reports.filter((report) => report.status === 'pending')
             return <article className={`admin-community-post ${post.status === 'hidden' ? 'is-hidden' : ''}`} key={post.id}>

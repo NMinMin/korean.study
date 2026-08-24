@@ -5,7 +5,7 @@ import { requireAdmin } from '../plugins/admin.js'
 type Status = 'draft' | 'published' | 'locked' | 'no_content'
 type ReportStatus = 'pending' | 'resolved' | 'dismissed'
 type SkillType = 'vocabulary_grammar' | 'dictation' | 'shadowing' | 'review'
-const DASHBOARD_CACHE_VERSION = 2
+const DASHBOARD_CACHE_VERSION = 3
 const APP_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 
 function appDateKey(date = new Date()) {
@@ -38,13 +38,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const todayKey = appDateKey()
     const startKey = shiftDateKey(todayKey, -days + 1)
     const previousStartKey = shiftDateKey(startKey, -days)
-    const [{ data: stats, error: statsError }, { data: progress, error: progressError }, { data: vocabProgress, error: vocabError }, textbookCount, lessonCount, userCount] = await Promise.all([
+    const [{ data: stats, error: statsError }, { data: progress, error: progressError }, { data: vocabProgress, error: vocabError }, textbookCount, lessonCount, userCount, pendingReportCount] = await Promise.all([
       supabaseAdmin.from('daily_study_stats').select('user_id, study_date, minutes').gte('study_date', previousStartKey).lte('study_date', todayKey),
       supabaseAdmin.from('lesson_progress').select('user_id, textbook_id, progress_percent, textbooks(title_ko)'),
       supabaseAdmin.from('vocabulary_progress').select('vocabulary_id, incorrect_count, correct_count, vocabulary(word_ko, meaning_vi), textbooks(title_ko)').gt('incorrect_count', 0),
       supabaseAdmin.from('textbooks').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('lessons').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }),
+      supabaseAdmin.from('content_reports').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
     ])
     if (statsError || progressError || vocabError) return reply.code(500).send({ code: 'DASHBOARD_READ_FAILED', message: 'Không thể tải thống kê dashboard.', requestId: request.id })
     const recent = (stats ?? []).filter((item) => item.study_date >= startKey)
@@ -71,7 +72,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     }
     const payload = {
       cacheVersion: DASHBOARD_CACHE_VERSION, days, activeUsers: activeUsers.size, averageCompletedLessons: activeUsers.size ? completed.length / activeUsers.size : 0,
-      averageMinutes: recent.length ? totalMinutes / recent.length : 0, retentionRate: activeUsers.size ? retained / activeUsers.size * 100 : 0,
+      averageMinutes: activeUsers.size ? totalMinutes / activeUsers.size / days : 0,
+      retentionRate: previousUsers.size ? retained / previousUsers.size * 100 : 0,
+      pendingReports: pendingReportCount.count ?? 0,
       totalTextbooks: textbookCount.count ?? 0, totalLessons: lessonCount.count ?? 0, totalUsers: userCount.count ?? 0,
       chart, courses: [...courseMap.values()].map((item) => ({ title: item.title, percent: item.count ? item.total / item.count : 0 })).sort((a, b) => b.percent - a.percent).slice(0, 5),
       hardVocabulary: [...hardMap.values()].map((item) => ({ ...item, errorRate: item.total ? item.incorrect / item.total * 100 : 0 })).sort((a, b) => b.errorRate - a.errorRate).slice(0, 8),
@@ -81,20 +84,24 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   })
 
   app.get('/admin/users', async (request, reply) => {
-    const [{ data: authData, error: authError }, { data: profiles, error: profileError }, { data: roles, error: roleError }] = await Promise.all([
+    const [{ data: authData, error: authError }, { data: profiles, error: profileError }, { data: roles, error: roleError }, { data: snapshots, error: snapshotError }] = await Promise.all([
       supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
       supabaseAdmin.from('profiles').select('id, display_name, avatar_url, xp, level, created_at, is_locked, locked_at').order('created_at', { ascending: false }),
       supabaseAdmin.from('user_roles').select('user_id, role'),
+      supabaseAdmin.from('user_dashboard_snapshots').select('user_id, xp, level'),
     ])
-    if (authError || profileError || roleError) return reply.code(500).send({ code: 'ADMIN_USERS_READ_FAILED', message: 'Không thể tải danh sách người dùng.', requestId: request.id })
+    if (authError || profileError || roleError || snapshotError) return reply.code(500).send({ code: 'ADMIN_USERS_READ_FAILED', message: 'Không thể tải danh sách người dùng.', requestId: request.id })
     const profileMap = new Map((profiles ?? []).map((profile) => [profile.id, profile]))
     const roleMap = new Map((roles ?? []).map((role) => [role.user_id, role.role]))
+    const snapshotMap = new Map((snapshots ?? []).map((snapshot) => [snapshot.user_id, snapshot]))
     return { data: authData.users.map((user) => ({
       id: user.id,
       email: user.email,
       emailConfirmedAt: user.email_confirmed_at,
       lastSignInAt: user.last_sign_in_at,
       ...profileMap.get(user.id),
+      xp: Number(snapshotMap.get(user.id)?.xp ?? profileMap.get(user.id)?.xp ?? 0),
+      level: Number(snapshotMap.get(user.id)?.level ?? profileMap.get(user.id)?.level ?? 1),
       role: roleMap.get(user.id) ?? 'user',
     })) }
   })
