@@ -28,6 +28,18 @@ type LessonIdentity = {
   textbookId?: string | null
 }
 
+async function authenticatedUserId(requestedUserId?: string | null): Promise<string | null> {
+  if (!supabase) return null
+  const { data, error } = await supabase.auth.getUser()
+  if (error || !data.user) return null
+  // The authenticated user is the only valid owner under RLS. Never trust a
+  // user id supplied by view state when writing personal learning progress.
+  if (requestedUserId && requestedUserId !== data.user.id) {
+    console.warn('Bỏ qua user_id không khớp phiên đăng nhập khi lưu tiến trình từ vựng')
+  }
+  return data.user.id
+}
+
 async function vocabularyRows(lesson: LessonIdentity): Promise<VocabularyRow[]> {
   if (!supabase || !lesson.id || !lesson.textbookId) return []
   const { data, error } = await supabase
@@ -45,13 +57,15 @@ async function vocabularyRows(lesson: LessonIdentity): Promise<VocabularyRow[]> 
 
 export async function loadRemoteVocabularyState(lesson: LessonIdentity, userId?: string | null): Promise<LocalVocabularyState | null> {
   if (!supabase || !userId) return null
+  const ownerId = await authenticatedUserId(userId)
+  if (!ownerId) return null
   const words = await vocabularyRows(lesson)
   if (!words.length) return null
   const ids = words.map((word) => word.id)
   const [progress, bookmarks, notes] = await Promise.all([
-    supabase.from('vocabulary_progress').select('vocabulary_id, mastery, last_rating, next_review_at, times_reviewed').eq('user_id', userId).in('vocabulary_id', ids),
-    supabase.from('vocabulary_bookmarks').select('vocabulary_id').eq('user_id', userId).in('vocabulary_id', ids),
-    supabase.from('vocabulary_notes').select('vocabulary_id, note').eq('user_id', userId).in('vocabulary_id', ids),
+    supabase.from('vocabulary_progress').select('vocabulary_id, mastery, last_rating, next_review_at, times_reviewed').eq('user_id', ownerId).in('vocabulary_id', ids),
+    supabase.from('vocabulary_bookmarks').select('vocabulary_id').eq('user_id', ownerId).in('vocabulary_id', ids),
+    supabase.from('vocabulary_notes').select('vocabulary_id, note').eq('user_id', ownerId).in('vocabulary_id', ids),
   ])
   if (progress.error || bookmarks.error || notes.error) return null
   const byId = new Map(words.map((word) => [word.id, word]))
@@ -78,6 +92,8 @@ export async function loadRemoteVocabularyState(lesson: LessonIdentity, userId?:
 
 export async function saveRemoteVocabularyState(lesson: LessonIdentity, userId: string | null | undefined, state: LocalVocabularyState) {
   if (!supabase || !userId) return false
+  const ownerId = await authenticatedUserId(userId)
+  if (!ownerId) return false
   const words = await vocabularyRows(lesson)
   if (!words.length) return false
   const operations: PromiseLike<unknown>[] = []
@@ -86,7 +102,7 @@ export async function saveRemoteVocabularyState(lesson: LessonIdentity, userId: 
     if (!item) continue
     if (item.box || item.lastRating || item.dueAt || item.timesReviewed) {
       operations.push(supabase.from('vocabulary_progress').upsert({
-        user_id: userId,
+        user_id: ownerId,
         textbook_id: word.textbook_id,
         lesson_id: word.lesson_id,
         vocabulary_id: word.id,
@@ -98,22 +114,29 @@ export async function saveRemoteVocabularyState(lesson: LessonIdentity, userId: 
       }))
     }
     operations.push(item.starred
-      ? supabase.from('vocabulary_bookmarks').upsert({ user_id: userId, vocabulary_id: word.id })
-      : supabase.from('vocabulary_bookmarks').delete().eq('user_id', userId).eq('vocabulary_id', word.id))
-    if (item.note?.trim()) operations.push(supabase.from('vocabulary_notes').upsert({ user_id: userId, vocabulary_id: word.id, note: item.note.trim(), updated_at: new Date().toISOString() }))
-    else operations.push(supabase.from('vocabulary_notes').delete().eq('user_id', userId).eq('vocabulary_id', word.id))
+      ? supabase.from('vocabulary_bookmarks').upsert({ user_id: ownerId, vocabulary_id: word.id })
+      : supabase.from('vocabulary_bookmarks').delete().eq('user_id', ownerId).eq('vocabulary_id', word.id))
+    if (item.note?.trim()) operations.push(supabase.from('vocabulary_notes').upsert({ user_id: ownerId, vocabulary_id: word.id, note: item.note.trim(), updated_at: new Date().toISOString() }))
+    else operations.push(supabase.from('vocabulary_notes').delete().eq('user_id', ownerId).eq('vocabulary_id', word.id))
   }
-  await Promise.all(operations)
-  return true
+  const results = await Promise.all(operations)
+  const failed = results.find((result: any) => result?.error)
+  if (failed && (failed as any).error) {
+    console.error('Không thể lưu tiến trình từ vựng theo người dùng', (failed as any).error)
+    return false
+  }
+  return operations.length > 0
 }
 
 export async function loadRemoteVocabularyStateForWords(words: IdentifiedVocabulary[], userId?: string | null): Promise<LocalVocabularyState | null> {
   if (!supabase || !userId || !words.length) return null
+  const ownerId = await authenticatedUserId(userId)
+  if (!ownerId) return null
   const ids = words.map((word) => word.id)
   const { data, error } = await supabase
     .from('vocabulary_progress')
     .select('vocabulary_id, mastery, last_rating, next_review_at, times_reviewed')
-    .eq('user_id', userId)
+    .eq('user_id', ownerId)
     .in('vocabulary_id', ids)
   if (error) return null
   const byId = new Map(words.map((word) => [word.id, word]))
@@ -132,12 +155,14 @@ export async function loadRemoteVocabularyStateForWords(words: IdentifiedVocabul
 
 export async function saveRemoteVocabularyStateForWords(words: IdentifiedVocabulary[], userId: string | null | undefined, state: LocalVocabularyState) {
   if (!supabase || !userId || !words.length) return false
+  const ownerId = await authenticatedUserId(userId)
+  if (!ownerId) return false
   const operations: PromiseLike<unknown>[] = []
   for (const word of words) {
     const item = state[word.word]
     if (!item) continue
     operations.push(supabase.from('vocabulary_progress').upsert({
-      user_id: userId,
+      user_id: ownerId,
       textbook_id: word.textbookId,
       lesson_id: word.lessonId,
       vocabulary_id: word.id,
@@ -148,6 +173,11 @@ export async function saveRemoteVocabularyStateForWords(words: IdentifiedVocabul
       updated_at: new Date().toISOString(),
     }))
   }
-  await Promise.all(operations)
-  return true
+  const results = await Promise.all(operations)
+  const failed = results.find((result: any) => result?.error)
+  if (failed && (failed as any).error) {
+    console.error('Không thể lưu tiến trình ôn từ theo người dùng', (failed as any).error)
+    return false
+  }
+  return operations.length > 0
 }

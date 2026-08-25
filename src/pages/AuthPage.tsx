@@ -17,6 +17,7 @@ function friendlyError(error: unknown) {
   if (/email not confirmed/i.test(message)) return 'Bạn cần xác minh email trước khi đăng nhập.'
   if (/user already registered/i.test(message)) return 'Email này đã được đăng ký.'
   if (/rate limit/i.test(message)) return 'Bạn thao tác quá nhanh. Vui lòng thử lại sau.'
+  if (/error sending confirmation email|unexpected_failure/i.test(message)) return 'Không thể gửi email xác nhận. Vui lòng kiểm tra cấu hình SMTP trong Supabase Auth hoặc thử lại sau.'
   return message || 'Đã có lỗi xảy ra. Vui lòng thử lại.'
 }
 

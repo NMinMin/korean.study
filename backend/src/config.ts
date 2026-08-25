@@ -11,6 +11,7 @@ const schema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   GROQ_API_KEY: z.string().min(1).optional(),
   GROQ_SPEECH_MODEL: z.string().min(1).default('whisper-large-v3-turbo'),
+  SPEECH_TO_TEXT_URL: z.string().url().default('https://speech-to-text-hy3k.onrender.com/transcribe'),
   GROQ_GRADER_API_KEY: z.string().min(1).optional(),
   GROQ_GRADER_MODEL: z.string().min(1).default('openai/gpt-oss-20b'),
   SMTP_FROM_EMAIL: z.string().email().optional(),

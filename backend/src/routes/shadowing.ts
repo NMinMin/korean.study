@@ -4,36 +4,37 @@ import { config } from '../config.js'
 import { requireAuth } from '../plugins/auth.js'
 
 const MAX_RECORDING_BYTES = 20 * 1024 * 1024
-const GROQ_TRANSCRIPTIONS_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
-const TRANSCRIPTION_TIMEOUT_MS = 30_000
+const TRANSCRIPTION_TIMEOUT_MS = 60_000
 
-type GroqTranscription = {
+type SpeechToTextResponse = {
   text?: unknown
+  transcript?: unknown
+  detail?: unknown
+  message?: unknown
 }
 
-async function transcribeWithGroq(content: Buffer, mimetype: string, filename: string) {
+async function transcribeRecording(content: Buffer, mimetype: string, filename: string) {
   const form = new FormData()
   form.append('file', new Blob([new Uint8Array(content)], { type: mimetype }), filename)
-  form.append('model', config.GROQ_SPEECH_MODEL)
-  form.append('language', 'ko')
-  form.append('response_format', 'json')
-  form.append('temperature', '0')
 
-  const response = await fetch(GROQ_TRANSCRIPTIONS_URL, {
+  const response = await fetch(config.SPEECH_TO_TEXT_URL, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${config.GROQ_API_KEY}` },
     body: form,
     signal: AbortSignal.timeout(TRANSCRIPTION_TIMEOUT_MS),
   })
-  const data = await response.json().catch(() => null) as GroqTranscription | null
+  const data = await response.json().catch(() => null) as SpeechToTextResponse | null
 
   if (!response.ok) {
-    const error = new Error(`Groq transcription failed with HTTP ${response.status}`)
+    const providerMessage = typeof data?.detail === 'string'
+      ? data.detail
+      : typeof data?.message === 'string' ? data.message : ''
+    const error = new Error(providerMessage || `Speech-to-text failed with HTTP ${response.status}`)
     Object.assign(error, { statusCode: 502, cause: data })
     throw error
   }
 
-  return typeof data?.text === 'string' ? data.text.trim() : ''
+  const transcript = typeof data?.text === 'string' ? data.text : data?.transcript
+  return typeof transcript === 'string' ? transcript.trim() : ''
 }
 
 export const shadowingRoutes: FastifyPluginAsync = async (app) => {
@@ -42,14 +43,6 @@ export const shadowingRoutes: FastifyPluginAsync = async (app) => {
   })
 
   app.post('/shadowing/transcribe', { preHandler: requireAuth }, async (request, reply) => {
-    if (!config.GROQ_API_KEY) {
-      return reply.code(503).send({
-        code: 'SPEECH_NOT_CONFIGURED',
-        message: 'Groq Speech-to-Text chưa được cấu hình trên backend.',
-        requestId: request.id,
-      })
-    }
-
     const part = await request.file()
     if (!part) {
       return reply.code(400).send({ code: 'AUDIO_REQUIRED', message: 'Thiếu file ghi âm.', requestId: request.id })
@@ -63,12 +56,20 @@ export const shadowingRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(400).send({ code: 'EMPTY_AUDIO', message: 'File ghi âm không có dữ liệu.', requestId: request.id })
     }
 
-    const transcript = await transcribeWithGroq(
+    const transcript = await transcribeRecording(
       content,
       part.mimetype,
       part.filename || 'shadowing.webm',
     )
 
-    return { transcript, provider: `groq/${config.GROQ_SPEECH_MODEL}` }
+    if (!transcript) {
+      return reply.code(422).send({
+        code: 'SPEECH_NOT_RECOGNIZED',
+        message: 'Không nhận diện được lời nói trong file ghi âm. Hãy nói rõ và gần micro hơn.',
+        requestId: request.id,
+      })
+    }
+
+    return { transcript, provider: 'speech-to-text-hy3k' }
   })
 }

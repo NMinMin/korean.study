@@ -42,9 +42,14 @@ export async function transcribeShadowRecording(blob) {
   if (!supabase) throw new Error('Supabase chưa được cấu hình.');
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error('Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.');
-  const extension = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
+  const extension = blob.type.includes('mpeg') || blob.type.includes('mp3')
+    ? 'mp3'
+    : blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
   const form = new FormData();
-  form.append('audio', blob, `shadowing-${Date.now()}.${extension}`);
+  // The speech-to-text service expects multipart/form-data with field `file`,
+  // matching its Postman contract. Keep the browser's real codec/MIME type;
+  // MP3 uploads are named .mp3 while MediaRecorder output remains webm/m4a.
+  form.append('file', blob, `shadowing-${Date.now()}.${extension}`);
   const response = await fetch(`${API_URL}/v1/shadowing/transcribe`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${session.access_token}` },

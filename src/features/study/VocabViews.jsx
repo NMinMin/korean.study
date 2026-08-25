@@ -477,7 +477,7 @@ export function VocabListView({ lesson, userId, onBack, onStudy, onReviewStart, 
       const merged = remote ? mergeVocabStates(local, remote) : local;
       if (alive) setProgress(merged);
       if (remote) {
-        await window.storage.set(storageKey, JSON.stringify(merged));
+        await saveScopedProgress(storageKey, JSON.stringify(merged));
         if (Object.keys(local).length) void saveRemoteVocabularyState(lesson, userId, merged);
       }
       if (alive) setLoaded(true);
@@ -489,7 +489,7 @@ export function VocabListView({ lesson, userId, onBack, onStudy, onReviewStart, 
     const cur = progress[word];
     const updated = { ...progress, [word]: { ...cur, starred: !cur?.starred } };
     setProgress(updated);
-    window.storage.set(storageKey, JSON.stringify(updated)).catch(() => { });
+    void saveScopedProgress(storageKey, JSON.stringify(updated));
     void saveRemoteVocabularyState(lesson, userId, updated);
   };
 
@@ -573,7 +573,7 @@ export function VocabNotebookView({ lesson, userId, onBack, onReview, vocabulary
     const merged = remote ? mergeVocabStates(local, remote) : local;
     setProgress(merged);
     if (remote) {
-      await window.storage.set(storageKey, JSON.stringify(merged));
+      await saveScopedProgress(storageKey, JSON.stringify(merged));
       if (Object.keys(local).length) void saveRemoteVocabularyState(lesson, userId, merged);
     }
     setLoaded(true);
@@ -586,7 +586,7 @@ export function VocabNotebookView({ lesson, userId, onBack, onReview, vocabulary
     const cur = progress[word];
     const updated = { ...progress, [word]: { ...cur, starred: !cur?.starred } };
     setProgress(updated);
-    window.storage.set(storageKey, JSON.stringify(updated)).catch(() => { });
+    void saveScopedProgress(storageKey, JSON.stringify(updated));
     void saveRemoteVocabularyState(lesson, userId, updated);
   };
 
@@ -695,7 +695,7 @@ export function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, de
           : await loadRemoteVocabularyState(lesson, userId);
         const saved = remoteSaved ? mergeVocabStates(localSaved, remoteSaved) : localSaved;
         if (remoteSaved) {
-          await window.storage.set(storageKey, JSON.stringify(saved));
+          await saveScopedProgress(storageKey, JSON.stringify(saved));
           if (Object.keys(localSaved).length) void (isIdentifiedDeck
             ? saveRemoteVocabularyStateForWords(deckWords, userId, saved)
             : saveRemoteVocabularyState(lesson, userId, saved));
@@ -731,7 +731,7 @@ export function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, de
   const persist = async (updated) => {
     setProgress(updated);
     try {
-      await window.storage.set(storageKey, JSON.stringify(updated));
+      await saveScopedProgress(storageKey, JSON.stringify(updated));
       if (isIdentifiedDeck) await saveRemoteVocabularyStateForWords(deckWords, userId, updated);
       else await saveRemoteVocabularyState(lesson, userId, updated);
     } catch (e) {
