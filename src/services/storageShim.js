@@ -18,12 +18,13 @@ export function initStorageShim() {
         try {
           if (key.startsWith('progress:')) {
             if (!supabase) return null;
-            const { data: auth } = await supabase.auth.getUser();
-            if (!auth.user) return null;
+            const { data: auth } = await supabase.auth.getSession();
+            const sessionUser = auth.session?.user;
+            if (!sessionUser) return null;
             const { data, error } = await supabase
               .from('user_progress_states')
               .select('state_value')
-              .eq('user_id', auth.user.id)
+              .eq('user_id', sessionUser.id)
               .eq('state_key', key)
               .maybeSingle();
             if (error || !data) return null;
@@ -40,12 +41,13 @@ export function initStorageShim() {
         try {
           if (key.startsWith('progress:')) {
             if (!supabase) return null;
-            const { data: auth } = await supabase.auth.getUser();
-            if (!auth.user) return null;
+            const { data: auth } = await supabase.auth.getSession();
+            const sessionUser = auth.session?.user;
+            if (!sessionUser) return null;
             const normalizedValue = typeof value === 'string' ? value : JSON.stringify(value);
             const { error } = await supabase.from('user_progress_states').upsert(
               {
-                user_id: auth.user.id,
+                user_id: sessionUser.id,
                 state_key: key,
                 state_value: normalizedValue,
                 updated_at: new Date().toISOString(),
@@ -68,9 +70,10 @@ export function initStorageShim() {
         try {
           if (key.startsWith('progress:')) {
             if (!supabase) return null;
-            const { data: auth } = await supabase.auth.getUser();
-            if (!auth.user) return null;
-            await supabase.from('user_progress_states').delete().eq('user_id', auth.user.id).eq('state_key', key);
+            const { data: auth } = await supabase.auth.getSession();
+            const sessionUser = auth.session?.user;
+            if (!sessionUser) return null;
+            await supabase.from('user_progress_states').delete().eq('user_id', sessionUser.id).eq('state_key', key);
             localStorage.removeItem(PREFIX + key);
             localStorage.removeItem(SHARED_PREFIX + key);
             return { key, deleted: true, shared: true };

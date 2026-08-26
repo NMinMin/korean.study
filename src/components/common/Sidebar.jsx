@@ -1,21 +1,21 @@
 import React from 'react';
 import {
   BookOpen, NotebookPen, Target, Trophy, Settings, Home, Sparkles, ChevronRight, LogOut,
-  MessageCircle, PanelLeftClose, PanelLeftOpen
+  MessageCircle
 } from 'lucide-react';
 import { DiamondIcon } from '../../data/fallbackData';
 import { BunnyMascot } from './Mascots';
 
 export const NAV_TILES = [
   { id: 'giaotrinh', label: 'Giáo trình', mobileLabel: 'Giáo trình', icon: BookOpen, color: '#4A90E2', bg: '#EEF4FD' },
-  { id: 'nguphap', label: 'Ngữ pháp', mobileLabel: 'Ngữ pháp', icon: NotebookPen, color: '#7C6FE4', bg: '#F0EEFC' },
+  { id: 'nguphap', label: 'Từ vựng & Ngữ pháp', mobileLabel: 'Từ & Ngữ pháp', icon: NotebookPen, color: '#7C6FE4', bg: '#F0EEFC' },
   { id: 'thithu', label: 'Thi thử', mobileLabel: 'Thi thử', icon: Target, color: '#D15A87', bg: '#FBEAF2' },
   { id: 'xephanghub', label: 'Xếp hạng', mobileLabel: 'Xếp hạng', icon: Trophy, color: '#F0912E', bg: '#FDF3E7' },
   { id: 'congdong', label: 'Cộng đồng', mobileLabel: 'Cộng đồng', icon: MessageCircle, color: '#3FA95C', bg: '#EAF8EE' },
   { id: 'caidat', label: 'Cài đặt', mobileLabel: 'Cài đặt', icon: Settings, color: '#8B85AB', bg: '#F3F1FC' },
 ];
 
-export default function Sidebar({ active, setActive, setView, goHome, onSignOut, isAdmin, gems = 0, onOpenShop, collapsed = false, onToggleCollapse }) {
+export default function Sidebar({ active, setActive, setView, goHome, onSignOut, isAdmin, gems = 0, onOpenShop, collapsed = false }) {
   const handleTileClick = (id) => {
     setActive(id);
     if (id === 'giaotrinh') setView('curriculum-hub');
@@ -29,9 +29,6 @@ export default function Sidebar({ active, setActive, setView, goHome, onSignOut,
 
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
-      <button className="sidebar-collapse-toggle" onClick={onToggleCollapse} aria-label={collapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'} title={collapsed ? 'Mở rộng' : 'Thu gọn'}>
-        {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-      </button>
       <button className="logo-row logo-row-btn" onClick={goHome} aria-label="Về trang chủ">
         <div className="logo-badge">한</div>
         <div className="logo-text">Korean <span>Study</span></div>

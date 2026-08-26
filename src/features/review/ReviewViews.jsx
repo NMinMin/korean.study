@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, BookOpen, Sparkles, Target, RotateCcw, CheckCircle2,
   XCircle, Volume2, Lightbulb, Trophy, Star, Award, Check, NotebookPen,
-  AlertTriangle, Headphones, Home, Lock, MessageCircle, Mic, Type
+  AlertTriangle, Headphones, Home, Lock, MessageCircle, Mic, Square, Type
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { requestAIJson } from '../../services/aiService';
@@ -36,6 +36,41 @@ const gradeLocally = gradeSpeechLocally;
 function pickDistractors(all, excludeIdx, n, getter) {
   const pool = all.map((_, i) => i).filter((i) => i !== excludeIdx);
   return shuffleArr(pool).slice(0, n).map((i) => getter(all[i]));
+}
+
+function calculateReviewComposite(answers = [], writingResults = [], reflexResults = [], elapsedMs = 0) {
+  const mcTotal = answers.length;
+  const mcAccuracy = mcTotal ? answers.filter((answer) => answer.correct).length / mcTotal : 1;
+  const writingScores = writingResults.map((item) => item?.score).filter((score) => typeof score === "number");
+  const writingAvg = writingScores.length ? Math.round(writingScores.reduce((sum, score) => sum + score, 0) / writingScores.length) : null;
+  const reflexList = reflexResults.filter((item) => !item?.timedOut && typeof item?.score === "number");
+  const reflexAccuracy = reflexList.length ? Math.round(reflexList.reduce((sum, item) => sum + item.score, 0) / reflexList.length) : null;
+  const expectedMs = mcTotal * 18000 + writingResults.length * 60000;
+  const speedRatio = expectedMs > 0 ? Math.min(1.3, expectedMs / Math.max(elapsedMs, 1)) : 1;
+  const speedFactor = Math.min(1, speedRatio * 0.85 + 0.15);
+  const composite = writingAvg !== null && reflexAccuracy !== null
+    ? mcAccuracy * 100 * 0.45 + writingAvg * 0.3 + reflexAccuracy * 0.2 + speedFactor * 100 * 0.05
+    : writingAvg !== null
+      ? mcAccuracy * 100 * 0.5 + writingAvg * 0.35 + speedFactor * 100 * 0.15
+      : reflexAccuracy !== null
+        ? mcAccuracy * 100 * 0.7 + reflexAccuracy * 0.25 + speedFactor * 100 * 0.05
+        : mcAccuracy * 100 * 0.8 + speedFactor * 100 * 0.2;
+  return { composite, writingAvg, reflexAccuracy };
+}
+
+function grammarExampleForCondition(condition = "") {
+  const normalized = String(condition).toLowerCase().replace(/\s+/g, " ").trim();
+  if (!normalized) return null;
+  if (normalized.includes("không có patchim") || normalized.includes("không patchim")) return "학교";
+  if (normalized.includes("có patchim") || normalized.includes("patchim")) return "책";
+  if (normalized.includes("하다")) return "공부하다";
+  if (normalized.includes("ㅏ") || normalized.includes("ㅗ")) return "가다";
+  if (normalized.includes("nguyên âm còn lại")) return "먹다";
+  if (normalized.includes("động từ hoặc tính từ")) return "가다";
+  if (normalized.includes("danh từ")) return "학생";
+  if (normalized.includes("động từ")) return "먹다";
+  if (normalized.includes("tính từ")) return "예쁘다";
+  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -314,11 +349,30 @@ function buildReviewPool(vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, li
   // 4) Ngữ pháp — dùng công thức 2 điểm ngữ pháp
   GRAMMAR_SAMPLE.forEach((g) => {
     g.formula.forEach((f) => {
+      const rawFormula = String(f.form || "").trim();
+      const formulaParts = rawFormula.split(/[:：]/);
+      const embeddedCondition = formulaParts.length > 1 ? formulaParts.shift().trim() : "";
+      const condition = f.condition && !["Cách dùng", "Cấu trúc"].includes(String(f.condition).trim())
+        ? String(f.condition).trim()
+        : embeddedCondition;
+      const exampleWord = grammarExampleForCondition(condition);
       const others = GRAMMAR_SAMPLE.flatMap((gg) => gg.formula.map((ff) => ff.form)).filter((form) => form !== f.form);
       const distractors = shuffleArr(others).slice(0, 3);
       if (distractors.length < 3) return;
       const options = shuffleArr([{ text: f.form, correct: true }, ...distractors.map((d) => ({ text: d, correct: false }))]);
-      pool.push({ type: "grammar", category: "nguphap", prompt: f.condition, options, patternName: g.pattern, correctExplain: g.context, key: `gram:${g.no}:${f.form}`, label: g.pattern });
+      pool.push({
+        type: "grammar",
+        category: "nguphap",
+        prompt: g.pattern,
+        question: exampleWord
+          ? `Từ “${exampleWord}” cần kết hợp theo công thức nào khi dùng ngữ pháp “${g.pattern}”?`
+          : `Chọn công thức phù hợp nhất khi dùng ngữ pháp “${g.pattern}”`,
+        options,
+        patternName: g.pattern,
+        correctExplain: g.context,
+        key: `gram:${g.no}:${f.form}`,
+        label: g.pattern,
+      });
     });
   });
 
@@ -578,7 +632,7 @@ export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabul
 }
 
 /* ---------- Màn 2: Làm bài ôn tập ---------- */
-export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, lines = SHADOW_LINES, exercises = [], isRecheck = false, onBack, onFinish, onChangeSet }) {
+export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, lines = SHADOW_LINES, exercises = [], isRecheck = false, onBack, onFinish, onProgress, onChangeSet }) {
   const [history, setHistory] = useState(null);
   const [pool, setPool] = useState(null);
   const [idx, setIdx] = useState(0);
@@ -593,6 +647,7 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
   const [writingResults, setWritingResults] = useState([]);
   const startTimeRef = useRef(Date.now());
   const audioRef = useRef(null);
+  const autoAdvanceRef = useRef(null);
 
   // ---- Shadowing phản xạ (đồng hồ đếm ngược) — chỉ có khi difficulty.shadowingCount > 0 ----
   const [shadowLines, setShadowLines] = useState(() => (difficulty.shadowingCount > 0 ? pickShadowingLines(difficulty.shadowingCount, seed) : []));
@@ -603,6 +658,8 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
   const sAudioRef = useRef(null);
   const sTimerRef = useRef(null);
   const sRecognitionRef = useRef(null);
+  const sTranscriptRef = useRef("");
+  const sShouldGradeRef = useRef(false);
   const sReflexSecondsRef = useRef(0);
   const sTimeLeftRef = useRef(0); // giá trị THỜI GIAN CÒN LẠI luôn mới nhất, tránh đọc closure cũ trong callback nhận diện giọng nói
 
@@ -619,7 +676,12 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => () => clearInterval(sTimerRef.current), []);
+  useEffect(() => () => {
+    clearInterval(sTimerRef.current);
+    clearTimeout(autoAdvanceRef.current);
+    sShouldGradeRef.current = false;
+    try { sRecognitionRef.current?.abort(); } catch (e) { }
+  }, []);
 
   // Tự động phát câu mẫu khi vừa vào một câu Shadowing mới trong phiên phản xạ.
   // Đặt Ở ĐÂY (không đặt sau các return có điều kiện của giai đoạn mc/writing)
@@ -644,6 +706,7 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
 
   const total = pool.length;
   const finishAll = async (finalAnswers, finalWriting, finalReflex) => {
+    const elapsedMs = Date.now() - startTimeRef.current;
     const newHistory = { ...history };
     finalAnswers.forEach((a) => {
       const cur = newHistory[a.key] || { wrong: 0, correct: 0, lastSeenAt: 0 };
@@ -653,8 +716,40 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
       await saveReviewHistory(lesson, userId, newHistory);
       if (finalReflex && finalReflex.length) await saveReflexAttempts(lesson, userId, finalReflex);
       if (seed) await markStandardExamTaken(difficulty.stars, lesson, userId);
+      if (mode === "bylesson") {
+        const completedItems = {};
+        finalAnswers.forEach((answer, answerIndex) => {
+          if (answer.correct) completedItems[`mc:${answerIndex}:${answer.key || "question"}`] = "correct";
+        });
+        (finalWriting || []).forEach((answer, answerIndex) => {
+          if (Number(answer?.score || 0) >= 80) completedItems[`writing:${answerIndex}:${answer.id || "question"}`] = "correct";
+        });
+        (finalReflex || []).forEach((answer, answerIndex) => {
+          if (!answer?.timedOut && Number(answer?.score || 0) >= 80) completedItems[`shadowing:${answerIndex}:${answer.no || "question"}`] = "correct";
+        });
+        const totalItems = finalAnswers.length + (finalWriting?.length || 0) + (finalReflex?.length || 0);
+        const { composite } = calculateReviewComposite(finalAnswers, finalWriting || [], finalReflex || [], elapsedMs);
+        // Từ 9/10 được xem là đã làm chủ bài ôn: lưu trọn vẹn tiến trình.
+        if (composite >= 90) {
+          finalAnswers.forEach((answer, answerIndex) => { completedItems[`mc:${answerIndex}:${answer.key || "question"}`] = "mastered"; });
+          (finalWriting || []).forEach((answer, answerIndex) => { completedItems[`writing:${answerIndex}:${answer.id || "question"}`] = "mastered"; });
+          (finalReflex || []).forEach((answer, answerIndex) => { completedItems[`shadowing:${answerIndex}:${answer.no || "question"}`] = "mastered"; });
+        }
+        try {
+          const percent = await saveRemoteActivityProgress(
+            lesson?.textbookId,
+            lesson?.id,
+            "ontap",
+            completedItems,
+            totalItems,
+          );
+          onProgress?.("ontap", percent);
+        } catch (error) {
+          console.error("Không thể lưu kết quả ôn tập", error);
+        }
+      }
     }
-    onFinish(finalAnswers, finalWriting, Date.now() - startTimeRef.current, finalReflex || []);
+    onFinish(finalAnswers, finalWriting, elapsedMs, finalReflex || []);
   };
 
   // "Đổi đề mới" — chỉ áp dụng cho Ôn tập ngẫu nhiên. Luôn sinh NGẪU NHIÊN
@@ -683,13 +778,19 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
       setPicked(opt);
       if (opt.correct) playCorrectSound();
       else playIncorrectSound();
-      setAnswers((a) => [...a, { correct: opt.correct, category: q.category, key: q.key, label: q.label }]);
+      const answer = { correct: opt.correct, category: q.category, key: q.key, label: q.label };
+      const updatedAnswers = [...answers, answer];
+      setAnswers(updatedAnswers);
+      if (opt.correct) {
+        clearTimeout(autoAdvanceRef.current);
+        autoAdvanceRef.current = window.setTimeout(() => next(updatedAnswers), 800);
+      }
     };
-    const next = () => {
+    const next = (answerSnapshot = answers) => {
       if (idx + 1 >= total) {
         if (writingPrompts.length > 0) { setPhase("writing"); setPicked(null); }
         else if (shadowLines.length > 0) { setPhase("shadowing"); setPicked(null); }
-        else finishAll(answers, []);
+        else finishAll(answerSnapshot, []);
         return;
       }
       setIdx((i) => i + 1);
@@ -720,7 +821,7 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
             </>
           ) : (
             <p className="rv-quiz-question" lang={(q.type === "image" || q.type === "meaning" || q.type === "fillblank" || q.type === "dialogue") ? "ko" : undefined}>
-              {q.type === "grammar" ? `Điền vào chỗ trống: "${q.prompt}"` : q.type === "translate" ? `Từ nào có nghĩa: "${q.prompt}"?` : q.type === "dialogue" ? `Câu tiếp theo sau: "${q.prompt}" là gì?` : q.prompt}
+              {q.type === "grammar" ? (q.question || `Chọn công thức đúng của ngữ pháp "${q.prompt}"`) : q.type === "translate" ? `Từ nào có nghĩa: "${q.prompt}"?` : q.type === "dialogue" ? `Câu tiếp theo sau: "${q.prompt}" là gì?` : q.prompt}
               {(q.type === "image" || q.type === "meaning" || q.type === "dialogue") && (
                 <button className="rv-mini-audio" onClick={() => speakKo(q.prompt)}><Volume2 size={12} color="#fff" /></button>
               )}
@@ -754,7 +855,7 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
             <div className={`rv-feedback ${picked.correct ? "ok" : "wrong"}`}>
               <span className="rv-feedback-face">{picked.correct ? "🐰" : "🤔"}</span>
               <span>{picked.correct ? "Chính xác! 🎉" : "Chưa đúng."}{q.correctExplain && ` (${q.correctExplain})`}</span>
-              <button className="rv-next-btn" onClick={next}>
+              <button className="rv-next-btn" onClick={() => next()}>
                 {idx + 1 >= total ? (writingPrompts.length > 0 ? "Sang phần Ứng dụng" : "Xem kết quả") : "Câu tiếp theo"} <ChevronRight size={16} />
               </button>
             </div>
@@ -872,6 +973,8 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
     const reflexSeconds = Math.round(((isFinite(dur) && dur > 0 ? dur : 3) + 2.5) * 10) / 10;
     setSPhaseState("counting");
     startCountdown(reflexSeconds);
+    // Sau khi nghe hết câu mẫu, bắt đầu thu ngay để giữ đúng nhịp Shadowing.
+    setTimeout(() => startShadowRecording(), 120);
   };
 
   const gradeReflexAttempt = async (said) => {
@@ -891,21 +994,49 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
     if (!speechSupported) { clearInterval(sTimerRef.current); setSPhaseState("unsupported"); return; }
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const rec = new SR();
-    rec.lang = "ko-KR"; rec.interimResults = false; rec.maxAlternatives = 1; rec.continuous = false;
+    rec.lang = "ko-KR"; rec.interimResults = true; rec.maxAlternatives = 1; rec.continuous = true;
+    sTranscriptRef.current = "";
+    sShouldGradeRef.current = true;
     setSPhaseState("recording");
     rec.onresult = (e) => {
-      clearInterval(sTimerRef.current);
-      const said = e.results?.[0]?.[0]?.transcript || "";
-      gradeReflexAttempt(said);
+      let transcript = "";
+      for (let i = 0; i < e.results.length; i += 1) transcript += `${e.results[i]?.[0]?.transcript || ""} `;
+      sTranscriptRef.current = transcript.trim();
     };
-    rec.onerror = () => { clearInterval(sTimerRef.current); setSPhaseState("timeout"); };
+    rec.onend = () => {
+      if (!sShouldGradeRef.current) return;
+      sShouldGradeRef.current = false;
+      clearInterval(sTimerRef.current);
+      const said = sTranscriptRef.current.trim();
+      if (said) gradeReflexAttempt(said);
+      else setSPhaseState("timeout");
+    };
+    rec.onerror = () => {
+      sShouldGradeRef.current = false;
+      clearInterval(sTimerRef.current);
+      setSPhaseState("timeout");
+    };
     sRecognitionRef.current = rec;
     try { rec.start(); } catch (e) { clearInterval(sTimerRef.current); setSPhaseState("timeout"); }
+  };
+
+  const stopShadowRecording = () => {
+    if (sPhaseState !== "recording") return;
+    clearInterval(sTimerRef.current);
+    setSPhaseState("grading");
+    try { sRecognitionRef.current?.stop(); }
+    catch (e) {
+      sShouldGradeRef.current = false;
+      const said = sTranscriptRef.current.trim();
+      if (said) gradeReflexAttempt(said);
+      else setSPhaseState("timeout");
+    }
   };
 
   // Hết giờ mà chưa đọc xong / chưa bấm ghi âm — tự ngắt mic, đánh dấu "Chưa
   // đạt (Quá thời gian)", cho thử lại đến khi người dùng muốn qua câu mới.
   const handleTimeout = () => {
+    sShouldGradeRef.current = false;
     try { sRecognitionRef.current?.abort(); } catch (e) { }
     setSPhaseState("timeout");
   };
@@ -947,12 +1078,20 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
         {sPhaseState === "intro" && (
           <p className="rv-reflex-hint"><Volume2 size={14} color="#7C6FE4" /> Đang phát câu mẫu — chuẩn bị đọc theo nhé...</p>
         )}
-        {sPhaseState === "counting" && (
-          <button className="rv-reflex-mic-btn" onClick={startShadowRecording}>
-            <Mic size={22} color="#fff" /> Bấm để đọc theo
-          </button>
+        {(sPhaseState === "counting" || sPhaseState === "recording") && (
+          <div className="rv-reflex-record-control">
+            <button
+              className={`sw-mic-btn ${sPhaseState === "recording" ? "rec" : ""}`}
+              onClick={sPhaseState === "recording" ? stopShadowRecording : startShadowRecording}
+              aria-label={sPhaseState === "recording" ? "Dừng và chấm điểm" : "Bắt đầu ghi âm"}
+            >
+              {sPhaseState === "recording" ? <Square size={21} fill="#fff" color="#fff" /> : <Mic size={26} color="#fff" />}
+            </button>
+            <p className={`rv-reflex-hint ${sPhaseState === "recording" ? "rec" : ""}`}>
+              {sPhaseState === "recording" ? "Đang ghi âm — bấm lần nữa để dừng và chấm điểm" : "Đang mở micro..."}
+            </p>
+          </div>
         )}
-        {sPhaseState === "recording" && <p className="rv-reflex-hint rec">🔴 Đang nghe bạn đọc...</p>}
         {sPhaseState === "grading" && <p className="rv-reflex-hint"><Sparkles size={14} color="#7C6FE4" /> AI đang chấm...</p>}
 
         {sPhaseState === "timeout" && (
@@ -996,25 +1135,16 @@ export function ReviewResultView({ answers, writingResults, elapsedMs, difficult
   const mcCorrect = answers.filter((a) => a.correct).length;
   const mcAccuracy = mcTotal ? mcCorrect / mcTotal : 1;
 
-  const writingScores = (writingResults || []).map((w) => w.score).filter((s) => typeof s === "number");
-  const writingAvg = writingScores.length ? Math.round(writingScores.reduce((a, b) => a + b, 0) / writingScores.length) : null;
+  const { composite, writingAvg, reflexAccuracy } = calculateReviewComposite(answers, writingResults || [], reflexResults || [], elapsedMs);
 
   // Điểm Shadowing phản xạ: độ chính xác phát âm trung bình + tốc độ phản xạ
   // trung bình (giây), đúng định dạng tài liệu yêu cầu.
   const reflexList = (reflexResults || []).filter((r) => !r.timedOut);
-  const reflexAccuracy = reflexList.length ? Math.round(reflexList.reduce((s, r) => s + r.score, 0) / reflexList.length) : null;
   const reflexAvgTimeLeft = reflexList.length ? Math.round((reflexList.reduce((s, r) => s + r.timeLeftAtDone, 0) / reflexList.length) * 10) / 10 : null;
   const reflexAvgLabel = reflexAvgTimeLeft === null ? null : reflexAvgTimeLeft >= 2 ? "Tuyệt vời" : reflexAvgTimeLeft >= 0.8 ? "Khá" : "Sát giờ";
 
   const seconds = Math.round(elapsedMs / 1000);
   const timeLabel = seconds >= 60 ? `${Math.floor(seconds / 60)} phút ${seconds % 60} giây` : `${seconds} giây`;
-  const expectedMs = mcTotal * 18000 + (writingResults?.length || 0) * 60000;
-  const speedRatio = expectedMs > 0 ? Math.min(1.3, expectedMs / Math.max(elapsedMs, 1)) : 1;
-  const speedFactor = Math.min(1, speedRatio * 0.85 + 0.15);
-
-  const composite = writingAvg !== null
-    ? mcAccuracy * 100 * 0.5 + writingAvg * 0.35 + speedFactor * 100 * 0.15
-    : mcAccuracy * 100 * 0.8 + speedFactor * 100 * 0.2;
   const achievedStars = composite >= 90 ? 5 : composite >= 75 ? 4 : composite >= 60 ? 3 : composite >= 40 ? 2 : 1;
   const score = Math.round(composite) / 10;
   const grade = composite >= 90 ? { label: "Hoàn thành xuất sắc!", icon: "🏆" } : composite >= 75 ? { label: "Nắm vững!", icon: "👍" } : composite >= 60 ? { label: "Đạt yêu cầu!", icon: "🙂" } : composite >= 40 ? { label: "Cần ôn thêm!", icon: "💪" } : { label: "Nên học lại bài!", icon: "📖" };
@@ -1034,6 +1164,9 @@ export function ReviewResultView({ answers, writingResults, elapsedMs, difficult
   ].map((c) => ({ ...c, pct: byCategory(c.key) })).filter((c) => c.pct !== null);
   if (writingAvg !== null) {
     cats.push({ key: "writing", label: "Viết (AI)", icon: Type, color: "#E5566B", bg: "#FDF0F2", pct: writingAvg });
+  }
+  if (reflexAccuracy !== null) {
+    cats.push({ key: "shadowing", label: "Phát âm (AI)", icon: Mic, color: "#7C6FE4", bg: "#F0EEFC", pct: reflexAccuracy });
   }
 
   const strengths = cats.filter((c) => c.pct >= 80);
@@ -1084,7 +1217,7 @@ export function ReviewResultView({ answers, writingResults, elapsedMs, difficult
         {reflexAccuracy !== null && (
           <div className="rv-reflex-summary">
             <Mic size={14} color="#7C6FE4" />
-            Độ chính xác phát âm: <b>{reflexAccuracy}%</b> · Tốc độ phản xạ: <b>{reflexAvgLabel}</b> (còn dư trung bình {reflexAvgTimeLeft}s/câu)
+            Tốc độ phản xạ: <b>{reflexAvgLabel}</b> (còn dư trung bình {reflexAvgTimeLeft}s/câu)
           </div>
         )}
 

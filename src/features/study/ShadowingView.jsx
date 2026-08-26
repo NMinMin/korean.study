@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, Headphones, Target, Volume2, Mic, Sparkles, Lightbulb, CheckCircle2, RotateCcw, AlertTriangle,
-  BookOpen, Download, Flame, Play, Scissors, Smile, Square, XCircle
+  BookOpen, Flame, Lock, Play, Scissors, Smile, Square, XCircle
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { requestAIJson, transcribeShadowRecording, parseAIJson } from '../../services/aiService';
@@ -21,14 +21,35 @@ import { compareSpeech, feedbackFor, toneForScore } from './speechAssessment';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
 
-export function DictationModeSelectView({ lesson, onBack, onSelect }) {
+export function DictationModeSelectView({ lesson, lines = SHADOW_LINES, onBack, onSelect }) {
+  const [practiceComplete, setPracticeComplete] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    setLoadingProgress(true);
+    loadRemoteActivityProgress(lesson?.id).then((rows) => {
+      if (!alive) return;
+      const items = rows.find((row) => row.activityType === 'nghechep')?.completedItems || {};
+      const completed = lines.length > 0 && lines.every((line, index) =>
+        items[`practice:${line?.no ?? index}`] === 'correct'
+      );
+      setPracticeComplete(completed);
+    }).catch(() => {
+      if (alive) setPracticeComplete(false);
+    }).finally(() => {
+      if (alive) setLoadingProgress(false);
+    });
+    return () => { alive = false; };
+  }, [lesson?.id, lines]);
+
   return (
     <section className="card page dictation-mode-page">
       <div className="page-back-heading">
         <button className="fc2-back" onClick={onBack} aria-label="Quay lại"><ChevronLeft size={20} /></button>
         <div>
           <div className="card-title"><Headphones size={19} color="#3FA95C" /> Nghe chép chính tả · Bài {lesson.no}</div>
-          <p className="dictation-mode-note">Chọn tuyến học phù hợp. Cả Luyện tập và Kiểm tra đều được lưu vào tiến trình.</p>
+          <p className="dictation-mode-note">Hoàn thành Luyện tập để mở Kiểm tra. Mỗi tuyến chiếm 50% tiến trình.</p>
         </div>
       </div>
       <div className="dictation-mode-grid">
@@ -38,11 +59,17 @@ export function DictationModeSelectView({ lesson, onBack, onSelect }) {
           <p>Nghe không giới hạn, dùng gợi ý và luyện từng câu. Câu đúng được lưu vào tiến trình.</p>
           <span>Bắt đầu luyện <ChevronRight size={16} /></span>
         </button>
-        <button className="dictation-mode-card test" onClick={() => onSelect("test")}>
+        <button
+          className={`dictation-mode-card test ${!practiceComplete ? 'locked' : ''}`}
+          disabled={loadingProgress || !practiceComplete}
+          onClick={() => onSelect("test")}
+          aria-label={!practiceComplete ? 'Kiểm tra đang khóa. Hãy hoàn thành Luyện tập trước.' : 'Vào kiểm tra'}
+        >
+          {!practiceComplete && <span className="dictation-mode-lock"><Lock size={14} /> Chưa mở khóa</span>}
           <span className="dictation-mode-icon"><Target size={27} /></span>
           <strong>Kiểm tra</strong>
-          <p>Mỗi câu chỉ được nghe tối đa 2 lần. Câu đúng được lưu để tiếp tục ở lần sau.</p>
-          <span>Vào kiểm tra <ChevronRight size={16} /></span>
+          <p>{practiceComplete ? 'Mỗi câu chỉ được nghe tối đa 2 lần và dùng gợi ý 1 lần.' : 'Bạn cần hoàn thành tuyến Luyện tập trước.'}</p>
+          <span>{practiceComplete ? <>Vào kiểm tra <ChevronRight size={16} /></> : <><Lock size={15} /> Hoàn thành Luyện tập để mở</>}</span>
         </button>
       </div>
     </section>
@@ -55,13 +82,26 @@ export function DictationModeSelectView({ lesson, onBack, onSelect }) {
 
 /* Worker AI chấm transcript tiếng Hàn; lỗi mạng sẽ dùng bộ chấm cục bộ. */
 async function gradeWithAI(target, said, realPron, timing = {}) {
+  const normalizeForGrading = (value) => String(value || "")
+    .normalize("NFKC")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const normalizedTarget = normalizeForGrading(target);
+  const normalizedSaid = normalizeForGrading(said);
   const prompt = `Bạn là giáo viên tiếng Hàn chấm bài luyện nói (shadowing) cho người Việt học tiếng Hàn.
 
-Câu mẫu (đáp án đúng): "${target}"
-${realPron ? `Cách đọc thực tế đúng chuẩn (có biến âm/liên âm): "${realPron}"\n` : ""}Transcript nhận diện từ giọng học viên: "${said}"
+Câu mẫu đã bỏ dấu câu: "${normalizedTarget}"
+${realPron ? `Cách đọc thực tế đúng chuẩn (có biến âm/liên âm): "${normalizeForGrading(realPron)}"\n` : ""}Transcript nhận diện đã bỏ dấu câu: "${normalizedSaid}"
 Thời gian phản xạ: ${Math.round((timing.elapsed || 0) * 10) / 10} giây; giới hạn: ${timing.limit || "không có"} giây.
 
-Chấm dựa trên độ khớp transcript, độ đầy đủ và thời gian phản xạ. Không được khẳng định đã phân tích âm sắc/acoustic vì đầu vào là transcript.
+Chấm theo hướng khích lệ người mới học, ưu tiên nội dung và các từ khóa chính hơn độ khớp máy móc từng ký tự. BẮT BUỘC bỏ qua hoàn toàn dấu chấm, dấu phẩy, dấu hỏi, dấu chấm than, dấu ngoặc, dấu gạch nối và khác biệt khoảng trắng. Không trừ điểm vì lỗi dấu câu, cách viết liền/tách từ hoặc một sai khác nhỏ có khả năng do hệ thống nhận diện giọng nói. Nếu học viên nói đủ ý và phần lớn từ chính xác thì nên cho 80-100 điểm; chỉ trừ mạnh khi thiếu hẳn cụm quan trọng, đổi nghĩa hoặc nói khác câu mẫu rõ rệt. Thời gian chỉ là tiêu chí phụ và không được làm giảm quá 5 điểm nếu vẫn trong giới hạn. Không được khẳng định đã phân tích âm sắc/acoustic vì đầu vào là transcript.
+
+Thang điểm tham khảo:
+- 90-100: đầy đủ nội dung, chỉ có sai khác rất nhỏ.
+- 80-89: đúng phần lớn câu và đủ ý, có 1-2 lỗi nhẹ.
+- 60-79: hiểu được nhưng thiếu hoặc sai một cụm đáng kể.
+- Dưới 60: thiếu nhiều nội dung hoặc khác câu mẫu rõ rệt.
 
 Phân tích và trả lời CHỈ bằng JSON theo đúng cấu trúc sau, không thêm markdown hay chữ nào khác ngoài JSON:
 {
@@ -138,39 +178,19 @@ const swFormatTime = (s) => {
   return `${m}:${sec}`;
 };
 
-const recordingExtension = (mimeType = "") => {
-  if (mimeType.includes("mp4")) return "m4a";
-  if (mimeType.includes("ogg")) return "ogg";
-  return "webm";
-};
-
-function SwWaveBars() {
-  const heights = [6, 10, 16, 9, 22, 13, 19, 10, 25, 15, 21, 12, 8, 17, 23, 14, 10, 19, 15, 7, 20, 12, 17, 9, 14, 22, 10, 15, 19, 7];
-  return (
-    <svg viewBox="0 0 300 28" width="100%" height="28" preserveAspectRatio="none" aria-hidden="true">
-      {heights.map((h, i) => (
-        <rect key={i} x={i * 10} y={14 - h / 2} width="5" height={h} rx="2" fill="#C9BCF2" />
-      ))}
-    </svg>
-  );
-}
-
-
-
 export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, onBack, onFinish, onProgress }) {
   const [idx, setIdx] = useState(0);
-  const [autoPlay, setAutoPlay] = useState(false);
   const [status, setStatus] = useState("idle"); // idle | recording | grading | done | error | unsupported
   const [results, setResults] = useState({});
+  const [skipped, setSkipped] = useState({});
   const [history, setHistory] = useState([]);
   const [errMsg, setErrMsg] = useState("");
   const [helpPanel, setHelpPanel] = useState(null); // null | "break" | "pron" | "tips"
   const [audioTime, setAudioTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [recordingElapsed, setRecordingElapsed] = useState(0);
+  const [isPlayingRecording, setIsPlayingRecording] = useState(false);
   const [recordedUrls, setRecordedUrls] = useState({}); // { [idx]: blob url } — bản ghi âm THẬT của người dùng để nghe lại
-  const [recordedDurations, setRecordedDurations] = useState({});
-  const [recordedMimeTypes, setRecordedMimeTypes] = useState({});
   const [showCompletion, setShowCompletion] = useState(false);
   const [finalAssessment, setFinalAssessment] = useState(null);
   const [assessingFinal, setAssessingFinal] = useState(false);
@@ -178,7 +198,6 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
   const [micBlocked, setMicBlocked] = useState(false); // getUserMedia bị chặn (thường do khung xem trước) — chỉ ảnh hưởng phần ghi âm để nghe lại, không chặn chấm điểm AI
   const recognitionRef = useRef(null);
   const audioRef = useRef(null);
-  const autoPlayTimer = useRef(null);
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
   const recordedUrlsRef = useRef({});
@@ -234,6 +253,8 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
   }, [lesson, userId]);
 
   useEffect(() => {
+    myRecAudioRef.current?.pause();
+    setIsPlayingRecording(false);
     setErrMsg("");
     setStatus("idle");
     setHelpPanel(null);
@@ -255,18 +276,6 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
     Object.values(recordedUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
   }, []);
 
-  // Tự động phát khi bật "Tự động phát" và mỗi khi chuyển câu
-  useEffect(() => {
-    if (!autoPlay) return;
-    clearTimeout(autoPlayTimer.current);
-    autoPlayTimer.current = setTimeout(() => {
-      const el = audioRef.current;
-      if (el) { el.currentTime = 0; el.play().catch(() => { }); }
-    }, 350);
-    return () => clearTimeout(autoPlayTimer.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idx, autoPlay]);
-
   const playNative = () => {
     const el = audioRef.current;
     if (!el) return;
@@ -278,9 +287,19 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
     const url = recordedUrls[idx];
     if (!url) return;
     if (!myRecAudioRef.current) myRecAudioRef.current = new Audio();
-    myRecAudioRef.current.src = url;
-    myRecAudioRef.current.currentTime = 0;
-    myRecAudioRef.current.play().catch(() => {
+    const player = myRecAudioRef.current;
+    if (isPlayingRecording && !player.paused) {
+      player.pause();
+      setIsPlayingRecording(false);
+      return;
+    }
+    player.src = url;
+    player.currentTime = 0;
+    player.onplay = () => setIsPlayingRecording(true);
+    player.onpause = () => setIsPlayingRecording(false);
+    player.onended = () => setIsPlayingRecording(false);
+    player.play().catch(() => {
+      setIsPlayingRecording(false);
       setErrMsg("Không thể phát bản ghi này. Bạn có thể tải file xuống để kiểm tra.");
       setStatus("error");
     });
@@ -337,8 +356,6 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
             recordedUrlsRef.current = next;
             return next;
           });
-          setRecordedDurations((prev) => ({ ...prev, [idx]: recordedDuration }));
-          setRecordedMimeTypes((prev) => ({ ...prev, [idx]: recordedMimeType }));
         } else {
           setErrMsg("Trình duyệt không tạo được file ghi âm. Hãy kiểm tra micro rồi thử lại.");
         }
@@ -584,9 +601,17 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
 
   const goPrev = () => { if (idx > 0) setIdx(idx - 1); };
   const goNext = () => {
-    if (!result || result.score < 80) return;
+    if ((!result || result.score < 80) && !skipped[idx]) return;
     if (idx < total - 1) { setIdx(idx + 1); return; }
-    if (lines.every((_, questionIndex) => results[questionIndex]?.score >= 80)) finishAndAssess(results);
+    const visitedAll = lines.every((_, questionIndex) => results[questionIndex]?.score >= 80 || skipped[questionIndex]);
+    if (visitedAll) finishAndAssess(results);
+  };
+
+  const skipShadowQuestion = () => {
+    if (status === "recording" || status === "grading" || shadowQuestionDone) return;
+    setSkipped((current) => ({ ...current, [idx]: true }));
+    setErrMsg("");
+    setStatus("idle");
   };
 
   const retryShadowing = () => {
@@ -594,6 +619,7 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
     setIsRecheck(true);
     setFinalAssessment(null);
     setResults({});
+    setSkipped({});
     setHistory([]);
     setIdx(0);
     setStatus("idle");
@@ -603,7 +629,9 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
     return (
       <SkillCompletionView
         title="Bạn đã hoàn thành Shadowing!"
-        description="Tất cả câu đã đạt mức chính xác yêu cầu. Bạn có muốn luyện kiểm tra lại không?"
+        description={Object.keys(skipped).length
+          ? `Bạn đã đi hết bài. ${Object.keys(skipped).length} câu bỏ qua chưa được tính vào tiến trình.`
+          : "Tất cả câu đã đạt mức chính xác yêu cầu. Bạn có muốn luyện kiểm tra lại không?"}
         assessment={finalAssessment}
         loading={assessingFinal}
         onBack={isRecheck ? onBack : (onFinish || onBack)}
@@ -639,12 +667,6 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
           />
 
           <div className="sw-card">
-            <div className="sw-card-top">
-              <button className={`sw-autoplay ${autoPlay ? "on" : ""}`} onClick={() => setAutoPlay((a) => !a)}>
-                <Volume2 size={13} /> Tự động phát
-              </button>
-            </div>
-
             <div className="sw-sentence-row">
               <h2 className="sw-ko" lang="ko">{line.ko}</h2>
               <button className="sw-mini-play" onClick={playNative} aria-label="Nghe câu">
@@ -656,10 +678,6 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
             <div className="sw-divider" />
 
             <div className="sw-controls">
-              <button className="sw-side-ctrl" onClick={playNative}>
-                <Volume2 size={20} color="#7C6FE4" />
-                <span>Nghe câu</span>
-              </button>
               <button
                 className={`sw-mic-btn ${status === "recording" ? "rec" : ""} ${status === "requesting" ? "requesting" : ""}`}
                 onClick={handleMicClick}
@@ -675,10 +693,6 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
                 ) : (
                   <Mic size={26} color="#fff" />
                 )}
-              </button>
-              <button className="sw-side-ctrl" onClick={playMyRecording} disabled={!recordedUrls[idx]} aria-label={recordedUrls[idx] ? "Nghe lại bản ghi của tôi" : "Chưa có bản ghi của tôi"}>
-                <Mic size={20} color="#7C6FE4" />
-                <span>Nghe lại</span>
               </button>
             </div>
             <p className="sw-mic-caption">
@@ -697,29 +711,6 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
             <p className={`sw-timer ${status === "recording" ? "is-recording" : ""} ${status === "recording" && recordingLimit - recordingElapsed <= 2 ? "is-ending" : ""}`}>
               {swFormatTime(recordingElapsed)} / {swFormatTime(recordingLimit)}
             </p>
-            {recordedUrls[idx] && status !== "recording" && (
-              <div className="sw-recording-saved">
-                <p className="sw-recording-ready">
-                  <CheckCircle2 size={14} /> Đã lưu bản ghi {swFormatTime(recordedDurations[idx] || 0)} trong phiên này
-                </p>
-                <div className="sw-recording-actions">
-                  <button type="button" className="sw-compare-btn mine" onClick={playMyRecording}>
-                    <Play size={14} /> Nghe giọng của tôi
-                  </button>
-                  <a
-                    className="sw-compare-btn download"
-                    href={recordedUrls[idx]}
-                    download={`shadowing-bai-${lesson.no}-cau-${idx + 1}.${recordingExtension(recordedMimeTypes[idx])}`}
-                  >
-                    <Download size={14} /> Tải bản ghi
-                  </a>
-                </div>
-                {status === "error" && (
-                  <p className="sw-recording-help">Hãy nghe lại file để kiểm tra micro có thu được tiếng hay không, sau đó bấm mic để ghi lại.</p>
-                )}
-              </div>
-            )}
-
             {status === "unsupported" && (
               <div className="sw-unsupported">
                 <AlertTriangle size={16} color="#E8912E" />
@@ -733,53 +724,86 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
             {result && status !== "grading" && (
               <div className="sw-result">
                 <div className="sw-result-head"><Sparkles size={14} color="#7C6FE4" /> Kết quả mới nhất</div>
-                <div className="sw-result-row">
-                  <button className="sw-result-play" onClick={playNative} aria-label="Nghe lại câu mẫu">
-                    <Play size={16} fill="#fff" color="#fff" />
-                  </button>
-                  <div className="sw-result-wave"><SwWaveBars /></div>
-                  <span className="sw-result-time">{swFormatTime(audioDuration)}</span>
+                <div className="sw-result-summary">
+                  <div className="sw-recording-playback">
+                    <button
+                      type="button"
+                      className={`sw-result-play ${isPlayingRecording ? "is-playing" : ""}`}
+                      onClick={playMyRecording}
+                      disabled={!recordedUrls[idx]}
+                      aria-label="Nghe lại đoạn vừa ghi âm"
+                    >
+                      {isPlayingRecording
+                        ? <Square size={13} color="#fff" fill="#fff" />
+                        : <Play size={15} color="#fff" fill="#fff" />}
+                    </button>
+                    <span>Nghe bản ghi của bạn</span>
+                    <span className={`sw-playback-wave ${isPlayingRecording ? "is-playing" : ""}`} aria-hidden="true">
+                      {Array.from({ length: 18 }, (_, waveIndex) => (
+                        <i
+                          key={waveIndex}
+                          style={{
+                            animationDelay: `${(waveIndex % 6) * -0.09}s`,
+                            animationDuration: `${0.55 + (waveIndex % 5) * 0.08}s`,
+                          }}
+                        />
+                      ))}
+                    </span>
+                  </div>
                   <div className="sw-accuracy">
-                    <span>Độ khớp câu</span>
+                    <span>Độ khớp</span>
                     <b className={toneForScore(result.score)}>{result.score}%</b>
                   </div>
                 </div>
                 <div className="sw-ai-feedback">
                   <div className="sw-ai-meta">
                     <span className={`sw-ai-badge ${result.source === "worker-ai" ? "" : "fallback"}`}>
-                      <Sparkles size={12} /> {result.source === "worker-ai" ? "AI chấm điểm" : "Chấm dự phòng"}
+                      <Sparkles size={12} /> {result.source === "worker-ai" ? "Đánh giá AI" : "Đánh giá dự phòng"}
                     </span>
-                    {result.source === "worker-ai" && result.model && <span className="sw-ai-model">{result.model}</span>}
                   </div>
-                  <p><strong>AI nhận diện:</strong> <span lang="ko">{result.transcript}</span></p>
-                  {result.strength && <p><strong>Điểm tốt:</strong> {result.strength}</p>}
-                  {result.warning && <p className="sw-ai-warning">{result.warning}</p>}
-                </div>
-                <div className="sw-compare-row">
-                  <button className="sw-compare-btn" onClick={playNative}>
-                    <Volume2 size={14} /> Giọng mẫu
-                  </button>
-                  <button className="sw-compare-btn mine" onClick={playMyRecording} disabled={!recordedUrls[idx]}>
-                    <Mic size={14} /> {recordedUrls[idx] ? "Giọng của tôi" : micBlocked ? "Không có quyền micro để ghi lại" : "Chưa có bản ghi"}
-                  </button>
-                </div>
-                <div className="sw-word-chips">
-                  {(result.words || []).map((w, i) => (
-                    <span key={i} className={`sw-chip ${w.status}`}>
-                      {w.word} {w.status === "ok" ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
-                    </span>
-                  ))}
+                  {result.strength && <p><strong>Nhận xét:</strong> {result.strength}</p>}
+                  {result.warning && <p className="sw-ai-warning"><strong>Cần cải thiện:</strong> {result.warning}</p>}
+                  {result.tip && <p><strong>Gợi ý:</strong> {result.tip}</p>}
                 </div>
                 <div className={`sw-score-state ${toneForScore(result.score)}`}>
                   {result.score >= 80
-                    ? <><CheckCircle2 size={15} /> Chính xác — bạn có thể sang câu tiếp theo.</>
+                    ? <><CheckCircle2 size={15} /> Đã đạt — bấm “Câu tiếp” để tiếp tục.</>
                     : result.score >= 60
                       ? <><AlertTriangle size={15} /> Gần đúng — nghe lại và ghi âm thêm một lần nhé.</>
-                      : <><XCircle size={15} /> Chưa đúng — đối chiếu các từ màu đỏ rồi thử lại.</>}
+                      : <><XCircle size={15} /> Chưa đạt — nghe mẫu rồi thử lại nhé.</>}
                 </div>
-                <p className="sw-tip"><Lightbulb size={14} color="#E8A93D" fill="#F7D98B" /> {result.tip}</p>
               </div>
             )}
+          </div>
+
+          <div className="fc-nav sw-question-nav">
+            <button className="fc-nav-btn" disabled={idx === 0} onClick={goPrev}><ChevronLeft size={18} /> Câu trước</button>
+            <div className="fc-dots sw-question-dots">
+              {lines.map((l, i) => (
+                <button
+                  key={l.no}
+                  className={`fc-dot ${i === idx ? "on" : ""} ${skipped[i] ? "rated-forgot" : results[i] ? (results[i].score >= 80 ? "rated-good" : results[i].score >= 60 ? "rated-vague" : "rated-forgot") : ""}`}
+                  disabled={i >= idx}
+                  onClick={() => { if (i < idx) setIdx(i); }}
+                  aria-label={`Câu ${i + 1}`}
+                />
+              ))}
+            </div>
+            <button
+              className="fc-nav-btn shadow-skip-btn"
+              disabled={shadowQuestionDone || Boolean(skipped[idx]) || status === "grading" || status === "recording"}
+              onClick={skipShadowQuestion}
+            >
+              <ChevronRight size={17} /> {skipped[idx] ? "Đã bỏ qua" : "Bỏ qua"}
+            </button>
+            <button
+              className="fc-nav-btn primary"
+              disabled={((!result || result.score < 80) && !skipped[idx]) || status === "grading" || status === "recording"}
+              title={(!result || result.score < 80) && !skipped[idx] ? "Hãy đạt từ 80 điểm hoặc chọn Bỏ qua" : undefined}
+              onClick={goNext}
+            >
+              {idx === total - 1 ? "Hoàn thành" : "Câu tiếp"} <ChevronRight size={18} />
+            </button>
           </div>
         </div>
 
@@ -832,27 +856,6 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
         </div>
       </div>
 
-      <div className="fc-nav">
-        <button className="fc-nav-btn" disabled={idx === 0} onClick={goPrev}><ChevronLeft size={18} /> Câu trước</button>
-        <div className="fc-dots">
-          {lines.map((l, i) => (
-            <button
-              key={l.no}
-              className={`fc-dot ${i === idx ? "on" : ""} ${results[i] ? (results[i].score >= 80 ? "rated-good" : results[i].score >= 60 ? "rated-vague" : "rated-forgot") : ""}`}
-              onClick={() => setIdx(i)}
-              aria-label={`Câu ${i + 1}`}
-            />
-          ))}
-        </div>
-        <button
-          className="fc-nav-btn primary"
-          disabled={!result || result.score < 80 || status === "grading" || status === "recording"}
-          title={!result || result.score < 80 ? "Hãy ghi âm lại đến khi câu đạt từ 80 điểm" : undefined}
-          onClick={goNext}
-        >
-          {idx === total - 1 ? "Hoàn thành" : "Câu tiếp"} <ChevronRight size={18} />
-        </button>
-      </div>
     </section>
   );
 }

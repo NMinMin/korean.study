@@ -10,6 +10,7 @@ import {
   saveRemoteDailyGoal,
   loadRemoteStudyPlan,
   saveRemoteStudyPlan,
+  recordRemoteStudyMinutes,
 } from '../../lib/studySettings';
 import {
   isCelebrationSoundEnabled,
@@ -128,6 +129,19 @@ export async function saveDailyGoal(g, userId) {
   } catch (e) {
     return normalized;
   }
+}
+
+export async function recordStudyMinutes(minutes, userId) {
+  const remote = await recordRemoteStudyMinutes(minutes);
+  if (!remote) return null;
+  try {
+    await window.storage.set(dailyGoalKey(userId), JSON.stringify(remote));
+  } catch (error) { }
+  window.dispatchEvent(new CustomEvent('kstudy:daily-goal-updated', { detail: remote }));
+  if (remote.targetMinutes > 0 && remote.todayMinutes >= remote.targetMinutes) {
+    await touchStudyLog(userId);
+  }
+  return remote;
 }
 
 export async function getStudyPlan(userId) {

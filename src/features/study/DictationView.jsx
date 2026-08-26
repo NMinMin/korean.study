@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, Volume2, Sparkles, CheckCircle2, RotateCcw, AlertTriangle,
   Lightbulb, XCircle, Check, Link2, Image as ImageIcon,
-  BookMarked, BookOpen, Eraser, Headphones, Lock, Play, Square, Star, Target
+  BookMarked, BookOpen, Eraser, Headphones, Play, Square, Star, Target
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { requestAIJson } from '../../services/aiService';
@@ -288,13 +288,16 @@ export function ChooseImageView({ onBack }) {
 /*  cho Shadowing), gợi ý hé lộ từng ký tự khi trả lời sai              */
 /* ------------------------------------------------------------------ */
 export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vocabulary = VOCAB_SAMPLE, initialMode = "practice", onBack, onFinish, onGoVocab, onProgress }) {
-  const mode = initialMode; // hai tuyến độc lập; chỉ "test" ghi tiến trình
+  const mode = initialMode;
+  const [orderedLines] = useState(() => shuffleArr([...lines]));
   const [idx, setIdx] = useState(0);
   const [inputs, setInputs] = useState({});
   const [status, setStatus] = useState({});
   const [verified, setVerified] = useState({}); // chỉ câu đúng trong phần Kiểm tra mới tính tiến độ
   const [checkedValues, setCheckedValues] = useState({}); // giá trị đã gõ TẠI THỜI ĐIỂM bấm Kiểm tra, dùng để bôi màu đúng/sai từng từ
   const [reveal, setReveal] = useState({});
+  const [hintUses, setHintUses] = useState({});
+  const [hintTexts, setHintTexts] = useState({});
   const [listensLeft, setListensLeft] = useState({});
   const [showTrans, setShowTrans] = useState({});
   const [attempted, setAttempted] = useState({});
@@ -311,8 +314,8 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
   const audioRef = useRef(null);
   const autoAdvanceRef = useRef(null);
 
-  const total = lines.length;
-  const line = lines[idx];
+  const total = orderedLines.length;
+  const line = orderedLines[idx];
   const target = line.ko.replace(/\*\*/g, "");
   const leftCount = mode === "practice" ? Infinity : listensLeft[idx] ?? 2;
   const curReveal = reveal[idx] || 0;
@@ -321,6 +324,9 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
   const st = status[idx];
   const questionLocked = st === "correct" || (mode === "test" && st === "failed");
   const storageKey = dictationProgressKey(lesson, userId);
+  const itemIdentity = (item, index) => item?.no ?? lines.indexOf(item) ?? index;
+  const progressKey = (route, item = line, index = idx) => `${route}:${itemIdentity(item, index)}`;
+  const hintLimit = mode === "practice" ? 3 : 1;
 
   useEffect(() => {
     let alive = true;
@@ -329,16 +335,31 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
       loadRemoteActivityProgress(lesson?.id),
     ]).then(([res, remoteRows]) => {
       if (!alive) return;
-      const localSaved = res?.value ? correctDictationResults(JSON.parse(res.value)) : {};
+      const localRaw = res?.value ? JSON.parse(res.value) : {};
       const remoteSaved = remoteRows.find((row) => row.activityType === "nghechep")?.completedItems || {};
-      const saved = { ...localSaved, ...remoteSaved };
+      const rawSaved = { ...localRaw, ...remoteSaved };
+      const saved = {};
+      Object.entries(rawSaved).forEach(([key, savedValue]) => {
+        const correct = savedValue === "correct" || (typeof savedValue === "object" && savedValue?.correct === true);
+        if (!correct) return;
+        if (key.startsWith("practice:") || key.startsWith("test:")) saved[key] = "correct";
+        else if (/^\d+$/.test(key)) {
+          const oldIndex = Number(key);
+          const oldLine = lines[oldIndex];
+          if (oldLine) saved[progressKey("test", oldLine, oldIndex)] = "correct";
+        }
+      });
       if (!Object.keys(saved).length) return;
       window.storage.set(storageKey, JSON.stringify(saved)).catch(() => { });
       setVerified(saved);
-      setStatus(saved);
-      const completedIndexes = Object.keys(saved).filter((key) => saved[key] === "correct");
+      const routeStatus = Object.fromEntries(orderedLines.map((item, questionIndex) => {
+        const key = progressKey(mode, item, questionIndex);
+        return [questionIndex, saved[key] === "correct" ? "correct" : undefined];
+      }).filter(([, value]) => value));
+      setStatus(routeStatus);
+      const completedIndexes = Object.keys(routeStatus);
       if (completedIndexes.length) {
-        const firstPending = Array.from({ length: total }).findIndex((_, questionIndex) => saved[questionIndex] !== "correct");
+        const firstPending = Array.from({ length: total }).findIndex((_, questionIndex) => routeStatus[questionIndex] !== "correct");
         if (firstPending < 0) setShowCompletion(true);
         else setIdx(firstPending);
       }
@@ -350,7 +371,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
     }).catch(() => { });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, storageKey, total, lesson, userId]);
+  }, [mode, storageKey, total, lesson, userId, orderedLines]);
 
   useEffect(() => {
     clearTimeout(autoAdvanceRef.current);
@@ -418,20 +439,20 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
     if (ok) playCorrectSound();
     else playIncorrectSound();
     const nextWrongCount = ok ? (wrongAttempts[idx] || 0) : (wrongAttempts[idx] || 0) + 1;
-    const failed = mode === "test" && !ok && nextWrongCount >= 2;
+    const failed = mode === "test" && !ok && nextWrongCount >= 3;
     const newStatus = { ...status, [idx]: ok ? "correct" : failed ? "failed" : "wrong" };
     setStatus(newStatus);
     if (!ok) setWrongAttempts((current) => ({ ...current, [idx]: nextWrongCount }));
     setCheckedValues((c) => ({ ...c, [idx]: value }));
     setAttempted((a) => ({ ...a, [idx]: true }));
     setRetryQueue((queue) => ok ? queue.filter((item) => item !== idx) : (queue.includes(idx) ? queue : [...queue, idx]));
-    const nextVerified = ok ? { ...verified, [idx]: "correct" } : verified;
+    const nextVerified = ok ? { ...verified, [progressKey(mode)]: "correct" } : verified;
     if (ok) {
       setVerified(nextVerified);
-      const fullyCorrect = Array.from({ length: total }).every((_, questionIndex) => nextVerified[questionIndex] === "correct");
-      if (!isRecheck || fullyCorrect) {
+      const fullyCorrect = orderedLines.every((item, questionIndex) => nextVerified[progressKey(mode, item, questionIndex)] === "correct");
+      if (!isRecheck) {
         window.storage.set(storageKey, JSON.stringify(nextVerified)).catch(() => { });
-        saveRemoteActivityProgress(lesson.textbookId, lesson.id, "nghechep", nextVerified, total)
+        saveRemoteActivityProgress(lesson.textbookId, lesson.id, "nghechep", nextVerified, total * 2)
           .then((percent) => onProgress?.("nghechep", percent))
           .catch(() => { });
       }
@@ -456,32 +477,41 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
   };
 
   const hint = () => {
-    setReveal((r) => ({ ...r, [idx]: Math.min((r[idx] || 0) + 1, maxReveal) }));
+    if ((hintUses[idx] || 0) >= hintLimit) return;
+    setHintUses((current) => ({ ...current, [idx]: (current[idx] || 0) + 1 }));
+    const targetWords = target.trim().split(/\s+/).filter(Boolean);
+    const enteredWords = value.trim().split(/\s+/).filter(Boolean);
+    let correctPrefixLength = 0;
+    while (
+      correctPrefixLength < enteredWords.length
+      && correctPrefixLength < targetWords.length
+      && normalizeDictation(enteredWords[correctPrefixLength]) === normalizeDictation(targetWords[correctPrefixLength])
+    ) {
+      correctPrefixLength += 1;
+    }
+    const nextWord = targetWords[Math.min(correctPrefixLength, targetWords.length - 1)] || "";
+    setHintTexts((current) => ({ ...current, [idx]: nextWord }));
     setAttempted((a) => ({ ...a, [idx]: true }));
-  };
-
-  const buildHintMask = () => {
-    let count = 0;
-    return target.split("").map((ch) => {
-      if (/\s/.test(ch)) return ch;
-      count += 1;
-      return count <= curReveal ? ch : "•";
-    }).join("");
   };
 
   const goto = (i) => setIdx(i);
   const goNext = (statusSnapshot = status, verifiedSnapshot = verified) => {
-    const currentDone = statusSnapshot[idx] === "correct" || (mode === "test" && statusSnapshot[idx] === "failed");
+    const currentDone = statusSnapshot[idx] === "correct" || statusSnapshot[idx] === "failed";
     if (!currentDone) return;
     const nextIndex = mode === "test"
-      ? Array.from({ length: total }).findIndex((_, questionIndex) => questionIndex > idx && verifiedSnapshot[questionIndex] !== "correct")
+      ? Array.from({ length: total }).findIndex((_, questionIndex) => questionIndex > idx && verifiedSnapshot[progressKey(mode, orderedLines[questionIndex], questionIndex)] !== "correct")
       : idx < total - 1 ? idx + 1 : -1;
     if (nextIndex >= 0) { goto(nextIndex); return; }
     const pending = mode === "test"
-      ? Array.from({ length: total }, (_, questionIndex) => questionIndex).filter((questionIndex) => verifiedSnapshot[questionIndex] !== "correct")
+      ? Array.from({ length: total }, (_, questionIndex) => questionIndex).filter((questionIndex) => verifiedSnapshot[progressKey(mode, orderedLines[questionIndex], questionIndex)] !== "correct")
       : retryQueue.filter((questionIndex) => statusSnapshot[questionIndex] !== "correct");
     if (pending.length) {
       if (mode === "test") {
+        if (retryRound >= 1) {
+          setRetryNotice(`Đã kết thúc lượt làm lại. ${pending.length} câu chưa đúng không được cộng vào tiến trình.`);
+          setShowCompletion(true);
+          return;
+        }
         setRetryRound((round) => round + 1);
         setRetryNotice(`Bạn đã đi hết lượt. Có ${pending.length} câu chưa đúng — bắt đầu lượt làm lại.`);
         setStatus((current) => {
@@ -500,6 +530,16 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
           return next;
         });
         setReveal((current) => {
+          const next = { ...current };
+          pending.forEach((questionIndex) => { delete next[questionIndex]; });
+          return next;
+        });
+        setHintUses((current) => {
+          const next = { ...current };
+          pending.forEach((questionIndex) => { delete next[questionIndex]; });
+          return next;
+        });
+        setHintTexts((current) => {
           const next = { ...current };
           pending.forEach((questionIndex) => { delete next[questionIndex]; });
           return next;
@@ -538,15 +578,26 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
     setStatus((current) => { const next = { ...current }; delete next[idx]; return next; });
   };
 
+  const skipCurrentQuestion = () => {
+    if (questionLocked) return;
+    playIncorrectSound();
+    const nextStatus = { ...status, [idx]: "failed" };
+    setStatus(nextStatus);
+    setAttempted((current) => ({ ...current, [idx]: true }));
+    setRetryQueue((queue) => queue.includes(idx) ? queue : [...queue, idx]);
+    window.setTimeout(() => goNext(nextStatus, verified), 250);
+  };
+
   const retryDictation = () => {
     setShowCompletion(false);
     setIsRecheck(true);
     setIdx(0);
     setInputs({});
     setStatus({});
-    setVerified({});
     setCheckedValues({});
     setAttempted({});
+    setHintUses({});
+    setHintTexts({});
     setRetryQueue([]);
     setListensLeft({});
     setWrongAttempts({});
@@ -555,12 +606,18 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
   };
 
   if (showCompletion) {
+    const correctCount = orderedLines.filter((item, questionIndex) => verified[progressKey(mode, item, questionIndex)] === "correct").length;
+    const routePercent = total ? Math.round((correctCount / total) * 100) : 0;
     return (
       <SkillCompletionView
         title={mode === "test" ? "Bạn đã hoàn thành Kiểm tra nghe chép!" : "Bạn đã hoàn thành Luyện tập nghe chép!"}
-        description={mode === "test" ? "Kết quả đúng đã được lưu vào tiến trình. Bạn có muốn kiểm tra lại không?" : "Kết quả luyện tập đã được lưu vào tiến trình. Bạn có muốn luyện lại không?"}
+        description={mode === "test"
+          ? correctCount === total
+            ? "Bạn đã hoàn thành cả hai tuyến Nghe chép chính tả. Bạn có muốn kiểm tra lại không?"
+            : `Bạn hoàn thành đúng ${correctCount}/${total} câu (${routePercent}%) ở tuyến Kiểm tra. Các câu chưa đúng không được cộng vào tiến trình.`
+          : "Luyện tập đã hoàn thành và tuyến Kiểm tra đã được mở."}
         retryLabel={mode === "test" ? "Kiểm tra lại" : "Luyện lại"}
-        onBack={!isRecheck ? (onFinish || onBack) : onBack}
+        onBack={mode === "test" && !isRecheck ? (onFinish || onBack) : onBack}
         onRetry={retryDictation}
       />
     );
@@ -584,7 +641,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
       <div className={`dc-route-banner ${mode}`}>
         {mode === "practice" ? <Headphones size={15} /> : <Target size={15} />}
         <strong>{mode === "practice" ? "Tuyến Luyện tập" : "Tuyến Kiểm tra"}</strong>
-        <span>{mode === "practice" ? "Không giới hạn lượt nghe · có lưu tiến trình" : "Tối đa 2 lượt nghe/câu · có lưu tiến trình"}</span>
+        <span>{mode === "practice" ? "Gợi ý tối đa 3 lần · chiếm 50% tiến trình" : "Tối đa 2 lượt nghe và 1 gợi ý/câu · chiếm 50% tiến trình"}</span>
       </div>
       {retryNotice && (
         <div className="dc-retry-notice"><RotateCcw size={15} /> <span>{retryNotice}</span><small>Lượt làm lại {retryRound}</small></div>
@@ -639,32 +696,42 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
               lang="ko"
             />
             <div className="dc-side-btns">
-              <button className="dc-hint-btn" onClick={hint} disabled={curReveal >= maxReveal}>
-                <Lightbulb size={15} /> Gợi ý
+              <button className="dc-hint-btn" onClick={hint} disabled={(hintUses[idx] || 0) >= hintLimit}>
+                <Lightbulb size={15} /> Gợi ý ({Math.max(0, hintLimit - (hintUses[idx] || 0))})
               </button>
               <button
-                className={`dc-trans-btn ${attempted[idx] ? "unlocked" : ""}`}
-                onClick={() => attempted[idx] && setShowTrans((s) => ({ ...s, [idx]: !s[idx] }))}
-                disabled={!attempted[idx]}
+                className={`dc-trans-btn unlocked ${showTrans[idx] ? "active" : ""}`}
+                onClick={() => setShowTrans((current) => ({ ...current, [idx]: !current[idx] }))}
+                aria-expanded={Boolean(showTrans[idx])}
               >
-                {attempted[idx] ? <BookMarked size={15} /> : <Lock size={15} />} Hiện bản dịch
+                <BookMarked size={15} /> {showTrans[idx] ? "Ẩn bản dịch" : "Hiện bản dịch"}
               </button>
             </div>
           </div>
 
-          {curReveal > 0 && (
-            <div className="dc-hint-line">💡 Gợi ý: <span lang="ko">{buildHintMask()}</span></div>
+          {hintTexts[idx] && (
+            <div className="dc-hint-line">
+              <Lightbulb size={15} />
+              <strong>Từ tiếp theo:</strong>
+              <span lang="ko">{hintTexts[idx]}</span>
+            </div>
           )}
-          {showTrans[idx] && attempted[idx] && <div className="dc-trans-line">🇻🇳 {line.vi}</div>}
+          {showTrans[idx] && (
+            <div className={`dc-trans-line ${line.vi ? "" : "is-empty"}`}>
+              <BookMarked size={15} />
+              <strong>Bản dịch:</strong>
+              <span>{line.vi || "Câu này chưa có bản dịch tiếng Việt."}</span>
+            </div>
+          )}
           {st && (
             <div className={`dc-feedback ${st === "correct" ? "ok" : "wrong"}`}>
               {st === "correct" ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
               {st === "correct"
                 ? "Chính xác! Làm tốt lắm."
                 : st === "failed"
-                  ? "Đã sai 2 lần — câu này được đánh dấu sai. Hãy làm tiếp và quay lại ở lượt cuối."
+                  ? "Đã sai lần thứ 3 — câu này được đánh dấu sai. Hãy làm tiếp và quay lại ở lượt cuối."
                   : mode === "test"
-                    ? "Chưa đúng — bạn còn 1 lần trả lời cho câu này."
+                    ? `Chưa đúng — bạn còn ${Math.max(0, 3 - (wrongAttempts[idx] || 0))} lần trả lời cho câu này.`
                     : "Chưa đúng — xem đối chiếu từng từ bên dưới:"}
             </div>
           )}
@@ -683,7 +750,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
           )}
 
           <div className="dc-actions">
-            <button className="dc-act-btn" onClick={clearCurrentAnswer} disabled={questionLocked || (!value && !checkedValues[idx])}><Eraser size={15} /> Xóa</button>
+            <button className="dc-act-btn" onClick={skipCurrentQuestion} disabled={questionLocked}><ChevronRight size={15} /> Bỏ qua câu</button>
             <button className="dc-act-btn primary" onClick={check} disabled={!value.trim() || questionLocked}><CheckCircle2 size={15} /> {questionLocked ? "Đã hoàn thành" : "Kiểm tra"}</button>
           </div>
         </div>
@@ -692,7 +759,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
           <div className="dc-tip-box">
             <div className="dc-tip-title"><Star size={15} fill="#F0C24E" color="#F0C24E" /> Mẹo</div>
             <ul>
-              <li>{mode === "practice" ? "Tuyến luyện tập không làm thay đổi tiến trình." : "Mỗi câu được nghe tối đa 2 lần và câu đúng được lưu."}</li>
+              <li>{mode === "practice" ? "Luyện tập chiếm 50% tiến trình và có tối đa 3 gợi ý mỗi câu." : "Kiểm tra chiếm 50% tiến trình, tối đa 2 lượt nghe và 1 gợi ý mỗi câu."}</li>
               <li>Dấu câu và khoảng trắng nhỏ không bị tính sai.</li>
               <li>Nghe theo cụm từ.</li>
             </ul>
@@ -714,7 +781,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
           <ChevronLeft size={18} /> Câu trước
         </button>
         <div className="fc-dots">
-          {lines.map((_, i) => (
+          {orderedLines.map((_, i) => (
             <button
               key={i}
               className={`fc-dot ${i === idx ? "on" : ""} ${status[i] === "correct" ? "rated-good" : status[i] === "wrong" || status[i] === "failed" ? "rated-forgot" : ""}`}
@@ -724,7 +791,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
             />
           ))}
         </div>
-        <button className="fc-nav-btn primary" disabled={status[idx] !== "correct" && !(mode === "test" && status[idx] === "failed")} onClick={() => goNext()}>
+        <button className="fc-nav-btn primary" disabled={status[idx] !== "correct" && status[idx] !== "failed"} onClick={() => goNext()}>
           {idx === total - 1 && retryQueue.some((questionIndex) => status[questionIndex] !== "correct") ? "Làm lại câu sai" : idx === total - 1 ? "Hoàn thành" : "Câu tiếp"} <ChevronRight size={18} />
         </button>
       </div>

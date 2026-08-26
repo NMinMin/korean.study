@@ -33,7 +33,7 @@ import { computeAndSyncUserStats } from './features/dashboard/progressService';
 import { supabase } from './lib/supabase';
 import notificationSoundUrl from '../Sound Effect/Notification.mp3';
 import { playEffect } from './services/audioService';
-import { getDailyGoal, saveDailyGoal, markNotifSeen } from './features/settings/studyPlanService';
+import { recordStudyMinutes, markNotifSeen } from './features/settings/studyPlanService';
 import { mapDatabaseGrammar, mapDatabaseLines } from './features/curriculum/curriculumMappers';
 import {
   ACTIVITIES,
@@ -74,7 +74,6 @@ import { CustomLessonStudyView, CustomLessonTestView } from './features/communit
 // Study & Review Views
 import {
   LessonDetailView,
-  VocabListView,
   VocabNotebookView,
   FlashcardView,
   VocabTestSelectView,
@@ -97,17 +96,9 @@ import {
 // Auth
 import AuthView, { profileStorageKey } from './features/auth/AuthView';
 
-const FOCUS_VIEWS = [
-  'lesson-detail', 'vocab-list', 'vocab-notebook', 'flashcards', 'flashcards-notebook', 'flashcards-schedule',
-  'flashcards-grammar', 'shadowing', 'dictation', 'review-hub', 'review-lesson-select',
-  'review-intro', 'review-quiz', 'review-result', 'aiquiz', 'study-custom-lesson', 'test-custom-lesson',
-  'vocab-test-select', 'vocab-test-fillblank', 'vocab-test-match', 'vocab-test-image',
-  'dictation-mode-select', 'nguphap-book', 'mock-exam',
-];
-
 const ROOT_PAGE_META = {
   'curriculum-hub': ['Giáo trình', 'Quản lý giáo trình của tôi và tiếp tục lộ trình đang học.'],
-  'nguphap-hub': ['Ngữ pháp', 'Tra cứu và luyện ngữ pháp theo từng giáo trình.'],
+  'nguphap-hub': ['Từ vựng & Ngữ pháp', 'Tra cứu từ vựng và ngữ pháp theo từng giáo trình.'],
   'mock-exam': ['Thi thử', 'Luyện tập trong giao diện tập trung.'],
   xephang: ['Xếp hạng', 'Theo dõi thành tích của bạn theo từng giáo trình.'],
   congdong: ['Cộng đồng', 'Chia sẻ cùng người học và khám phá các bộ từ vựng.'],
@@ -115,7 +106,7 @@ const ROOT_PAGE_META = {
 };
 
 const ACTIVE_STUDY_VIEWS = new Set([
-  'lesson-detail', 'vocab-list', 'vocab-notebook', 'flashcards', 'flashcards-notebook', 'flashcards-schedule',
+  'lesson-detail', 'vocab-notebook', 'flashcards', 'flashcards-notebook', 'flashcards-schedule',
   'flashcards-grammar', 'nguphap-book', 'shadowing', 'dictation', 'review-quiz',
   'study-custom-lesson', 'test-custom-lesson', 'aiquiz', 'vocab-test-fillblank',
   'vocab-test-match', 'vocab-test-image',
@@ -125,7 +116,6 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const [profile, setProfile] = useState(authenticatedProfile || undefined);
   const [active, setActive] = useState('home');
   const [view, setView] = useState('home');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [lesson, setLesson] = useState(null);
   const [reviewAnswers, setReviewAnswers] = useState([]);
   const [reviewWriting, setReviewWriting] = useState([]);
@@ -168,7 +158,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
 
   useEffect(() => {
     refreshUserStats();
-  }, [profile, lesson, learningCatalog]);
+  }, [profile?.id]);
 
   useEffect(() => {
     if (!supabase || !profile?.id) return undefined;
@@ -223,17 +213,9 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     setView('lesson-detail');
   };
 
-  const openVocabulary = (l, backView) => {
-    setLesson(l);
-    setVocabBackView(backView);
-    setView('vocab-list');
-  };
-
-  const focusMode = FOCUS_VIEWS.includes(view);
-
-  useEffect(() => {
-    setSidebarCollapsed(focusMode);
-  }, [focusMode, view]);
+  // Thi thử dùng giao diện tập trung: menu tự thu và bung tạm khi hover.
+  // Các trang học khác luôn giữ menu ở kích thước đầy đủ.
+  const sidebarCollapsed = active === 'thithu';
 
   const refreshShop = async () => {
     try {
@@ -291,12 +273,6 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     setView('tuvung-bai');
   };
 
-  const openGrammarBook = async (book) => {
-    const catalog = prepareLearningCatalog(await loadLearningCatalog(book.id));
-    if (catalog) setLearningCatalog(catalog);
-    setView('nguphap-book');
-  };
-
   const switchLessonTextbook = async (textbookId) => {
     if (!textbookId || textbookId === learningCatalog?.activeTextbook?.id) return;
     const catalog = prepareLearningCatalog(await loadLearningCatalog(textbookId));
@@ -331,9 +307,12 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
       return { ...current, hasStarted: true, lessons: updatedLessons, continueLesson: updatedContinueLesson };
     });
     try {
+      // State above already updates the current lesson immediately. Reloading
+      // the complete catalog after every flashcard caused dozens of duplicate
+      // Supabase requests and could race with the vocabulary write. Persist the
+      // compact lesson aggregate only; normal navigation/dashboard hydration
+      // will fetch the catalog again when it is actually needed.
       await syncLessonProgress(lesson.textbookId, lesson.id, lessonProgress, lastActivity);
-      const catalog = prepareLearningCatalog(await loadLearningCatalog(lesson.textbookId));
-      if (catalog) setLearningCatalog(catalog);
     } catch (error) { }
   };
 
@@ -401,20 +380,28 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     (async () => {
       let catalog = await loadLearningCatalog();
       if (!catalog || !alive) return;
-      for (const item of catalog.lessons || []) {
+      setLearningCatalog(prepareLearningCatalog(catalog));
+
+      // Đồng bộ dữ liệu local cũ ở nền; không chặn lần hiển thị Dashboard đầu tiên.
+      const legacySyncKey = `kstudy:activity-completion-synced:${profile.id}`;
+      if (localStorage.getItem(legacySyncKey) === 'true') return;
+      const completionStates = await Promise.all((catalog.lessons || []).map(async (item) => {
         try {
           const saved = await window.storage.get(activityCompletionKey(item, profile.id));
-          const completed = saved?.value ? JSON.parse(saved.value) : {};
-          for (const activity of ACTIVITIES) {
-            if (completed[activity.id]) await markRemoteActivityCompleted(item.textbookId, item.id, activity.id);
-          }
-        } catch (error) { }
-      }
-      catalog = await loadLearningCatalog(catalog.activeTextbook?.id) || catalog;
-      if (alive) setLearningCatalog(prepareLearningCatalog(catalog));
+          return { item, completed: saved?.value ? JSON.parse(saved.value) : {} };
+        } catch (error) {
+          return { item, completed: {} };
+        }
+      }));
+      await Promise.all(completionStates.flatMap(({ item, completed }) =>
+        ACTIVITIES
+          .filter((activity) => completed[activity.id])
+          .map((activity) => markRemoteActivityCompleted(item.textbookId, item.id, activity.id))
+      ));
+      localStorage.setItem(legacySyncKey, 'true');
     })();
     return () => { alive = false; };
-  }, [profile]);
+  }, [profile?.id]);
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -422,15 +409,41 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   }, [profile?.id]);
 
   useEffect(() => {
-    if (!profile || !ACTIVE_STUDY_VIEWS.has(view)) return;
-    const id = setInterval(async () => {
-      if (document.visibilityState !== 'visible') return;
-      const g = await getDailyGoal(profile.id);
-      g.todayMinutes = (g.todayMinutes || 0) + 0.5;
-      await saveDailyGoal(g, profile.id);
-    }, 30000);
-    return () => clearInterval(id);
-  }, [profile, view]);
+    if (!profile?.id || !ACTIVE_STUDY_VIEWS.has(view)) return undefined;
+    const userId = profile.id;
+    let activeStartedAt = document.visibilityState === 'visible' ? Date.now() : null;
+    let accumulatedMs = 0;
+    let saveChain = Promise.resolve();
+
+    const captureActiveTime = (continueTracking) => {
+      const now = Date.now();
+      if (activeStartedAt !== null) accumulatedMs += Math.max(0, now - activeStartedAt);
+      activeStartedAt = continueTracking ? now : null;
+    };
+
+    const flush = (continueTracking = document.visibilityState === 'visible') => {
+      captureActiveTime(continueTracking);
+      // Bỏ qua những lần chỉ lướt qua màn học vài giây để tránh request vụn.
+      if (accumulatedMs < 15_000) return;
+      const minutes = accumulatedMs / 60_000;
+      accumulatedMs = 0;
+      saveChain = saveChain.then(() => recordStudyMinutes(minutes, userId)).catch(() => undefined);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') activeStartedAt = Date.now();
+      else flush(false);
+    };
+
+    // Gộp thời gian học thành một lần ghi tối đa mỗi 5 phút.
+    const intervalId = window.setInterval(() => flush(true), 5 * 60_000);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      flush(false);
+    };
+  }, [profile?.id, view]);
 
   if (profile === undefined) {
     return <div className="app"><div className="auth-loading"><Sparkles size={22} color="#7C6FE4" /></div></div>;
@@ -519,7 +532,6 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
               gems={shop.balance}
               onOpenShop={refreshShop}
               collapsed={sidebarCollapsed}
-              onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
             />
           <main className="main">
             {ROOT_PAGE_META[view] && (
@@ -545,7 +557,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                       ? openLesson(continueLesson, 'home')
                       : (setCatalogNotice(null), setView('curriculum-hub'), setActive('giaotrinh'))}
                   />
-                  <WordOfDayWidget vocabulary={catalogVocabulary} onOpen={() => openVocabulary(primaryLesson, 'home')} />
+                  <WordOfDayWidget vocabulary={catalogVocabulary} onOpen={() => { setView('nguphap-hub'); setActive('nguphap'); }} />
                   <RecentActivityCard profile={profile} lesson={primaryLesson} vocabulary={catalogVocabulary} />
                   <DailyGoalRing userId={profile.id} onChangeGoal={() => { setActive('caidat'); setView('caidat'); }} />
                   <QuickAccessMenu onDictation={goDictation} onShadowing={goShadowing} onReview={goReview} />
@@ -584,8 +596,10 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             {view === 'nguphap-hub' && (
               <GrammarHubView
                 books={learningCatalog?.myTextbooks || []}
+                vocabulary={catalogVocabulary}
+                grammar={catalogGrammar}
+                userId={profile.id}
                 onBack={goHome}
-                onOpenBook={openGrammarBook}
                 onAddBook={() => { setCatalogNotice(null); setView('curriculum-hub'); setActive('giaotrinh'); }}
               />
             )}
@@ -705,6 +719,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 mode={reviewMode}
                 seed={reviewSeed}
                 isRecheck={reviewIsRecheck}
+                onProgress={handlePartialActivityProgress}
                 onBack={() => setView('review-intro')}
                 onChangeSet={() => setReviewSeed(null)}
                 onFinish={(answers, writing, elapsedMs, reflex) => {
@@ -775,7 +790,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 onProgressChange={handleLessonProgressChange}
                 onBack={() => setView(lessonDetailBackView)}
                 onStartActivity={(actId) => {
-                  if (actId === 'tuvung') { setVocabBackView('lesson-detail'); setView('vocab-list'); }
+                  if (actId === 'tuvung') { setVocabBackView('lesson-detail'); setReviewAllFlashcards(false); setView('flashcards'); }
                   if (actId === 'shadowing') { setActivityRunBackView('lesson-detail'); setView('shadowing'); }
                   if (actId === 'nghechep') { setDictationEntryBackView('lesson-detail'); setView('dictation-mode-select'); }
                   if (actId === 'ontap') {
@@ -787,18 +802,6 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                   }
                   if (actId === 'aiquiz') setView('aiquiz');
                 }}
-              />
-            )}
-            {view === 'vocab-list' && lesson && (
-              <VocabListView
-                lesson={lesson}
-                userId={profile.id}
-                vocabulary={lessonVocabulary}
-                grammar={lessonGrammar}
-                reviewingSession={reviewAllFlashcards}
-                onBack={() => { setReviewAllFlashcards(false); setView(vocabBackView); }}
-                onReviewStart={() => setReviewAllFlashcards(true)}
-                onStudy={(reviewing) => { setReviewAllFlashcards(Boolean(reviewing)); setView('flashcards'); }}
               />
             )}
             {view === 'vocab-notebook' && lesson && (
@@ -840,8 +843,9 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 vocabulary={lessonVocabulary}
                 grammar={lessonGrammar}
                 includeMastered={reviewAllFlashcards}
-                onBack={() => setView('vocab-list')}
+                onBack={() => setView(vocabBackView)}
                 onFinish={() => { setReviewAllFlashcards(false); handleActivityFinish('tuvung'); }}
+                onProgress={handlePartialActivityProgress}
               />
             )}
             {view === 'vocab-test-select' && lesson && (
@@ -897,6 +901,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             {view === 'dictation-mode-select' && lesson && (
               <DictationModeSelectView
                 lesson={lesson}
+                lines={databaseDictationLines.length ? databaseDictationLines : undefined}
                 onBack={() => setView(dictationEntryBackView)}
                 onSelect={(selectedMode) => { setDictationMode(selectedMode); setView('dictation'); }}
               />

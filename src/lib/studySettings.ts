@@ -51,6 +51,31 @@ export async function saveRemoteDailyGoal(goal: DailyGoalData) {
   return !settings.error && !stats.error
 }
 
+export async function recordRemoteStudyMinutes(minutes: number): Promise<DailyGoalData | null> {
+  if (!supabase || !Number.isFinite(minutes) || minutes <= 0) return null
+  const { data: authData, error: authError } = await supabase.auth.getSession()
+  if (authError || !authData.session?.access_token) {
+    window.dispatchEvent(new CustomEvent('kstudy:auth-expired'))
+    return null
+  }
+  const { data, error } = await supabase.rpc('record_study_minutes', { p_minutes: minutes })
+  if (error) {
+    const message = String(error.message || '').toLowerCase()
+    if (error.code === 'PGRST301' || message.includes('jwt') || message.includes('unauthorized')) {
+      window.dispatchEvent(new CustomEvent('kstudy:auth-expired'))
+    }
+    return null
+  }
+  if (!data) return null
+  const row = Array.isArray(data) ? data[0] : data
+  return {
+    targetMinutes: Number(row?.target_minutes ?? 15),
+    todayMinutes: Number(row?.today_minutes ?? 0),
+    todayDate: String(row?.study_date ?? new Date().toISOString().slice(0, 10)),
+    trackingVersion: 2,
+  }
+}
+
 export async function loadRemoteStudyPlan(): Promise<(StudyPlanData & { effectSoundEnabled: boolean }) | null> {
   if (!supabase) return null
   const userId = await currentUserId()

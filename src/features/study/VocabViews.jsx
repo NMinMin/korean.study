@@ -6,7 +6,7 @@ import {
   AlertTriangle, Bot, Flame, MessageCircle, MessageSquare, PencilLine, Settings, Target, Type
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { speakKo, playVocabularyAudio, playCorrectSound, playIncorrectSound, playCelebrationSound } from '../../services/audioService';
+import { speakKo, playVocabularyAudio, playIncorrectSound, playCelebrationSound } from '../../services/audioService';
 import { renderKo } from '../../utils/textUtils';
 import { todayStr } from '../../utils/streakUtils';
 import { FcBunny, SwBunnyEmpty, MiniBear } from '../../components/common/Mascots';
@@ -20,17 +20,31 @@ import {
   readScopedProgress,
   saveScopedProgress
 } from '../../services/storageShim';
-import { markRemoteActivityCompleted } from '../../lib/activityProgress';
+import { markRemoteActivityCompleted, saveRemoteActivityProgress } from '../../lib/activityProgress';
 import { ACTIVITIES, loadActivityProgress as loadLessonActivityProgress, mergeVocabStates } from './activityHelpers';
 import { SkillCompletionView } from '../review/ReviewViews';
 import {
   loadRemoteVocabularyState,
   loadRemoteVocabularyStateForWords,
+  loadRemoteFlashcardSession,
   saveRemoteVocabularyState,
-  saveRemoteVocabularyStateForWords
+  saveRemoteVocabularyStateForWords,
+  saveRemoteFlashcardSession,
 } from '../../lib/vocabularyProgress';
 
 const cleanKo = (text) => String(text || '').replace(/\*\*/g, '').replaceAll('[', '').replaceAll(']', '');
+
+const vocabularyStateDelta = (local = {}, remote = {}, merged = {}) => Object.fromEntries(
+  Object.keys(local)
+    .filter((word) => {
+      const localItem = local[word] || {};
+      const remoteItem = remote[word] || {};
+      return (localItem.timesReviewed || 0) > (remoteItem.timesReviewed || 0)
+        || (Object.prototype.hasOwnProperty.call(localItem, 'starred') && localItem.starred !== remoteItem.starred)
+        || (Object.prototype.hasOwnProperty.call(localItem, 'note') && localItem.note !== remoteItem.note);
+    })
+    .map((word) => [word, merged[word]])
+);
 
 export function LessonDetailView({ lesson, userId, textbookTitle, onBack, onStartActivity, onProgressChange }) {
   const [pcts, setPcts] = useState({ tuvung: 0, shadowing: 0, nghechep: 0, ontap: 0 });
@@ -40,11 +54,12 @@ export function LessonDetailView({ lesson, userId, textbookTitle, onBack, onStar
     loadLessonActivityProgress(lesson, userId).then((p) => {
       if (!alive) return;
       setPcts(p);
-      const overall = Math.round(Object.values(p).reduce((sum, value) => sum + value, 0) / Object.keys(p).length);
-      onProgressChange?.(overall, p);
     });
     return () => { alive = false; };
-  }, [lesson, userId]);
+    // Hydration is read-only. Calling onProgressChange here updated the parent
+    // catalog, created a new lesson object, and mounted this effect again in a
+    // request loop. Progress aggregation is performed when a skill is changed.
+  }, [lesson?.id, lesson?.textbookId, userId]);
 
   return (
     <section className="card page">
@@ -171,7 +186,10 @@ function CardIllustration({ src, word }) {
   );
 }
 
-const BOX_INTERVAL_DAYS = { 1: 1, 2: 3, 3: 7, 4: 7, 5: 7 };
+// Chu kỳ 1–3–7 là các ngày tính từ lần học đầu tiên. Vì vậy khoảng
+// cách thực tế giữa các lượt là +1, rồi +2 (đến ngày 3), rồi +4
+// (đến ngày 7). Sau khi qua đủ chu kỳ, duy trì ôn mỗi 7 ngày.
+const BOX_INTERVAL_DAYS = { 1: 1, 2: 2, 3: 4, 4: 7 };
 
 const RATINGS = [
   { id: "vague", label: "Ôn lại sau", Icon: RotateCcw, color: "#8B85AB" },
@@ -180,10 +198,13 @@ const RATINGS = [
 ];
 
 const nextBox = (curBox, rating) => {
-  const box = curBox || 1;
+  // Box biểu diễn mốc ôn vừa đạt: 1 ngày -> 3 ngày -> 7 ngày.
+  // Từ mới bắt đầu ở box 0 để lần "Đã nhớ" đầu tiên lên box 1,
+  // tránh bỏ qua mốc ôn sau 1 ngày và nhảy thẳng tới 3 ngày.
+  const box = Number(curBox) || 0;
   if (rating === "forgot") return 1;
-  if (rating === "good") return Math.min(5, box + 1);
-  return box;
+  if (rating === "good") return Math.min(4, box + 1);
+  return Math.max(1, box);
 };
 
 const addDays = (n) => {
@@ -478,7 +499,8 @@ export function VocabListView({ lesson, userId, onBack, onStudy, onReviewStart, 
       if (alive) setProgress(merged);
       if (remote) {
         await saveScopedProgress(storageKey, JSON.stringify(merged));
-        if (Object.keys(local).length) void saveRemoteVocabularyState(lesson, userId, merged);
+        const delta = vocabularyStateDelta(local, remote, merged);
+        if (Object.keys(delta).length) void saveRemoteVocabularyState(lesson, userId, delta);
       }
       if (alive) setLoaded(true);
     })();
@@ -574,7 +596,8 @@ export function VocabNotebookView({ lesson, userId, onBack, onReview, vocabulary
     setProgress(merged);
     if (remote) {
       await saveScopedProgress(storageKey, JSON.stringify(merged));
-      if (Object.keys(local).length) void saveRemoteVocabularyState(lesson, userId, merged);
+      const delta = vocabularyStateDelta(local, remote, merged);
+      if (Object.keys(delta).length) void saveRemoteVocabularyState(lesson, userId, delta);
     }
     setLoaded(true);
   };
@@ -657,7 +680,7 @@ export function WordOfDayWidget({ onOpen, vocabulary = VOCAB_SAMPLE }) {
 }
 
 
-export function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, deckWords, deckTitle, vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, includeMastered = false }) {
+export function FlashcardView({ lesson, userId, onBack, onFinish, onProgress, initialTab, deckWords, deckTitle, vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, includeMastered = false }) {
   const [contentTab, setContentTab] = useState(initialTab || "vocab"); // "vocab" | "grammar"
   const [grammarIdx, setGrammarIdx] = useState(0);
   const [grammarFlipped, setGrammarFlipped] = useState(false);
@@ -676,15 +699,24 @@ export function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, de
   const [noteDraft, setNoteDraft] = useState("");
   const [dragX, setDragX] = useState(0);
   const dragRef = useRef({ active: false, startX: 0 });
+  const loadedDeckRef = useRef("");
   const total = deck.length;
   const card = deck[queue[0]];
   const storageKey = vocabProgressKey(lesson, userId);
+  // Phiên đang học cũng phải theo tài khoản và đồng bộ thiết bị. Tiền tố
+  // `progress:` khiến storage shim lưu vào user_progress_states (Supabase),
+  // thay vì localStorage của trình duyệt.
+  const sessionKey = `progress:flashcard-session:${lesson?.textbookId || "textbook"}:${lesson?.id || lesson?.no || "lesson"}:${userId || "anonymous"}`;
+  const hasRemoteVocabulary = Boolean(userId && lesson?.id && lesson?.textbookId);
   const cardProgress = card ? progress[card.word] : null;
   const gram = grammar[grammarIdx];
 
   useEffect(() => { setGrammarFlipped(false); }, [grammarIdx]);
 
   useEffect(() => {
+    const deckLoadKey = `${storageKey}:${includeMastered ? "all" : "remaining"}:${isIdentifiedDeck ? "identified" : "lesson"}`;
+    if (loadedDeckRef.current === deckLoadKey) return undefined;
+    loadedDeckRef.current = deckLoadKey;
     let alive = true;
     (async () => {
       try {
@@ -693,22 +725,36 @@ export function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, de
         const remoteSaved = isIdentifiedDeck
           ? await loadRemoteVocabularyStateForWords(deckWords, userId)
           : await loadRemoteVocabularyState(lesson, userId);
-        const saved = remoteSaved ? mergeVocabStates(localSaved, remoteSaved) : localSaved;
-        if (remoteSaved) {
-          await saveScopedProgress(storageKey, JSON.stringify(saved));
-          if (Object.keys(localSaved).length) void (isIdentifiedDeck
-            ? saveRemoteVocabularyStateForWords(deckWords, userId, saved)
-            : saveRemoteVocabularyState(lesson, userId, saved));
-        }
-        if (alive && Object.keys(saved).length) {
-          const remaining = deck
+        // A real lesson has one canonical source: vocabulary_progress. Keeping
+        // another full copy in user_progress_states allowed slower, older
+        // upserts to overwrite newer card ratings when the learner navigated
+        // quickly. Local scoped data is retained only for sample/fallback decks.
+        const saved = remoteSaved !== null ? remoteSaved : localSaved;
+        if (alive) {
+          let sessionState = {};
+          try {
+            sessionState = await loadRemoteFlashcardSession(sessionKey, userId) || {};
+          } catch (e) { }
+
+          let remaining = deck
             .map((item, index) => ({ item, index }))
             .filter(({ item }) => includeMastered || saved[item.word]?.lastRating !== "good")
             .map(({ index }) => index);
 
+          if (!includeMastered && Array.isArray(sessionState.words) && sessionState.words.length) {
+            const remainingByWord = new Map(remaining.map((index) => [deck[index].word, index]));
+            const restored = sessionState.words.map((word) => remainingByWord.get(word)).filter((index) => index !== undefined);
+            const restoredSet = new Set(restored);
+            remaining = [...restored, ...remaining.filter((index) => !restoredSet.has(index))];
+          }
+
           setProgress(saved);
           setQueue(remaining);
-          setMasteredCount(deck.length - remaining.length);
+          setMasteredCount(deck.filter((item) => saved[item.word]?.lastRating === "good").length);
+          if (sessionState.contentTab === "grammar" && grammar.length) setContentTab("grammar");
+          if (Number.isInteger(sessionState.grammarIdx) && grammar.length) {
+            setGrammarIdx(Math.min(Math.max(sessionState.grammarIdx, 0), grammar.length - 1));
+          }
         }
       } catch (e) {
         /* chưa có dữ liệu lưu trước đó — dùng mặc định rỗng */
@@ -717,7 +763,16 @@ export function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, de
       }
     })();
     return () => { alive = false; };
-  }, [storageKey, userId, includeMastered, isIdentifiedDeck]);
+  }, [storageKey, sessionKey, userId, includeMastered, isIdentifiedDeck, hasRemoteVocabulary]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    void saveRemoteFlashcardSession(sessionKey, userId, {
+      words: queue.map((index) => deck[index]?.word).filter(Boolean),
+      contentTab,
+      grammarIdx,
+    });
+  }, [loaded, contentTab, grammarIdx, sessionKey, userId]);
 
   // Mỗi khi chuyển thẻ (kể cả khi cùng 1 từ bị đẩy lại ngay do "Chưa thuộc"
   // và hàng đợi chỉ còn 1 từ): quay về mặt trước + nạp ghi chú đã lưu.
@@ -731,9 +786,14 @@ export function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, de
   const persist = async (updated) => {
     setProgress(updated);
     try {
-      await saveScopedProgress(storageKey, JSON.stringify(updated));
-      if (isIdentifiedDeck) await saveRemoteVocabularyStateForWords(deckWords, userId, updated);
-      else await saveRemoteVocabularyState(lesson, userId, updated);
+      const changed = card ? { [card.word]: updated[card.word] } : updated;
+      if (isIdentifiedDeck) {
+        await saveRemoteVocabularyStateForWords(deckWords, userId, changed);
+      } else if (hasRemoteVocabulary) {
+        await saveRemoteVocabularyState(lesson, userId, changed);
+      } else {
+        await saveScopedProgress(storageKey, JSON.stringify(updated));
+      }
     } catch (e) {
       /* lưu thất bại — tiến trình vẫn hiển thị tạm trong phiên này */
     }
@@ -753,18 +813,33 @@ export function FlashcardView({ lesson, userId, onBack, onFinish, initialTab, de
         timesReviewed: (cur?.timesReviewed || 0) + 1,
       },
     };
-    if (ratingId === "good") playCorrectSound();
-    else playIncorrectSound();
+    if (ratingId !== "good") playIncorrectSound();
     if (isRecheck) setProgress(updated);
     else persist(updated);
     const wordIdx = queue[0];
+    const nextQueue = ratingId === "good" ? queue.slice(1) : [...queue.slice(1), wordIdx];
     if (ratingId === "good") {
-      setMasteredCount((c) => c + 1);
-      setQueue((q) => q.slice(1));
+      if (!isRecheck && !deckTitle) {
+        const completedItems = Object.fromEntries(
+          deck
+            .filter((item) => updated[item.word]?.lastRating === "good")
+            .map((item) => [item.id || item.word, "correct"]),
+        );
+        saveRemoteActivityProgress(lesson?.textbookId, lesson?.id, "tuvung", completedItems, total)
+          .then((percent) => onProgress?.("tuvung", percent))
+          .catch(() => { });
+      }
+      if (isRecheck) setMasteredCount((c) => c + 1);
+      else setMasteredCount(deck.filter((item) => updated[item.word]?.lastRating === "good").length);
     } else {
       // "Chưa thuộc" — đẩy xuống cuối hàng đợi để lặp lại trong cùng phiên
-      setQueue((q) => [...q.slice(1), wordIdx]);
     }
+    setQueue(nextQueue);
+    void saveRemoteFlashcardSession(sessionKey, userId, {
+      words: nextQueue.map((index) => deck[index].word),
+      contentTab,
+      grammarIdx,
+    });
     setTurn((t) => t + 1);
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 1400);

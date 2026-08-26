@@ -32,11 +32,13 @@ export function feedbackFor(score, hasSpeech) {
 export const toneForScore = (score) => (score >= 80 ? 'good' : score >= 60 ? 'mid' : 'bad');
 
 export async function gradeSpeechWithAI(requestAIJson, target, said, realPron, timing = {}) {
+  const cleanText = (value) => normalizeSpeech(value).join(' ');
   const prompt = `Chấm phát âm tiếng Hàn dựa trên transcript.
-Câu mẫu: "${target}"
-Cách đọc tham khảo: "${realPron || ''}"
-Transcript: "${said}"
+Câu mẫu đã bỏ dấu câu: "${cleanText(target)}"
+Cách đọc tham khảo đã bỏ dấu câu: "${cleanText(realPron)}"
+Transcript đã bỏ dấu câu: "${cleanText(said)}"
 Thời gian: ${timing.elapsed || 0}/${timing.limit || 0} giây.
+Chấm theo hướng khích lệ người mới học và ưu tiên đúng nội dung, từ khóa chính. Phải bỏ qua hoàn toàn dấu câu, cách viết liền/tách từ, khác biệt khoảng trắng và sai khác nhỏ có khả năng do nhận diện giọng nói. Nếu đủ ý và phần lớn từ đúng thì cho 80-100; chỉ trừ mạnh khi thiếu cụm quan trọng, đổi nghĩa hoặc nói khác câu mẫu rõ rệt. Thời gian chỉ là tiêu chí phụ, không làm giảm quá 5 điểm nếu vẫn trong giới hạn.
 Trả về JSON: {"score":0-100,"words":[{"word":"...","status":"ok|missing|wrong"}],"strength":"...","tip":"..."}`;
   const { value: parsed, model } = await requestAIJson(prompt);
   if (typeof parsed?.score !== 'number' || !Array.isArray(parsed?.words)) throw new Error('malformed AI response');

@@ -16,6 +16,28 @@ import {
 import { computeLeaderboard } from '../leaderboard/leaderboardApi';
 import { loadVocabularyReviewSchedule } from '../../lib/reviewSchedule';
 
+function PurpleMugunghwaIcon({ className = '' }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <g fill="#eeeaff" stroke="currentColor" strokeWidth="1.65" strokeLinejoin="round">
+        <ellipse cx="16" cy="8.3" rx="4.6" ry="7.1" />
+        <ellipse cx="16" cy="8.3" rx="4.6" ry="7.1" transform="rotate(72 16 16)" />
+        <ellipse cx="16" cy="8.3" rx="4.6" ry="7.1" transform="rotate(144 16 16)" />
+        <ellipse cx="16" cy="8.3" rx="4.6" ry="7.1" transform="rotate(216 16 16)" />
+        <ellipse cx="16" cy="8.3" rx="4.6" ry="7.1" transform="rotate(288 16 16)" />
+      </g>
+      <circle cx="16" cy="16" r="4.1" fill="#7c6fe4" stroke="#6757ca" strokeWidth="1.2" />
+      <circle cx="16" cy="16" r="2.15" fill="#f4f1ff" />
+      <path d="M16 15.7c2.2-1.6 4.3-2.1 6.4-1.7" stroke="#6757ca" strokeWidth="1.7" strokeLinecap="round" />
+      <g fill="#6757ca">
+        <circle cx="20.7" cy="13.9" r=".85" />
+        <circle cx="22.5" cy="14" r=".72" />
+        <circle cx="19.7" cy="14.8" r=".65" />
+      </g>
+    </svg>
+  );
+}
+
 export function ConfettiBurst() {
   const pieces = useMemo(() => Array.from({ length: 18 }, (_, i) => ({
     id: i, left: Math.random() * 100, delay: Math.random() * 0.25,
@@ -43,11 +65,14 @@ export function DailyGoalRing({ userId, onChangeGoal }) {
   useEffect(() => {
     const syncImmediately = (event) => event.detail ? setGoal(event.detail) : refresh();
     refresh();
-    const id = setInterval(refresh, 5000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
     window.addEventListener('kstudy:daily-goal-updated', syncImmediately);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
     return () => {
-      clearInterval(id);
       window.removeEventListener('kstudy:daily-goal-updated', syncImmediately);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
   }, [userId]);
 
@@ -319,7 +344,7 @@ export function ReviewSchedule({ userId, onReview }) {
 
   useEffect(() => {
     let alive = true;
-    (async () => {
+    const refresh = async () => {
       const result = await loadVocabularyReviewSchedule(userId, 14);
       const days = result.map((item, index) => {
         const [year, month, day] = item.dateKey.split('-').map(Number);
@@ -331,8 +356,14 @@ export function ReviewSchedule({ userId, onReview }) {
         };
       });
       if (alive) setSchedule(days);
-    })();
-    return () => { alive = false; };
+    };
+    void refresh();
+    const handleReviewUpdated = () => { void refresh(); };
+    window.addEventListener('kstudy:vocabulary-review-updated', handleReviewUpdated);
+    return () => {
+      alive = false;
+      window.removeEventListener('kstudy:vocabulary-review-updated', handleReviewUpdated);
+    };
   }, [userId]);
 
   const picked = schedule[selected];
@@ -340,11 +371,12 @@ export function ReviewSchedule({ userId, onReview }) {
     <section className="card review">
       <div className="card-title-row">
         <div className="card-title"><CalendarDays size={19} color="#7C6FE4" /> Lịch ôn từ vựng</div>
-        <span className="review-cycle">Chu kỳ 1–3–7 ngày</span>
+        <span className="review-cycle" title="Phương pháp lặp lại ngắt quãng">Lặp lại ngắt quãng · 1–3–7 ngày</span>
       </div>
       <div className="days">
         {schedule.map((d, index) => (
-          <div key={d.date.toISOString()} className={`day ${index === 0 ? 'today' : ''} ${selected === index ? 'selected' : ''} ${d.words.length ? 'has-review' : 'rest-day'}`} role="button" tabIndex={0} onClick={() => setSelected(index)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(index); } }}>
+          <div key={d.date.toISOString()} className={`day ${index === 0 ? 'today' : ''} ${d.date.getDay() === 6 ? 'saturday' : ''} ${d.date.getDay() === 0 ? 'sunday' : ''} ${selected === index ? 'selected' : ''} ${d.words.length ? 'has-review' : 'rest-day'}`} role="button" tabIndex={0} onClick={() => setSelected(index)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(index); } }}>
+            {d.words.length > 0 && <PurpleMugunghwaIcon className="day-review-flower" />}
             <span className="day-name">{d.label}</span>
             <span className="day-date">{d.date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</span>
             <span className="day-words">{d.words.length ? `${d.words.length} từ` : 'Nghỉ ngơi'}</span>
@@ -368,7 +400,7 @@ export function ReviewSchedule({ userId, onReview }) {
       <div className="tip">
         <Lightbulb size={17} color="#E8A93D" fill="#F7D98B" />
         <b>Mẹo học tập</b>
-        <span>Ôn từ vựng theo chu kỳ (1 ngày – 3 ngày – 7 ngày) giúp bạn ghi nhớ lâu hơn!</span>
+        <span>Ôn theo phương pháp lặp lại ngắt quãng vào ngày thứ 1, thứ 3 và thứ 7 tính từ lần học đầu tiên.</span>
         <ChevronRight size={16} color="#9A8FE0" />
       </div>
     </section>

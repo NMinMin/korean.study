@@ -42,6 +42,12 @@ function setSessionPreference(persistent: boolean) {
   }
   // Không để lại bất kỳ lựa chọn lưu phiên nào sau khi đóng trình duyệt.
   localStorage.removeItem('kstudy:session-preference')
+  // Dọn token từng được lưu lâu bởi phiên cũ trước khi tạo phiên chỉ dùng
+  // trong tab hiện tại. Token mới sẽ được authStorage ghi vào sessionStorage.
+  for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+    const key = localStorage.key(index)
+    if (key && (/^sb-.*-auth-token$/.test(key) || key === 'supabase.auth.token')) localStorage.removeItem(key)
+  }
   sessionStorage.setItem('kstudy:session-preference', 'session-only')
 }
 
@@ -91,6 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const clearInvalidSession = useCallback(() => {
     clearAuthState()
+    clearSessionPreference()
     if (supabase) {
       window.setTimeout(() => {
         void supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
@@ -174,6 +181,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     document.addEventListener('visibilitychange', onVisibility)
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisibility) }
   }, [clearInvalidSession, session])
+
+  useEffect(() => {
+    const handleExpiredSession = () => clearInvalidSession()
+    window.addEventListener('kstudy:auth-expired', handleExpiredSession)
+    return () => window.removeEventListener('kstudy:auth-expired', handleExpiredSession)
+  }, [clearInvalidSession])
 
   const value = useMemo<AuthContextValue>(() => ({
     loading,

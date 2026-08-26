@@ -90,7 +90,7 @@ export type LearningExercise = {
   sortOrder: number
 }
 
-export async function loadLearningCatalog(preferredTextbookId?: string): Promise<LearningCatalog | null> {
+async function loadLearningCatalogUncached(preferredTextbookId?: string): Promise<LearningCatalog | null> {
   if (!supabase) return null
   const { data: authData } = await supabase.auth.getUser()
   const userId = authData.user?.id
@@ -283,6 +283,25 @@ export async function loadLearningCatalog(preferredTextbookId?: string): Promise
   return { textbooks, myTextbooks, availableTextbooks, lessons, activeTextbook, continueLesson, continueCompletedToday, hasStarted, vocabulary, grammar, exercises }
 }
 
+const CATALOG_CACHE_MS = 10_000
+const catalogRequests = new Map<string, { expiresAt: number; promise: Promise<LearningCatalog | null> }>()
+
+export function loadLearningCatalog(preferredTextbookId?: string): Promise<LearningCatalog | null> {
+  const key = preferredTextbookId || 'active'
+  const cached = catalogRequests.get(key)
+  if (cached && cached.expiresAt > Date.now()) return cached.promise
+  const promise = loadLearningCatalogUncached(preferredTextbookId).catch((error) => {
+    catalogRequests.delete(key)
+    throw error
+  })
+  catalogRequests.set(key, { expiresAt: Date.now() + CATALOG_CACHE_MS, promise })
+  return promise
+}
+
+function invalidateLearningCatalogCache(): void {
+  catalogRequests.clear()
+}
+
 export async function addUserTextbook(textbookId: string): Promise<void> {
   if (!supabase) throw new Error('Supabase chưa được cấu hình')
   const { data, error: authError } = await supabase.auth.getUser()
@@ -292,6 +311,7 @@ export async function addUserTextbook(textbookId: string): Promise<void> {
     { onConflict: 'user_id,textbook_id' },
   )
   if (error) throw error
+  invalidateLearningCatalogCache()
 }
 
 export async function markLessonStarted(textbookId: string, lessonId: string): Promise<void> {
@@ -306,7 +326,10 @@ export async function markLessonStarted(textbookId: string, lessonId: string): P
     .select('lesson_id')
     .maybeSingle()
   if (updateError) throw updateError
-  if (existing) return
+  if (existing) {
+    invalidateLearningCatalogCache()
+    return
+  }
   const { error: insertError } = await supabase.from('lesson_progress').insert({
     user_id: data.user.id,
     textbook_id: textbookId,
@@ -317,6 +340,7 @@ export async function markLessonStarted(textbookId: string, lessonId: string): P
     updated_at: marker.updated_at,
   })
   if (insertError) throw insertError
+  invalidateLearningCatalogCache()
 }
 
 export async function syncLessonProgress(
@@ -342,4 +366,5 @@ export async function syncLessonProgress(
     { onConflict: 'user_id,lesson_id' },
   )
   if (error) throw error
+  invalidateLearningCatalogCache()
 }

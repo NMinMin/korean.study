@@ -31,7 +31,7 @@ export async function requestAIJson(prompt) {
       signal: controller.signal,
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error?.message || `AI grader HTTP ${res.status}`);
+    if (!res.ok) throw new Error(data?.message || data?.error?.message || `AI grader HTTP ${res.status}`);
     return { value: parseAIJson(data.result), model: data.model || 'AI grader' };
   } finally {
     window.clearTimeout(timer);

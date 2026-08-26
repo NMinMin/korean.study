@@ -30,7 +30,13 @@ export const mapDatabaseLines = (exercises, skillType) =>
         no: index + 1,
         spk: fallback?.spk || (index % 2 === 0 ? 'A' : 'B'),
         ko,
-        vi: exercise.promptVi || fallback?.vi || exercise.explanationVi || '',
+        vi: exercise.promptVi
+          || exercise.answer?.translation
+          || exercise.answer?.translationVi
+          || exercise.answer?.meaning
+          || fallback?.vi
+          || exercise.explanationVi
+          || '',
         rhythmBreak: String(exercise.answer?.rhythmBreak || fallback?.rhythmBreak || ko),
         realPron: String(exercise.answer?.realPronunciation || fallback?.realPron || ''),
         tips: fallback?.tips || (exercise.explanationVi ? [exercise.explanationVi] : []),

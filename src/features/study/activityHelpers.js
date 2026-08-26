@@ -12,7 +12,6 @@ import {
   readScopedProgress,
 } from '../../services/storageShim';
 import { markRemoteActivityCompleted, loadRemoteActivityProgress } from '../../lib/activityProgress';
-import { loadRemoteVocabularyState } from '../../lib/vocabularyProgress';
 import { correctDictationResults } from '../dashboard/progressService';
 
 export const ACTIVITIES = [
@@ -77,13 +76,11 @@ export async function loadActivityProgress(lesson, userId) {
   } catch (e) { }
   try {
     const userKey = vocabProgressKey(lesson, userId);
-    const [v, remote] = await Promise.all([
-      readScopedProgress(userKey, legacyVocabProgressKey(lesson), userId),
-      userId ? loadRemoteVocabularyState(lesson, userId) : Promise.resolve(null),
-    ]);
+    const v = await readScopedProgress(userKey, legacyVocabProgressKey(lesson), userId);
     const localState = v?.value ? JSON.parse(v.value) : {};
-    const merged = remote ? mergeVocabStates(localState, remote) : localState;
-    if (Object.keys(merged).length) out.tuvung = Math.max(out.tuvung, Math.round((Object.keys(merged).length / VOCAB_SAMPLE.length) * 100));
+    const mastered = Object.values(localState).filter((item) => item?.lastRating === 'good').length;
+    const vocabularyTotal = Number(lesson?.words) || VOCAB_SAMPLE.length;
+    if (mastered) out.tuvung = Math.max(out.tuvung, Math.round((mastered / vocabularyTotal) * 100));
   } catch (e) { }
   try {
     const s = await readScopedProgress(shadowProgressKey(lesson, userId), legacyShadowProgressKey(lesson), userId);

@@ -51,19 +51,16 @@ export async function computeAndSyncUserStats(profile, lesson) {
   let storedLeaderboardXp = 0;
   let storedLeaderboardStreak = 0;
   let storedStreakState = 0;
-  let storedProfileXp = 0;
   let curriculumXp = 0;
   let curriculumStreak = 0;
   let hasCurriculumStats = false;
   if (supabase) {
     try {
-      const [{ data: profileRow }, { data: leaderboardRow }, { data: curriculumRows }, { data: streakRow }] = await Promise.all([
-        supabase.from('profiles').select('xp').eq('id', userId).maybeSingle(),
+      const [{ data: leaderboardRow }, { data: curriculumRows }, { data: streakRow }] = await Promise.all([
         supabase.from('leaderboard_stats').select('xp, streak').eq('user_id', userId).maybeSingle(),
         supabase.from('curriculum_leaderboard_stats').select('xp, streak').eq('user_id', userId),
         supabase.from('streak_states').select('current_streak').eq('user_id', userId).maybeSingle(),
       ]);
-      storedProfileXp = Number(profileRow?.xp || 0);
       storedLeaderboardXp = Number(leaderboardRow?.xp || 0);
       storedLeaderboardStreak = Number(leaderboardRow?.streak || 0);
       storedStreakState = Number(streakRow?.current_streak || 0);
@@ -72,7 +69,7 @@ export async function computeAndSyncUserStats(profile, lesson) {
       curriculumStreak = (curriculumRows || []).reduce((highest, row) => Math.max(highest, Number(row?.streak || 0)), 0);
     } catch (e) { }
   }
-  xp = hasCurriculumStats ? curriculumXp : Math.max(storedProfileXp, storedLeaderboardXp);
+  xp = hasCurriculumStats ? curriculumXp : storedLeaderboardXp;
   const streak = Math.max(storedStreakState, storedLeaderboardStreak, curriculumStreak);
   const stats = { userId, displayName: profile?.displayName || 'Người học', xp, streak, updatedAt: Date.now() };
   return stats;
@@ -89,7 +86,7 @@ export async function computeHomeProgress(lesson, userId, vocabulary = VOCAB_SAM
   try {
     const v = await readScopedProgress(vocabProgressKey(lesson, userId), legacyVocabProgressKey(lesson), userId);
     if (v?.value) {
-      const n = Object.keys(JSON.parse(v.value)).length;
+      const n = Object.values(JSON.parse(v.value)).filter((item) => item?.lastRating === 'good').length;
       out[0].pct = Math.round((n / vocabulary.length) * 100);
       out[0].detail = `${n} / ${vocabulary.length} từ`;
     }
