@@ -571,7 +571,6 @@ export function VocabListView({ lesson, userId, onBack, onStudy, onReviewStart, 
             <article className="vl-grammar-card" key={item.id || item.no}>
               <div><b lang="ko">{item.pattern}</b><span>{item.translation}</span></div>
               <p>{item.context}</p>
-              {item.examples?.[0] && <small><span lang="ko">{cleanKo(item.examples[0].ko)}</span> — {item.examples[0].vi}</small>}
             </article>
           ))}
         </div>
@@ -960,23 +959,6 @@ export function FlashcardView({ lesson, userId, onBack, onFinish, onProgress, in
                           </div>
                           <span className="gm-formula-plus">+</span>
                           <span className="gm-formula-form" style={{ color: gram.color }} lang="ko">{f.form}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="fc2-section">
-                    <div className="fc2-sec-title">💡 VÍ DỤ</div>
-                    <div className="gm-examples">
-                      {gram.examples.map((ex, i) => (
-                        <div key={i} className="gm-example-row">
-                          <div className="gm-example-text">
-                            <p className="gm-example-ko" lang="ko">{renderKo(ex.ko)}</p>
-                            <p className="gm-example-vi">{ex.vi}</p>
-                          </div>
-                          <button className="gm-example-audio" onClick={() => speakKo(ex.ko)} aria-label="Nghe câu">
-                            <Volume2 size={11} color="#fff" />
-                          </button>
                         </div>
                       ))}
                     </div>
