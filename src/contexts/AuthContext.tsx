@@ -29,6 +29,15 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 const SESSION_EXPIRES_KEY = 'kstudy:session-expires-at'
 const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000
 
+function clearSupabaseAuthStorage() {
+  for (const storage of [localStorage, sessionStorage]) {
+    for (let index = storage.length - 1; index >= 0; index -= 1) {
+      const key = storage.key(index)
+      if (key && (/^sb-.*-auth-token$/.test(key) || key === 'supabase.auth.token')) storage.removeItem(key)
+    }
+  }
+}
+
 function sessionStore() {
   return localStorage.getItem('kstudy:session-preference') === 'persistent' ? localStorage : sessionStorage
 }
@@ -44,16 +53,14 @@ function setSessionPreference(persistent: boolean) {
   localStorage.removeItem('kstudy:session-preference')
   // Dọn token từng được lưu lâu bởi phiên cũ trước khi tạo phiên chỉ dùng
   // trong tab hiện tại. Token mới sẽ được authStorage ghi vào sessionStorage.
-  for (let index = localStorage.length - 1; index >= 0; index -= 1) {
-    const key = localStorage.key(index)
-    if (key && (/^sb-.*-auth-token$/.test(key) || key === 'supabase.auth.token')) localStorage.removeItem(key)
-  }
+  clearSupabaseAuthStorage()
   sessionStorage.setItem('kstudy:session-preference', 'session-only')
 }
 
 function clearSessionPreference() {
   localStorage.removeItem('kstudy:session-preference')
   sessionStorage.removeItem('kstudy:session-preference')
+  clearSupabaseAuthStorage()
   clearSessionExpiry()
 }
 
@@ -80,6 +87,18 @@ function profileFromUser(user: User): AppProfile {
     avatarUrl: typeof user.user_metadata?.avatar_url === 'string' ? user.user_metadata.avatar_url : null,
     role: 'user',
   }
+}
+
+function isAuthRestError(error: unknown) {
+  if (!error || typeof error !== 'object') return false
+  const value = error as { code?: string; message?: string; status?: number }
+  const message = String(value.message || '').toLowerCase()
+  return value.status === 401
+    || value.status === 403
+    || value.code === 'PGRST301'
+    || message.includes('jwt')
+    || message.includes('unauthorized')
+    || message.includes('permission denied')
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -133,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       supabase.from('user_roles').select('role').eq('user_id', verifiedUser.id).maybeSingle(),
     ])
     if (requestVersion !== authLoadVersion.current) return
-    if (profileError?.code === 'PGRST301' || roleError?.code === 'PGRST301' || profileError?.message?.includes('JWT') || roleError?.message?.includes('JWT')) {
+    if (isAuthRestError(profileError) || isAuthRestError(roleError)) {
       clearInvalidSession()
       return
     }
@@ -198,6 +217,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSessionPreference(remember)
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) {
+        clearAuthState()
         clearSessionPreference()
         throw error
       }

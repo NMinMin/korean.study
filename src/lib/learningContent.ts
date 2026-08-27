@@ -43,6 +43,18 @@ export type LearningCatalog = {
 
 const REQUIRED_LESSON_ACTIVITIES = ['tuvung', 'nghechep', 'shadowing', 'ontap'] as const
 
+async function currentAuthUserId(): Promise<string | null> {
+  if (!supabase) return null
+  const { data: sessionData } = await supabase.auth.getSession()
+  if (!sessionData.session?.user) return null
+  const { data, error } = await supabase.auth.getUser()
+  if (error || !data.user) {
+    window.dispatchEvent(new CustomEvent('kstudy:auth-expired'))
+    return null
+  }
+  return data.user.id
+}
+
 function localDateKey(value: string | Date = new Date()): string {
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) return ''
@@ -92,8 +104,7 @@ export type LearningExercise = {
 
 async function loadLearningCatalogUncached(preferredTextbookId?: string): Promise<LearningCatalog | null> {
   if (!supabase) return null
-  const { data: authData } = await supabase.auth.getUser()
-  const userId = authData.user?.id
+  const userId = await currentAuthUserId()
   const [textbookResult, lessonResult, membershipResult, progressResult, activityResult] = await Promise.all([
     supabase.from('textbooks').select('id, slug, title_ko, title_vi, description, status, sort_order').order('sort_order'),
     supabase.from('lessons').select('id, textbook_id, lesson_number, title_ko, title_vi, status').order('lesson_number'),
@@ -304,10 +315,10 @@ function invalidateLearningCatalogCache(): void {
 
 export async function addUserTextbook(textbookId: string): Promise<void> {
   if (!supabase) throw new Error('Supabase chưa được cấu hình')
-  const { data, error: authError } = await supabase.auth.getUser()
-  if (authError || !data.user) throw new Error('Bạn cần đăng nhập để thêm giáo trình')
+  const userId = await currentAuthUserId()
+  if (!userId) throw new Error('Bạn cần đăng nhập để thêm giáo trình')
   const { error } = await supabase.from('user_textbooks').upsert(
-    { user_id: data.user.id, textbook_id: textbookId, status: 'studying' },
+    { user_id: userId, textbook_id: textbookId, status: 'studying' },
     { onConflict: 'user_id,textbook_id' },
   )
   if (error) throw error
@@ -316,12 +327,12 @@ export async function addUserTextbook(textbookId: string): Promise<void> {
 
 export async function markLessonStarted(textbookId: string, lessonId: string): Promise<void> {
   if (!supabase) return
-  const { data } = await supabase.auth.getUser()
-  if (!data.user) return
+  const userId = await currentAuthUserId()
+  if (!userId) return
   const marker = { textbook_id: textbookId, last_activity: 'lesson', updated_at: new Date().toISOString() }
   const { data: existing, error: updateError } = await supabase.from('lesson_progress')
     .update(marker)
-    .eq('user_id', data.user.id)
+    .eq('user_id', userId)
     .eq('lesson_id', lessonId)
     .select('lesson_id')
     .maybeSingle()
@@ -331,7 +342,7 @@ export async function markLessonStarted(textbookId: string, lessonId: string): P
     return
   }
   const { error: insertError } = await supabase.from('lesson_progress').insert({
-    user_id: data.user.id,
+    user_id: userId,
     textbook_id: textbookId,
     lesson_id: lessonId,
     progress_percent: 0,
@@ -350,12 +361,12 @@ export async function syncLessonProgress(
   lastActivity = 'lesson',
 ): Promise<void> {
   if (!supabase) return
-  const { data } = await supabase.auth.getUser()
-  if (!data.user) return
+  const userId = await currentAuthUserId()
+  if (!userId) return
   const normalized = Math.max(0, Math.min(100, Math.round(progressPercent)))
   const { error } = await supabase.from('lesson_progress').upsert(
     {
-      user_id: data.user.id,
+      user_id: userId,
       textbook_id: textbookId,
       lesson_id: lessonId,
       progress_percent: normalized,

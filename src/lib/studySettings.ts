@@ -19,8 +19,14 @@ const dayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 
 async function currentUserId() {
   if (!supabase) return null
-  const { data } = await supabase.auth.getSession()
-  return data.session?.user?.id ?? null
+  const { data: sessionData } = await supabase.auth.getSession()
+  if (!sessionData.session?.user) return null
+  const { data, error } = await supabase.auth.getUser()
+  if (error || !data.user) {
+    window.dispatchEvent(new CustomEvent('kstudy:auth-expired'))
+    return null
+  }
+  return data.user.id
 }
 
 export async function loadRemoteDailyGoal(date: string): Promise<DailyGoalData | null> {
@@ -53,15 +59,17 @@ export async function saveRemoteDailyGoal(goal: DailyGoalData) {
 
 export async function recordRemoteStudyMinutes(minutes: number): Promise<DailyGoalData | null> {
   if (!supabase || !Number.isFinite(minutes) || minutes <= 0) return null
-  const { data: authData, error: authError } = await supabase.auth.getSession()
-  if (authError || !authData.session?.access_token) {
+  const { data: sessionData } = await supabase.auth.getSession()
+  if (!sessionData.session?.user) return null
+  const { data: authData, error: authError } = await supabase.auth.getUser()
+  if (authError || !authData.user) {
     window.dispatchEvent(new CustomEvent('kstudy:auth-expired'))
     return null
   }
   const { data, error } = await supabase.rpc('record_study_minutes', { p_minutes: minutes })
   if (error) {
     const message = String(error.message || '').toLowerCase()
-    if (error.code === 'PGRST301' || message.includes('jwt') || message.includes('unauthorized')) {
+    if (error.code === 'PGRST301' || error.code === '42501' || message.includes('jwt') || message.includes('unauthorized') || message.includes('authentication required')) {
       window.dispatchEvent(new CustomEvent('kstudy:auth-expired'))
     }
     return null

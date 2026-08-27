@@ -44,24 +44,36 @@ async function writeActivityProgress(payload: ActivityProgressPayload): Promise<
   }
 }
 
+async function currentAuthUserId() {
+  if (!supabase) return null
+  const { data: sessionData } = await supabase.auth.getSession()
+  if (!sessionData.session?.user) return null
+  const { data: auth, error } = await supabase.auth.getUser()
+  if (error || !auth.user) {
+    window.dispatchEvent(new CustomEvent('kstudy:auth-expired'))
+    return null
+  }
+  return auth.user.id
+}
+
 export async function loadRemoteActivityProgress(lessonId?: string): Promise<ActivityProgressRecord[]> {
   if (!supabase || !isDatabaseId(lessonId)) return []
-  const { data: auth } = await supabase.auth.getUser()
-  if (!auth.user) return []
+  const userId = await currentAuthUserId()
+  if (!userId) return []
   const { data, error } = await supabase.from('activity_progress')
     .select('activity_type, progress_percent, completed_items, completed_at')
-    .eq('user_id', auth.user.id).eq('lesson_id', lessonId)
+    .eq('user_id', userId).eq('lesson_id', lessonId)
   if (error) return []
   return (data ?? []).map((row) => ({ activityType: row.activity_type as ActivityKind, progressPercent: Number(row.progress_percent || 0), completedItems: (row.completed_items || {}) as Record<string, unknown>, completedAt: row.completed_at }))
 }
 
 export async function saveRemoteActivityProgress(textbookId: string | undefined, lessonId: string | undefined, activityType: ActivityKind, completedItems: Record<string, unknown>, totalItems: number, maxPercent = 100): Promise<number> {
   if (!supabase || !isDatabaseId(textbookId) || !isDatabaseId(lessonId)) return 0
-  const { data: auth } = await supabase.auth.getUser()
-  if (!auth.user) return 0
+  const userId = await currentAuthUserId()
+  if (!userId) return 0
   const progressPercent = totalItems > 0 ? Math.min(maxPercent, Math.round((Object.keys(completedItems).length / totalItems) * 100)) : 0
   await writeActivityProgress({
-    user_id: auth.user.id, textbook_id: textbookId, lesson_id: lessonId, activity_type: activityType,
+    user_id: userId, textbook_id: textbookId, lesson_id: lessonId, activity_type: activityType,
     progress_percent: progressPercent, completed_items: completedItems,
     completed_at: progressPercent >= 100 ? new Date().toISOString() : null, updated_at: new Date().toISOString(),
   })
@@ -70,11 +82,11 @@ export async function saveRemoteActivityProgress(textbookId: string | undefined,
 
 export async function markRemoteActivityCompleted(textbookId: string | undefined, lessonId: string | undefined, activityType: ActivityKind): Promise<void> {
   if (!supabase || !isDatabaseId(textbookId) || !isDatabaseId(lessonId)) return
-  const { data: auth } = await supabase.auth.getUser()
-  if (!auth.user) return
-  const { data: current } = await supabase.from('activity_progress').select('completed_items').eq('user_id', auth.user.id).eq('lesson_id', lessonId).eq('activity_type', activityType).maybeSingle()
+  const userId = await currentAuthUserId()
+  if (!userId) return
+  const { data: current } = await supabase.from('activity_progress').select('completed_items').eq('user_id', userId).eq('lesson_id', lessonId).eq('activity_type', activityType).maybeSingle()
   await writeActivityProgress({
-    user_id: auth.user.id, textbook_id: textbookId, lesson_id: lessonId, activity_type: activityType,
+    user_id: userId, textbook_id: textbookId, lesson_id: lessonId, activity_type: activityType,
     progress_percent: 100, completed_items: current?.completed_items || { completed: true },
     completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
   })
