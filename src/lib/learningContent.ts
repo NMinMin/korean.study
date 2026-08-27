@@ -43,6 +43,29 @@ export type LearningCatalog = {
 
 const REQUIRED_LESSON_ACTIVITIES = ['tuvung', 'nghechep', 'shadowing', 'ontap'] as const
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function textFrom(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function textListFrom(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.map((item) => textFrom(item)).filter(Boolean) as string[]
+}
+
+function isVocabularyGrammarVocabulary(row: { skill_type: string; exercise_type: string | null }): boolean {
+  return row.skill_type === 'vocabulary_grammar'
+    && ['vocabulary', 'vocab', 'word', 'flashcard'].includes(String(row.exercise_type || '').toLowerCase())
+}
+
+function isVocabularyGrammarGrammar(row: { skill_type: string; exercise_type: string | null }): boolean {
+  return row.skill_type === 'vocabulary_grammar'
+    && ['grammar', 'grammar_pattern', 'pattern'].includes(String(row.exercise_type || '').toLowerCase())
+}
+
 async function currentAuthUserId(): Promise<string | null> {
   if (!supabase) return null
   const { data: sessionData } = await supabase.auth.getSession()
@@ -135,8 +158,12 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
       .order('sort_order'),
   ])
   if (vocabularyResult.error || grammarResult.error || exerciseResult.error) return null
+  const exerciseVocabularyRows = (exerciseResult.data ?? []).filter(isVocabularyGrammarVocabulary)
   const wordCounts = new Map<string, number>()
   for (const row of vocabularyResult.data ?? []) {
+    wordCounts.set(row.lesson_id, (wordCounts.get(row.lesson_id) ?? 0) + 1)
+  }
+  for (const row of exerciseVocabularyRows) {
     wordCounts.set(row.lesson_id, (wordCounts.get(row.lesson_id) ?? 0) + 1)
   }
   const lessonCounts = new Map<string, number>()
@@ -249,7 +276,7 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
   const continueLesson = explicitlySelectedLesson ?? completedTodayLesson ?? latestInProgress ?? nextLesson
   const continueCompletedToday = Boolean(completedTodayLesson && continueLesson?.id === completedTodayLesson.id)
   const activeLessonIds = new Set(lessons.map((lesson) => lesson.id))
-  const vocabulary: LearningVocabulary[] = (vocabularyResult.data ?? [])
+  const vocabularyFromTable: LearningVocabulary[] = (vocabularyResult.data ?? [])
     .filter((row) => activeLessonIds.has(row.lesson_id))
     .map((row) => ({
       id: row.id,
@@ -263,7 +290,37 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
       audio: row.audio_url,
       sortOrder: row.sort_order,
     }))
-  const grammar: LearningGrammar[] = (grammarResult.data ?? [])
+  const vocabularyFromExercises: LearningVocabulary[] = exerciseVocabularyRows
+    .filter((row) => activeLessonIds.has(row.lesson_id))
+    .map((row) => {
+      const answer = asRecord(row.answer)
+      const word = textFrom(answer.word) ?? textFrom(answer.correct) ?? textFrom(row.prompt_ko) ?? ''
+      return {
+        id: `exercise-vocab-${row.id}`,
+        lessonId: row.lesson_id,
+        word,
+        meaningVi: textFrom(answer.meaning) ?? textFrom(row.prompt_vi) ?? '',
+        type: textFrom(answer.partOfSpeech),
+        pron: textFrom(answer.pronunciation),
+        mnemonic: textFrom(answer.mnemonic) ?? textFrom(row.explanation_vi),
+        img: textFrom(answer.imageUrl) ?? textFrom(row.image_url) ?? textFrom(row.media_url),
+        audio: textFrom(answer.audioUrl) ?? textFrom(row.audio_url),
+        sortOrder: row.sort_order,
+      }
+    })
+    .filter((item) => item.word)
+  const vocabularyKeys = new Set(vocabularyFromTable.map((item) => `${item.lessonId}:${item.word}`))
+  const vocabulary: LearningVocabulary[] = [
+    ...vocabularyFromTable,
+    ...vocabularyFromExercises.filter((item) => {
+      const key = `${item.lessonId}:${item.word}`
+      if (vocabularyKeys.has(key)) return false
+      vocabularyKeys.add(key)
+      return true
+    }),
+  ].sort((a, b) => a.sortOrder - b.sortOrder)
+
+  const grammarFromTable: LearningGrammar[] = (grammarResult.data ?? [])
     .filter((row) => activeLessonIds.has(row.lesson_id))
     .map((row) => ({
       id: row.id,
@@ -275,6 +332,33 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
       notesVi: row.notes_vi,
       sortOrder: row.sort_order,
     }))
+  const grammarFromExercises: LearningGrammar[] = (exerciseResult.data ?? [])
+    .filter((row) => activeLessonIds.has(row.lesson_id) && isVocabularyGrammarGrammar(row))
+    .map((row) => {
+      const answer = asRecord(row.answer)
+      const formulaLines = textListFrom(answer.formulaLines)
+      return {
+        id: `exercise-grammar-${row.id}`,
+        lessonId: row.lesson_id,
+        pattern: textFrom(answer.correct) ?? textFrom(row.prompt_ko) ?? '',
+        meaningVi: textFrom(row.prompt_vi) ?? textFrom(answer.contextVi) ?? '',
+        usageVi: formulaLines.join('\n') || null,
+        conjugationVi: null,
+        notesVi: textFrom(answer.note) ?? textFrom(row.explanation_vi),
+        sortOrder: row.sort_order,
+      }
+    })
+    .filter((item) => item.pattern)
+  const grammarKeys = new Set(grammarFromTable.map((item) => `${item.lessonId}:${item.pattern}`))
+  const grammar: LearningGrammar[] = [
+    ...grammarFromTable,
+    ...grammarFromExercises.filter((item) => {
+      const key = `${item.lessonId}:${item.pattern}`
+      if (grammarKeys.has(key)) return false
+      grammarKeys.add(key)
+      return true
+    }),
+  ].sort((a, b) => a.sortOrder - b.sortOrder)
   const exercises: LearningExercise[] = (exerciseResult.data ?? [])
     .filter((row) => activeLessonIds.has(row.lesson_id))
     .map((row) => ({
@@ -294,7 +378,7 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
   return { textbooks, myTextbooks, availableTextbooks, lessons, activeTextbook, continueLesson, continueCompletedToday, hasStarted, vocabulary, grammar, exercises }
 }
 
-const CATALOG_CACHE_MS = 10_000
+const CATALOG_CACHE_MS = 1_000
 const catalogRequests = new Map<string, { expiresAt: number; promise: Promise<LearningCatalog | null> }>()
 
 export function loadLearningCatalog(preferredTextbookId?: string): Promise<LearningCatalog | null> {

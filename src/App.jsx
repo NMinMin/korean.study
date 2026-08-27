@@ -477,16 +477,18 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     setActive('thithu');
   };
 
+  const hasRemoteCatalog = Boolean(learningCatalog);
   const catalogLessons = learningCatalog?.lessons?.length ? learningCatalog.lessons : FALLBACK_LESSONS;
-  const catalogVocabulary = learningCatalog?.vocabulary?.length ? learningCatalog.vocabulary : VOCAB_SAMPLE;
-  const catalogGrammar = learningCatalog?.grammar?.length ? learningCatalog.grammar : GRAMMAR_SAMPLE;
+  const catalogVocabulary = hasRemoteCatalog ? (learningCatalog?.vocabulary || []) : VOCAB_SAMPLE;
+  const catalogGrammar = hasRemoteCatalog ? (learningCatalog?.grammar || []) : GRAMMAR_SAMPLE;
   const primaryLesson = catalogLessons[0] || FALLBACK_LESSONS[0];
   const selectedLesson = lesson || primaryLesson;
   const lessonVocabularyFromDatabase = learningCatalog?.vocabulary?.filter((word) => word.lessonId === selectedLesson?.id) || [];
   const lessonGrammarFromDatabase = learningCatalog?.grammar?.filter((item) => item.lessonId === selectedLesson?.id) || [];
   const lessonExercises = learningCatalog?.exercises?.filter((exercise) => exercise.lessonId === selectedLesson?.id) || [];
-  const lessonVocabulary = lessonVocabularyFromDatabase.length ? lessonVocabularyFromDatabase : VOCAB_SAMPLE;
-  const lessonGrammar = lessonGrammarFromDatabase.length ? lessonGrammarFromDatabase : GRAMMAR_SAMPLE;
+  const selectedLessonIsFallback = !hasRemoteCatalog || String(selectedLesson?.id || '').startsWith('fallback-lesson');
+  const lessonVocabulary = lessonVocabularyFromDatabase.length ? lessonVocabularyFromDatabase : (selectedLessonIsFallback ? VOCAB_SAMPLE : []);
+  const lessonGrammar = lessonGrammarFromDatabase.length ? lessonGrammarFromDatabase : (selectedLessonIsFallback ? GRAMMAR_SAMPLE : []);
   const databaseShadowLines = mapDatabaseLines(lessonExercises, 'shadowing');
   const databaseDictationLines = mapDatabaseLines(lessonExercises, 'dictation');
   const lessonShadowLines = databaseShadowLines.length ? databaseShadowLines : SHADOW_LINES;
@@ -650,6 +652,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             )}
             {view === 'flashcards-grammar' && lesson && (
               <FlashcardView
+                key={`flashcards-grammar-${lesson.id}-${lessonVocabulary.length}-${lessonGrammar.length}`}
                 lesson={lesson}
                 userId={profile.id}
                 vocabulary={lessonVocabulary}
@@ -815,6 +818,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             )}
             {view === 'flashcards-notebook' && lesson && reviewDeck && (
               <FlashcardView
+                key={`flashcards-notebook-${lesson.id}-${reviewDeck.map((word) => word.id || word.word).join('|')}`}
                 lesson={lesson}
                 userId={profile.id}
                 vocabulary={catalogVocabulary}
@@ -826,6 +830,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             )}
             {view === 'flashcards-schedule' && lesson && reviewDeck && (
               <FlashcardView
+                key={`flashcards-schedule-${lesson.id}-${reviewDeck.map((word) => word.id || word.word).join('|')}`}
                 lesson={lesson}
                 userId={profile.id}
                 vocabulary={catalogVocabulary}
@@ -838,6 +843,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             )}
             {view === 'flashcards' && lesson && (
               <FlashcardView
+                key={`flashcards-${lesson.id}-${lessonVocabulary.length}-${lessonGrammar.length}-${reviewAllFlashcards ? 'all' : 'new'}`}
                 lesson={lesson}
                 userId={profile.id}
                 vocabulary={lessonVocabulary}

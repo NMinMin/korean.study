@@ -4,7 +4,13 @@ import { requireAdmin } from '../plugins/admin.js'
 
 type Status = 'draft' | 'published' | 'locked' | 'no_content'
 type ReportStatus = 'pending' | 'resolved' | 'dismissed'
-type SkillType = 'vocabulary_grammar' | 'dictation' | 'shadowing' | 'review'
+type SkillType = 'vocabulary_grammar' | 'dictation' | 'shadowing'
+
+const exerciseSkillTypes = ['vocabulary_grammar', 'dictation', 'shadowing'] as const
+
+function isExerciseSkillType(value: unknown): value is SkillType {
+  return typeof value === 'string' && exerciseSkillTypes.includes(value as SkillType)
+}
 const DASHBOARD_CACHE_VERSION = 3
 const APP_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 
@@ -186,7 +192,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   })
 
   app.get<{ Querystring: { lessonId?: string; skillType?: SkillType } }>('/admin/exercises', async (request, reply) => {
-    let query = supabaseAdmin.from('lesson_exercises').select('*, lessons(lesson_number, title_ko, textbook_id, textbooks(title_ko))').order('sort_order')
+    let query = supabaseAdmin.from('lesson_exercises').select('*, lessons(lesson_number, title_ko, textbook_id, textbooks(title_ko))').in('skill_type', [...exerciseSkillTypes]).order('sort_order')
     if (request.query.lessonId) query = query.eq('lesson_id', request.query.lessonId)
     if (request.query.skillType) query = query.eq('skill_type', request.query.skillType)
     const { data, error } = await query
@@ -197,6 +203,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Body: { lessonId: string; skillType: SkillType; exerciseType?: string; promptKo: string; promptVi?: string; answer?: unknown; explanationVi?: string; mediaUrl?: string; imageUrl?: string; audioUrl?: string; sortOrder?: number; status?: Status } }>('/admin/exercises', async (request, reply) => {
     const body = request.body
     if (!body.lessonId || !body.skillType || !body.promptKo?.trim()) return reply.code(400).send({ code: 'EXERCISE_FIELDS_REQUIRED', message: 'Bài học, kỹ năng và nội dung tiếng Hàn là bắt buộc.', requestId: request.id })
+    if (!isExerciseSkillType(body.skillType)) return reply.code(400).send({ code: 'EXERCISE_SKILL_INVALID', message: 'Chỉ lưu học liệu Từ vựng & Ngữ pháp, Nghe chép chính tả hoặc Shadowing. Ôn tập được AI tạo tự động.', requestId: request.id })
     const isListeningSkill = body.skillType === 'dictation' || body.skillType === 'shadowing'
     const { data, error } = await supabaseAdmin.from('lesson_exercises').insert({ lesson_id: body.lessonId, skill_type: body.skillType, exercise_type: body.exerciseType?.trim() || 'question', prompt_ko: body.promptKo.trim(), prompt_vi: body.promptVi?.trim() || null, answer: body.answer ?? {}, explanation_vi: body.explanationVi?.trim() || null, media_url: body.mediaUrl?.trim() || null, image_url: isListeningSkill ? null : body.imageUrl?.trim() || null, audio_url: body.audioUrl?.trim() || null, sort_order: body.sortOrder ?? 0, status: body.status ?? 'published' }).select().single()
     if (error) return reply.code(400).send({ code: 'EXERCISE_CREATE_FAILED', message: error.message, requestId: request.id })
@@ -205,6 +212,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.patch<{ Params: { id: string }; Body: { lessonId?: string; skillType?: SkillType; exerciseType?: string; promptKo?: string; promptVi?: string; answer?: unknown; explanationVi?: string; mediaUrl?: string; imageUrl?: string; audioUrl?: string; sortOrder?: number; status?: Status } }>('/admin/exercises/:id', async (request, reply) => {
     const body = request.body
+    if (body.skillType !== undefined && !isExerciseSkillType(body.skillType)) return reply.code(400).send({ code: 'EXERCISE_SKILL_INVALID', message: 'Không thể lưu kỹ năng Ôn tập. Nội dung ôn tập được AI tạo từ ba kỹ năng nền tảng.', requestId: request.id })
     const listeningSkillSelected = body.skillType === 'dictation' || body.skillType === 'shadowing'
     const patch = { ...(body.lessonId !== undefined && { lesson_id: body.lessonId }), ...(body.skillType !== undefined && { skill_type: body.skillType }), ...(body.exerciseType !== undefined && { exercise_type: body.exerciseType.trim() || 'question' }), ...(body.promptKo !== undefined && { prompt_ko: body.promptKo.trim() }), ...(body.promptVi !== undefined && { prompt_vi: body.promptVi.trim() || null }), ...(body.answer !== undefined && { answer: body.answer }), ...(body.explanationVi !== undefined && { explanation_vi: body.explanationVi.trim() || null }), ...(body.mediaUrl !== undefined && { media_url: body.mediaUrl.trim() || null }), ...(listeningSkillSelected ? { image_url: null } : body.imageUrl !== undefined && { image_url: body.imageUrl.trim() || null }), ...(body.audioUrl !== undefined && { audio_url: body.audioUrl.trim() || null }), ...(body.sortOrder !== undefined && { sort_order: body.sortOrder }), ...(body.status !== undefined && { status: body.status }), updated_at: new Date().toISOString() }
     const { data, error } = await supabaseAdmin.from('lesson_exercises').update(patch).eq('id', request.params.id).select().single()

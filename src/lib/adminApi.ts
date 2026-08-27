@@ -7,12 +7,21 @@ export async function adminApi<T>(path: string, init?: RequestInit): Promise<T> 
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
   if (!token) throw new Error('Phiên đăng nhập đã hết hạn.')
+  const headers = new Headers(init?.headers)
+  headers.set('Authorization', `Bearer ${token}`)
+  if (init?.body != null && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
   const response = await fetch(`${apiUrl}/v1/admin${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...init?.headers },
+    headers,
   })
-  const payload = response.status === 204 ? null : await response.json()
+  const payload = response.status === 204 ? null : await response.json().catch(() => null)
   if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      window.dispatchEvent(new CustomEvent('kstudy:auth-expired'))
+      throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
+    }
     if (response.status === 404) throw new Error('Backend đang chạy bản cũ hoặc sai địa chỉ API. Hãy build và khởi động lại backend.')
     throw new Error(payload?.message || 'Thao tác quản trị thất bại.')
   }
