@@ -491,8 +491,12 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const lessonGrammar = lessonGrammarFromDatabase.length ? lessonGrammarFromDatabase : (selectedLessonIsFallback ? GRAMMAR_SAMPLE : []);
   const databaseShadowLines = mapDatabaseLines(lessonExercises, 'shadowing');
   const databaseDictationLines = mapDatabaseLines(lessonExercises, 'dictation');
-  const lessonShadowLines = databaseShadowLines.length ? databaseShadowLines : SHADOW_LINES;
-  const lessonDictationLines = databaseDictationLines.length ? databaseDictationLines : SHADOW_LINES;
+  const lessonShadowLines = databaseShadowLines.length
+    ? databaseShadowLines
+    : (selectedLessonIsFallback ? SHADOW_LINES : []);
+  const lessonDictationLines = databaseDictationLines.length
+    ? databaseDictationLines
+    : (selectedLessonIsFallback ? SHADOW_LINES : []);
   const reviewLessons = reviewMode === 'bylesson' && reviewSelectedLessons.length
     ? catalogLessons.filter((item) => reviewSelectedLessons.includes(item.no))
     : catalogLessons;
@@ -500,10 +504,23 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const reviewVocabularyFromDatabase = learningCatalog?.vocabulary?.filter((word) => reviewLessonIds.has(word.lessonId)) || [];
   const reviewGrammarFromDatabase = learningCatalog?.grammar?.filter((item) => reviewLessonIds.has(item.lessonId)) || [];
   const reviewExercises = learningCatalog?.exercises?.filter((exercise) => reviewLessonIds.has(exercise.lessonId)) || [];
-  const reviewVocabulary = reviewVocabularyFromDatabase.length ? reviewVocabularyFromDatabase : lessonVocabulary;
-  const reviewGrammar = reviewGrammarFromDatabase.length ? reviewGrammarFromDatabase : lessonGrammar;
-  const reviewLinesFromDatabase = mapDatabaseLines(reviewExercises, 'shadowing');
-  const reviewLines = reviewLinesFromDatabase.length ? reviewLinesFromDatabase : lessonShadowLines;
+  const reviewDictationLinesFromDatabase = mapDatabaseLines(reviewExercises, 'dictation');
+  const reviewShadowLinesFromDatabase = mapDatabaseLines(reviewExercises, 'shadowing');
+  const usesFallbackReviewData = !hasRemoteCatalog || (
+    reviewLessons.length === 1 && String(reviewLessons[0]?.id || '').startsWith('fallback-lesson')
+  );
+  const reviewVocabulary = reviewVocabularyFromDatabase.length
+    ? reviewVocabularyFromDatabase
+    : (usesFallbackReviewData ? lessonVocabulary : []);
+  const reviewGrammar = reviewGrammarFromDatabase.length
+    ? reviewGrammarFromDatabase
+    : (usesFallbackReviewData ? lessonGrammar : []);
+  const reviewDictationLines = reviewDictationLinesFromDatabase.length
+    ? reviewDictationLinesFromDatabase
+    : (usesFallbackReviewData ? lessonDictationLines : []);
+  const reviewShadowLines = reviewShadowLinesFromDatabase.length
+    ? reviewShadowLinesFromDatabase
+    : (usesFallbackReviewData ? lessonShadowLines : []);
   const activeTextbookTitle = learningCatalog?.activeTextbook?.title || 'Giáo trình tiếng Hàn';
   const continueTextbook = learningCatalog?.activeTextbook?.isAdded ? learningCatalog.activeTextbook : null;
   const continueLesson = continueTextbook ? (learningCatalog?.continueLesson || null) : null;
@@ -621,8 +638,8 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 userId={profile.id}
                 vocabulary={reviewVocabulary}
                 grammar={reviewGrammar}
-                lines={reviewLines}
-                exercises={reviewExercises}
+                dictationLines={reviewDictationLines}
+                shadowingLines={reviewShadowLines}
                 mode="random"
                 selectedLessons={[]}
                 onBack={goHome}
@@ -697,8 +714,8 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 userId={profile.id}
                 vocabulary={reviewVocabulary}
                 grammar={reviewGrammar}
-                lines={reviewLines}
-                exercises={reviewExercises}
+                dictationLines={reviewDictationLines}
+                shadowingLines={reviewShadowLines}
                 mode={reviewMode}
                 selectedLessons={reviewSelectedLessons}
                 onBack={() => setView(reviewIntroBackView)}
@@ -716,8 +733,8 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 userId={profile.id}
                 vocabulary={reviewVocabulary}
                 grammar={reviewGrammar}
-                lines={reviewLines}
-                exercises={reviewExercises}
+                dictationLines={reviewDictationLines}
+                shadowingLines={reviewShadowLines}
                 difficulty={reviewDifficulty}
                 mode={reviewMode}
                 seed={reviewSeed}

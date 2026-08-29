@@ -26,8 +26,9 @@ type AuthContextValue = {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
+const SESSION_PREFERENCE_KEY = 'kstudy:session-preference'
 const SESSION_EXPIRES_KEY = 'kstudy:session-expires-at'
-const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000
+const REMEMBER_SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000
 
 function clearSupabaseAuthStorage() {
   for (const storage of [localStorage, sessionStorage]) {
@@ -38,28 +39,28 @@ function clearSupabaseAuthStorage() {
   }
 }
 
-function sessionStore() {
-  return localStorage.getItem('kstudy:session-preference') === 'persistent' ? localStorage : sessionStorage
+function isRememberedSession() {
+  return localStorage.getItem(SESSION_PREFERENCE_KEY) === 'persistent'
 }
 
 function setSessionPreference(persistent: boolean) {
   clearSessionExpiry()
   if (persistent) {
-    sessionStorage.removeItem('kstudy:session-preference')
-    localStorage.setItem('kstudy:session-preference', 'persistent')
+    sessionStorage.removeItem(SESSION_PREFERENCE_KEY)
+    localStorage.setItem(SESSION_PREFERENCE_KEY, 'persistent')
     return
   }
   // Không để lại bất kỳ lựa chọn lưu phiên nào sau khi đóng trình duyệt.
-  localStorage.removeItem('kstudy:session-preference')
+  localStorage.removeItem(SESSION_PREFERENCE_KEY)
   // Dọn token từng được lưu lâu bởi phiên cũ trước khi tạo phiên chỉ dùng
   // trong tab hiện tại. Token mới sẽ được authStorage ghi vào sessionStorage.
   clearSupabaseAuthStorage()
-  sessionStorage.setItem('kstudy:session-preference', 'session-only')
+  sessionStorage.setItem(SESSION_PREFERENCE_KEY, 'session-only')
 }
 
 function clearSessionPreference() {
-  localStorage.removeItem('kstudy:session-preference')
-  sessionStorage.removeItem('kstudy:session-preference')
+  localStorage.removeItem(SESSION_PREFERENCE_KEY)
+  sessionStorage.removeItem(SESSION_PREFERENCE_KEY)
   clearSupabaseAuthStorage()
   clearSessionExpiry()
 }
@@ -69,14 +70,24 @@ function clearSessionExpiry() {
   sessionStorage.removeItem(SESSION_EXPIRES_KEY)
 }
 
-function getOrCreateSessionExpiry() {
-  const store = sessionStore()
-  const saved = Number(store.getItem(SESSION_EXPIRES_KEY))
+function getOrCreateRememberedSessionExpiry() {
+  // Phiên không chọn "Lưu đăng nhập" nằm trong sessionStorage và tự mất khi
+  // đóng trình duyệt, vì vậy không áp dụng thời hạn ghi nhớ 7 ngày cho nó.
+  if (!isRememberedSession()) return Number.POSITIVE_INFINITY
+
+  const saved = Number(localStorage.getItem(SESSION_EXPIRES_KEY))
   if (Number.isFinite(saved) && saved > 0) return saved
-  const expiresAt = Date.now() + SESSION_LIFETIME_MS
+  const expiresAt = Date.now() + REMEMBER_SESSION_LIFETIME_MS
   clearSessionExpiry()
-  store.setItem(SESSION_EXPIRES_KEY, String(expiresAt))
+  localStorage.setItem(SESSION_EXPIRES_KEY, String(expiresAt))
   return expiresAt
+}
+
+function startRememberedSessionLifetime() {
+  clearSessionExpiry()
+  if (isRememberedSession()) {
+    localStorage.setItem(SESSION_EXPIRES_KEY, String(Date.now() + REMEMBER_SESSION_LIFETIME_MS))
+  }
 }
 
 function profileFromUser(user: User): AppProfile {
@@ -126,7 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadProfile = useCallback(async (nextSession: Session | null) => {
     const requestVersion = ++authLoadVersion.current
-    if (nextSession && getOrCreateSessionExpiry() <= Date.now()) {
+    if (nextSession && getOrCreateRememberedSessionExpiry() <= Date.now()) {
       clearInvalidSession()
       return
     }
@@ -192,7 +203,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!session || !supabase) return
     const checkExpiry = () => {
-      if (getOrCreateSessionExpiry() > Date.now()) return
+      if (getOrCreateRememberedSessionExpiry() > Date.now()) return
       clearInvalidSession()
     }
     const timer = window.setInterval(() => void checkExpiry(), 30_000)
@@ -221,8 +232,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearSessionPreference()
         throw error
       }
-      clearSessionExpiry()
-      sessionStore().setItem(SESSION_EXPIRES_KEY, String(Date.now() + SESSION_LIFETIME_MS))
+      startRememberedSessionLifetime()
     },
     async signUp({ displayName, email, password, remember = false }) {
       if (!supabase) throw new Error('Supabase chưa được cấu hình.')
@@ -242,8 +252,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw error
       }
       if (data.session) {
-        clearSessionExpiry()
-        sessionStore().setItem(SESSION_EXPIRES_KEY, String(Date.now() + SESSION_LIFETIME_MS))
+        startRememberedSessionLifetime()
       } else {
         clearSessionPreference()
       }

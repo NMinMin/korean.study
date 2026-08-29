@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   Grid3X3,
+  GripVertical,
   Headphones,
   Image,
   List,
@@ -28,14 +29,8 @@ type VocabularyGrammarKind = 'vocabulary' | 'grammar'
 type TtsVoice =
   | 'ko-KR-SunHiNeural'
   | 'ko-KR-InJoonNeural'
-  | 'ko-KR-HyunsuMultilingualNeural'
-  | 'ko-KR-HyunsuNeural'
-  | 'ko-KR-BongJinNeural'
-  | 'ko-KR-GookMinNeural'
-  | 'ko-KR-JiMinNeural'
-  | 'ko-KR-SeoHyeonNeural'
-  | 'ko-KR-SoonBokNeural'
-  | 'ko-KR-YuJinNeural'
+  | 'ko-KR-HyunSuNeural'
+type DialogueLine = { speaker: 'A' | 'B'; ko: string; vi: string }
 type Textbook = { id: string; title_ko: string }
 type Lesson = { id: string; textbook_id: string; lesson_number: number; title_ko: string; textbooks?: { title_ko?: string } }
 type Exercise = {
@@ -66,6 +61,8 @@ type Draft = {
   partOfSpeech: string
   pronunciation: string
   mnemonic: string
+  collocations: { ko: string; vi: string }[]
+  dialogues: DialogueLine[]
   note: string
   contextVi: string
   formulaLines: string[]
@@ -92,6 +89,8 @@ const emptyDraft: Draft = {
   partOfSpeech: '',
   pronunciation: '',
   mnemonic: '',
+  collocations: [{ ko: '', vi: '' }],
+  dialogues: [{ speaker: 'A', ko: '', vi: '' }],
   note: '',
   contextVi: '',
   formulaLines: [''],
@@ -101,18 +100,22 @@ const emptyDraft: Draft = {
   ttsSpeed: 1,
 }
 
-const ttsVoices: { value: TtsVoice; label: string; gender: 'Nữ' | 'Nam'; description: string }[] = [
-  { value: 'ko-KR-SunHiNeural', gender: 'Nữ', label: 'SunHi', description: 'Tự nhiên, phổ biến nhất' },
-  { value: 'ko-KR-JiMinNeural', gender: 'Nữ', label: 'JiMin', description: 'Trẻ trung, thân thiện' },
-  { value: 'ko-KR-SeoHyeonNeural', gender: 'Nữ', label: 'SeoHyeon', description: 'Nhẹ nhàng, tự nhiên' },
-  { value: 'ko-KR-SoonBokNeural', gender: 'Nữ', label: 'SoonBok', description: 'Điềm tĩnh, chín chắn' },
-  { value: 'ko-KR-YuJinNeural', gender: 'Nữ', label: 'YuJin', description: 'Tươi vui, rõ ràng' },
-  { value: 'ko-KR-InJoonNeural', gender: 'Nam', label: 'InJoon', description: 'Ấm áp' },
-  { value: 'ko-KR-HyunsuNeural', gender: 'Nam', label: 'Hyunsu', description: 'Tiêu chuẩn' },
-  { value: 'ko-KR-HyunsuMultilingualNeural', gender: 'Nam', label: 'Hyunsu Multilingual', description: 'Đa ngôn ngữ' },
-  { value: 'ko-KR-BongJinNeural', gender: 'Nam', label: 'BongJin', description: 'Truyền cảm, tự nhiên' },
-  { value: 'ko-KR-GookMinNeural', gender: 'Nam', label: 'GookMin', description: 'Trầm, trang trọng' },
+const ttsVoices: { value: TtsVoice; label: string; gender: 'Nữ' | 'Nam'; description: string; previewUrl?: string }[] = [
+  {
+    value: 'ko-KR-SunHiNeural', gender: 'Nữ', label: 'SunHi',
+    description: 'Tiêu chuẩn, tự nhiên, phổ biến',
+    previewUrl: 'http://api-cloud-u4v8.onrender.com/files/storage/1787874626792-NgheThu.mp3',
+  },
+  {
+    value: 'ko-KR-InJoonNeural', gender: 'Nam', label: 'InJoon',
+    description: 'Tiêu chuẩn, rõ ràng, phù hợp giảng dạy',
+    previewUrl: 'http://api-cloud-u4v8.onrender.com/files/storage/1787874893843-NgheThu.mp3',
+  },
+  { value: 'ko-KR-HyunSuNeural', gender: 'Nam', label: 'HyunSu', description: 'Trẻ trung, tự nhiên' },
 ]
+
+const voicePreviewCache = new Map<TtsVoice, string>()
+const VOICE_PREVIEW_TEXT = '안녕하세요. 한국어 공부를 함께 시작해 볼까요?'
 
 function asRecord(answer: unknown): Record<string, unknown> {
   return answer && typeof answer === 'object' && !Array.isArray(answer) ? answer as Record<string, unknown> : {}
@@ -142,9 +145,34 @@ function inferVocabularyGrammarKind(item?: Exercise): VocabularyGrammarKind {
 
 function normalizeTtsVoice(value: unknown): TtsVoice {
   if (ttsVoices.some((voice) => voice.value === value)) return value as TtsVoice
-  if (value === 'ko-KR-HyunSuNeural') return 'ko-KR-HyunsuNeural'
-  if (value === 'ko-KR-BongJinNeura') return 'ko-KR-BongJinNeural'
+  if (value === 'ko-KR-HyunsuNeural' || value === 'ko-KR-HyunsuMultilingualNeural') return 'ko-KR-HyunSuNeural'
+  if (value === 'ko-KR-BongJinNeural' || value === 'ko-KR-BongJinNeura' || value === 'ko-KR-GookMinNeural') return 'ko-KR-InJoonNeural'
   return 'ko-KR-SunHiNeural'
+}
+
+function normalizeCollocations(value: unknown): { ko: string; vi: string }[] {
+  if (!Array.isArray(value)) return [{ ko: '', vi: '' }]
+  const rows = value.map((entry) => {
+    const row = asRecord(entry)
+    return {
+      ko: String(row.ko ?? row.korean ?? row.phrase ?? ''),
+      vi: String(row.vi ?? row.meaning ?? row.meaningVi ?? ''),
+    }
+  }).filter((row) => row.ko || row.vi)
+  return rows.length ? rows : [{ ko: '', vi: '' }]
+}
+
+function normalizeDialogues(value: unknown, fallbackKo = '', fallbackVi = ''): DialogueLine[] {
+  const rows = (Array.isArray(value) ? value : []).map((entry) => {
+    const row = asRecord(entry)
+    return {
+      speaker: row.speaker === 'B' ? 'B' as const : 'A' as const,
+      ko: String(row.ko ?? row.korean ?? ''),
+      vi: String(row.vi ?? row.vietnamese ?? row.meaning ?? ''),
+    }
+  }).filter((row) => row.ko || row.vi)
+  if (rows.length) return rows
+  return [{ speaker: 'A', ko: fallbackKo, vi: fallbackVi }]
 }
 
 async function uploadImageToApi(file: File): Promise<string> {
@@ -168,10 +196,11 @@ function ttsFilename(text: string): string {
 }
 
 async function generateKoreanTts(text: string, voice: TtsVoice, speed: number = 1): Promise<string> {
+  const apiVoice = voice === 'ko-KR-HyunSuNeural' ? 'ko-KR-HyunsuNeural' : voice
   const response = await fetch('https://text-to-speed.onrender.com/tts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, voice, filename: ttsFilename(text), speed }),
+    body: JSON.stringify({ text, voice: apiVoice, filename: ttsFilename(text), speed }),
   })
   const data = await response.json().catch(() => ({}))
   if (!response.ok || data?.success === false) {
@@ -207,9 +236,13 @@ function VoiceSelect({
     const positionMenu = () => {
       const rect = triggerRef.current?.getBoundingClientRect()
       if (!rect) return
-      const maxHeight = Math.min(280, window.innerHeight - 32)
-      const openUp = window.innerHeight - rect.bottom < Math.min(300, maxHeight) && rect.top > window.innerHeight - rect.bottom
-      setMenuStyle({ left: rect.left, width: rect.width, maxHeight, ...(openUp ? { bottom: window.innerHeight - rect.top + 8 } : { top: rect.bottom + 8 }) })
+      const desktop = window.matchMedia('(min-width: 901px)').matches
+      const availableBelow = Math.max(120, window.innerHeight - rect.bottom - 16)
+      const maxHeight = Math.min(280, desktop ? availableBelow : window.innerHeight - 32)
+      const openUp = !desktop && window.innerHeight - rect.bottom < Math.min(300, maxHeight) && rect.top > window.innerHeight - rect.bottom
+      setMenuStyle(openUp
+        ? { left: rect.left, width: rect.width, maxHeight, bottom: window.innerHeight - rect.top + 8, top: 'auto' }
+        : { left: rect.left, width: rect.width, maxHeight, top: rect.bottom + 8, bottom: 'auto' })
     }
     positionMenu()
     window.addEventListener('resize', positionMenu)
@@ -272,10 +305,10 @@ function TtsPanel({
     <div className="admin-tts-heading"><Volume2 size={16} /><strong>{showSpeed ? 'Audio mẫu (tự sinh)' : 'Giọng đọc TTS'}</strong></div>
     <label>Giọng đọc<VoiceSelect value={draft.ttsVoice} onChange={(value) => setDraft((current) => ({ ...current, ttsVoice: value, audioUrl: '' }))} onPreview={(value) => void previewVoice(value)} previewing={previewing} /></label>
     {showSpeed && <div className="admin-speed-field"><span>Tốc độ đọc</span><div>{([0.75, 1, 1.25] as const).map((speed) => <button type="button" key={speed} className={draft.ttsSpeed === speed ? 'active' : ''} onClick={() => setDraft((current) => ({ ...current, ttsSpeed: speed, audioUrl: '' }))}>{speed}x</button>)}</div></div>}
-    <button type="button" className="admin-tts-preview" disabled={previewing || !draft.promptKo.trim()} onClick={() => void previewVoice()}>{previewing ? <LoaderCircle className="spin" size={17} /> : <Volume2 size={17} />} Nghe thử</button>
+    <button type="button" className="admin-tts-preview" disabled={previewing} onClick={() => void previewVoice()}>{previewing ? <LoaderCircle className="spin" size={17} /> : <Volume2 size={17} />} Nghe thử giọng</button>
     {draft.audioUrl
       ? <audio className="admin-tts-audio" controls src={draft.audioUrl} />
-      : <div className="admin-tts-empty"><Mic size={25} /><span>Nhập câu tiếng Hàn rồi bấm Nghe thử</span></div>}
+      : <div className="admin-tts-empty"><Mic size={25} /><span>Audio của bài sẽ được tạo khi lưu</span></div>}
   </aside>
 }
 
@@ -296,7 +329,20 @@ export default function AdminExercises() {
   const [deleting, setDeleting] = useState(false)
   const [uploading, setUploading] = useState<'image' | 'audio' | null>(null)
   const [previewingVoice, setPreviewingVoice] = useState(false)
+  const [playingPreviewVoice, setPlayingPreviewVoice] = useState<TtsVoice | null>(null)
+  const voicePreviewAudioRef = useRef<HTMLAudioElement | null>(null)
   const [pendingImage, setPendingImage] = useState<File | null>(null)
+  const [draggedFormulaIndex, setDraggedFormulaIndex] = useState<number | null>(null)
+
+  const moveFormulaLine = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return
+    setDraft((current) => {
+      const formulaLines = [...current.formulaLines]
+      const [movedLine] = formulaLines.splice(fromIndex, 1)
+      formulaLines.splice(toIndex, 0, movedLine)
+      return { ...current, formulaLines }
+    })
+  }
 
   const selectedBookId = lessons.find((item) => item.id === draft.lessonId)?.textbook_id || textbooks[0]?.id || ''
   const availableLessons = useMemo(() => lessons.filter((item) => book === 'all' || item.textbook_id === book), [book, lessons])
@@ -347,6 +393,7 @@ export default function AdminExercises() {
       return
     }
     const answer = asRecord(item.answer)
+    const example = asRecord(answer.example)
     const kind = inferVocabularyGrammarKind(item)
     setDraft({
       lessonId: item.lesson_id,
@@ -359,6 +406,12 @@ export default function AdminExercises() {
       partOfSpeech: String(answer.partOfSpeech || answer.part_of_speech || ''),
       pronunciation: String(answer.pronunciation || answer.pron || ''),
       mnemonic: String(answer.mnemonic || (kind === 'vocabulary' ? answerAsText(item.answer) : '') || ''),
+      collocations: normalizeCollocations(answer.collocations),
+      dialogues: normalizeDialogues(
+        answer.dialogues ?? answer.dialogue,
+        String(example.ko ?? answer.exampleKo ?? ''),
+        String(example.vi ?? answer.exampleVi ?? ''),
+      ),
       note: String(answer.note || answer.notes || (kind === 'grammar' ? answerAsText(item.answer) : '') || ''),
       contextVi: String(answer.contextVi || ''),
       formulaLines: Array.isArray(answer.formulaLines) && answer.formulaLines.length
@@ -388,6 +441,10 @@ export default function AdminExercises() {
 
   const buildAnswer = (imageUrl: string, audioUrl: string) => {
     if (isVocabularyExercise) {
+      const dialogues = draft.dialogues
+        .map((line) => ({ speaker: line.speaker, ko: line.ko.trim(), vi: line.vi.trim() }))
+        .filter((line) => line.ko || line.vi)
+      const firstDialogue = dialogues[0]
       return {
         correct: draft.promptKo.trim(),
         word: draft.promptKo.trim(),
@@ -395,6 +452,12 @@ export default function AdminExercises() {
         partOfSpeech: draft.partOfSpeech.trim(),
         pronunciation: draft.pronunciation.trim(),
         mnemonic: draft.mnemonic.trim(),
+        collocations: draft.collocations
+          .map((row) => ({ ko: row.ko.trim(), vi: row.vi.trim() }))
+          .filter((row) => row.ko || row.vi),
+        dialogues,
+        dialogue: dialogues,
+        example: firstDialogue ? { ko: firstDialogue.ko, vi: firstDialogue.vi } : null,
         imageUrl,
         audioUrl,
         ttsVoice: draft.ttsVoice,
@@ -419,18 +482,59 @@ export default function AdminExercises() {
     }
   }
 
+  useEffect(() => () => {
+    const audio = voicePreviewAudioRef.current
+    if (!audio) return
+    audio.pause()
+    audio.removeAttribute('src')
+    audio.load()
+    voicePreviewAudioRef.current = null
+  }, [])
+
+  const stopVoicePreview = () => {
+    const audio = voicePreviewAudioRef.current
+    if (audio) {
+      audio.pause()
+      audio.currentTime = 0
+      voicePreviewAudioRef.current = null
+    }
+    setPlayingPreviewVoice(null)
+  }
+
   const previewVoice = async (voice: TtsVoice = draft.ttsVoice) => {
-    const text = draft.promptKo.trim()
-    if (!text) return setError('Nhập nội dung tiếng Hàn trước khi nghe thử.')
+    if (playingPreviewVoice === voice && voicePreviewAudioRef.current) {
+      stopVoicePreview()
+      return
+    }
+
+    stopVoicePreview()
     setPreviewingVoice(true)
+    setError('')
     try {
-      const canReuseCurrentAudio = voice === draft.ttsVoice && draft.audioUrl && !draft.audioUrl.startsWith('blob:')
-      const audioUrl = canReuseCurrentAudio
-        ? draft.audioUrl
-        : await generateKoreanTts(text, voice, draft.ttsSpeed)
-      if (voice === draft.ttsVoice) setDraft((current) => ({ ...current, audioUrl }))
-      await new Audio(audioUrl).play()
+      const configuredPreview = ttsVoices.find((item) => item.value === voice)?.previewUrl
+      let audioUrl = configuredPreview ? normalizeAssetUrl(configuredPreview) : voicePreviewCache.get(voice)
+      if (!audioUrl) {
+        audioUrl = await generateKoreanTts(VOICE_PREVIEW_TEXT, voice, 1)
+        voicePreviewCache.set(voice, audioUrl)
+      }
+
+      const audio = new Audio(audioUrl)
+      audio.preload = 'auto'
+      voicePreviewAudioRef.current = audio
+      audio.addEventListener('ended', () => {
+        if (voicePreviewAudioRef.current === audio) voicePreviewAudioRef.current = null
+        setPlayingPreviewVoice(null)
+      }, { once: true })
+      audio.addEventListener('error', () => {
+        if (voicePreviewAudioRef.current === audio) voicePreviewAudioRef.current = null
+        setPlayingPreviewVoice(null)
+        setError('Không tải được file nghe thử. Vui lòng thử lại.')
+      }, { once: true })
+      await audio.play()
+      setPlayingPreviewVoice(voice)
     } catch (cause) {
+      voicePreviewAudioRef.current = null
+      setPlayingPreviewVoice(null)
       setError(cause instanceof Error ? cause.message : 'Không thể nghe thử giọng đọc.')
     } finally {
       setPreviewingVoice(false)
@@ -561,7 +665,7 @@ export default function AdminExercises() {
             </div>}
           </section>
 
-          <section className={`admin-form-section admin-content-section${isVocabularyExercise ? ' is-vocab' : ''}${isGrammarExercise ? ' is-grammar' : ''}`}>
+          <section className={`admin-form-section admin-content-section${isVocabularyExercise ? ' is-vocab' : ''}${isGrammarExercise ? ' is-grammar' : ''}${isDictation ? ' is-dictation' : ''}${isShadowing ? ' is-shadowing' : ''}`}>
             <div className="admin-section-title"><span>{isVocabularyExercise ? 'Nội dung từ vựng' : isGrammarExercise ? 'Nội dung ngữ pháp' : isDictation ? 'Nội dung nghe' : 'Câu luyện nói'}</span></div>
             {isVocabularyExercise && <>
               <div className="admin-vocab-main">
@@ -569,12 +673,69 @@ export default function AdminExercises() {
                 <label className="admin-vi-field">Nội dung tiếng Việt<input value={draft.promptVi} onChange={(event) => setDraft({ ...draft, promptVi: event.target.value })} /></label>
                 <label className="admin-vocab-input">Loại từ<input value={draft.partOfSpeech} onChange={(event) => setDraft({ ...draft, partOfSpeech: event.target.value })} placeholder="Ví dụ: Danh từ, Động từ…" /></label>
                 <label className="admin-vocab-input">Phát âm chuẩn<input value={draft.pronunciation} onChange={(event) => setDraft({ ...draft, pronunciation: event.target.value })} placeholder="Ví dụ: [꼳따발]" /></label>
-                <label className="admin-vocab-input admin-voice-field">Phát âm thanh (TTS)<div className="admin-voice-preview-row"><VoiceSelect value={draft.ttsVoice} onChange={(value) => setDraft({ ...draft, ttsVoice: value, audioUrl: '' })} onPreview={(value) => void previewVoice(value)} previewing={previewingVoice} /><button type="button" className="admin-voice-preview" disabled={previewingVoice || !draft.promptKo.trim()} onClick={() => void previewVoice()}>{previewingVoice ? <LoaderCircle className="spin" size={16} /> : <Volume2 size={16} />} Nghe thử</button></div></label>
+                <label className="admin-vocab-input admin-voice-field">Phát âm thanh (TTS)<div className="admin-voice-preview-row"><VoiceSelect value={draft.ttsVoice} onChange={(value) => setDraft({ ...draft, ttsVoice: value, audioUrl: '' })} onPreview={(value) => void previewVoice(value)} previewing={previewingVoice} /><button type="button" className={`admin-voice-preview${playingPreviewVoice === draft.ttsVoice ? ' is-playing' : ''}`} disabled={previewingVoice} onClick={() => void previewVoice()}>{previewingVoice ? <LoaderCircle className="spin" size={16} /> : <Volume2 size={16} />} {playingPreviewVoice === draft.ttsVoice ? 'Dừng nghe' : 'Nghe thử giọng'}</button></div></label>
               </div>
               <div className="admin-vocab-side">
                 <div className="admin-upload-field admin-image-field"><span>Hình ảnh</span><label className={uploading === 'image' ? 'uploading' : ''}>{uploading === 'image' ? <LoaderCircle className="spin" /> : <Image />}<strong>{draft.imageUrl ? 'Đổi hình ảnh' : 'Tải hình ảnh'}</strong><small>PNG, JPG, WEBP · tối đa 10 MB</small><input type="file" accept="image/*" onChange={(event) => previewUpload('image', event.target.files?.[0])} /></label>{draft.imageUrl && <div className="admin-uploaded-file image-preview"><img src={draft.imageUrl} alt="Xem trước hình bài tập" /><a href={draft.imageUrl} target="_blank" rel="noreferrer">Xem hình đã tải</a><button onClick={() => setDraft({ ...draft, imageUrl: '' })}><X size={15} /></button></div>}{draft.audioUrl && <div className="admin-uploaded-file"><audio controls src={draft.audioUrl} /><button title="Tạo lại audio khi lưu" onClick={() => setDraft({ ...draft, audioUrl: '' })}><X size={15} /></button></div>}</div>
               </div>
               <label className="admin-mnemonic-field">Mẹo nhớ<textarea rows={2} value={draft.mnemonic} onChange={(event) => setDraft({ ...draft, mnemonic: event.target.value })} placeholder="Ví dụ: 꽃(hoa) + 다발(bó) = bó hoa" /></label>
+              <div className="admin-vocab-enrichment">
+                <section className="admin-collocation-builder">
+                  <div className="admin-vocab-extra-heading"><span>Cụm từ hay đi chung</span><button type="button" onClick={() => setDraft({ ...draft, collocations: [...draft.collocations, { ko: '', vi: '' }] })}><Plus size={15} /> Thêm cụm từ</button></div>
+                  <div className="admin-collocation-list">
+                    {draft.collocations.map((row, index) => <div className="admin-collocation-row" key={index}>
+                      <input value={row.ko} onChange={(event) => setDraft({ ...draft, collocations: draft.collocations.map((item, itemIndex) => itemIndex === index ? { ...item, ko: event.target.value } : item) })} placeholder="Cụm từ tiếng Hàn" />
+                      <input value={row.vi} onChange={(event) => setDraft({ ...draft, collocations: draft.collocations.map((item, itemIndex) => itemIndex === index ? { ...item, vi: event.target.value } : item) })} placeholder="Nghĩa tiếng Việt" />
+                      <button type="button" aria-label={`Xóa cụm từ ${index + 1}`} disabled={draft.collocations.length === 1} onClick={() => setDraft({ ...draft, collocations: draft.collocations.filter((_, itemIndex) => itemIndex !== index) })}><X size={15} /></button>
+                    </div>)}
+                  </div>
+                </section>
+                <section className="admin-example-builder admin-dialogue-builder">
+                  <div className="admin-vocab-extra-heading">
+                    <span>Ví dụ minh họa dạng hội thoại</span>
+                    <button type="button" onClick={() => setDraft((current) => {
+                      const lastSpeaker = current.dialogues.at(-1)?.speaker
+                      return { ...current, dialogues: [...current.dialogues, { speaker: lastSpeaker === 'A' ? 'B' : 'A', ko: '', vi: '' }] }
+                    })}><Plus size={15} /> Thêm hộp hội thoại</button>
+                  </div>
+                  <div className="admin-dialogue-list">
+                    {draft.dialogues.map((line, index) => <article className={`admin-dialogue-row speaker-${line.speaker.toLowerCase()}`} key={`dialogue-${index}`}>
+                      <div className="admin-dialogue-row-head">
+                        <span>Lượt {index + 1}</span>
+                        <div className="admin-dialogue-speaker-switch" aria-label={`Người nói lượt ${index + 1}`}>
+                          {(['A', 'B'] as const).map((speaker) => <button
+                            type="button"
+                            className={line.speaker === speaker ? 'is-active' : ''}
+                            aria-pressed={line.speaker === speaker}
+                            key={speaker}
+                            onClick={() => setDraft((current) => ({
+                              ...current,
+                              dialogues: current.dialogues.map((item, itemIndex) => itemIndex === index ? { ...item, speaker } : item),
+                            }))}
+                          >{speaker}</button>)}
+                        </div>
+                        <button
+                          type="button"
+                          className="admin-dialogue-remove"
+                          aria-label={`Xóa lượt hội thoại ${index + 1}`}
+                          disabled={draft.dialogues.length === 1}
+                          onClick={() => setDraft((current) => ({ ...current, dialogues: current.dialogues.filter((_, itemIndex) => itemIndex !== index) }))}
+                        ><X size={15} /></button>
+                      </div>
+                      <div className="admin-dialogue-fields">
+                        <label>Câu tiếng Hàn<textarea rows={2} value={line.ko} onChange={(event) => setDraft((current) => ({
+                          ...current,
+                          dialogues: current.dialogues.map((item, itemIndex) => itemIndex === index ? { ...item, ko: event.target.value } : item),
+                        }))} placeholder="Nhập câu hội thoại tiếng Hàn…" /></label>
+                        <label>Nghĩa tiếng Việt<textarea rows={2} value={line.vi} onChange={(event) => setDraft((current) => ({
+                          ...current,
+                          dialogues: current.dialogues.map((item, itemIndex) => itemIndex === index ? { ...item, vi: event.target.value } : item),
+                        }))} placeholder="Nhập bản dịch lượt thoại…" /></label>
+                      </div>
+                    </article>)}
+                  </div>
+                </section>
+              </div>
             </>}
             {isGrammarExercise && <>
               <div className="admin-grammar-main">
@@ -584,11 +745,32 @@ export default function AdminExercises() {
               </div>
               <div className="admin-grammar-side">
                 <div className="admin-formula-builder">
-                  <div><span>Công thức / cách dùng</span><button type="button" onClick={() => setDraft({ ...draft, formulaLines: [...draft.formulaLines, ''] })}><Plus size={15} /> Thêm dòng</button></div>
-                  {draft.formulaLines.map((line, index) => <label key={index}>
-                    <input value={line} onChange={(event) => setDraft({ ...draft, formulaLines: draft.formulaLines.map((item, itemIndex) => itemIndex === index ? event.target.value : item) })} placeholder={`Cách dùng ${index + 1}`} />
-                    {draft.formulaLines.length > 1 && <button type="button" onClick={() => setDraft({ ...draft, formulaLines: draft.formulaLines.filter((_, itemIndex) => itemIndex !== index) })}><X size={14} /></button>}
-                  </label>)}
+                  <div><span className="admin-formula-title">Công thức / cách dùng<small><GripVertical size={13} /> Kéo thả để xếp</small></span><button type="button" onClick={() => setDraft({ ...draft, formulaLines: [...draft.formulaLines, ''] })}><Plus size={15} /> Thêm cách dùng</button></div>
+                  <div className="admin-formula-list">
+                    {draft.formulaLines.map((line, index) => <div
+                      className={`admin-formula-row${draggedFormulaIndex === index ? ' is-dragging' : ''}`}
+                      draggable
+                      key={index}
+                      onDragStart={(event) => {
+                        setDraggedFormulaIndex(index)
+                        event.dataTransfer.effectAllowed = 'move'
+                      }}
+                      onDragOver={(event) => {
+                        event.preventDefault()
+                        event.dataTransfer.dropEffect = 'move'
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault()
+                        if (draggedFormulaIndex !== null) moveFormulaLine(draggedFormulaIndex, index)
+                        setDraggedFormulaIndex(null)
+                      }}
+                      onDragEnd={() => setDraggedFormulaIndex(null)}
+                    >
+                      <span className="admin-formula-drag" title="Kéo để sắp xếp" aria-hidden="true"><GripVertical size={17} /></span>
+                      <input value={line} onChange={(event) => setDraft({ ...draft, formulaLines: draft.formulaLines.map((item, itemIndex) => itemIndex === index ? event.target.value : item) })} placeholder={`Cách dùng ${index + 1}`} />
+                      <button type="button" disabled={draft.formulaLines.length === 1} aria-label={`Xóa cách dùng ${index + 1}`} onClick={() => setDraft({ ...draft, formulaLines: draft.formulaLines.filter((_, itemIndex) => itemIndex !== index) })}><X size={14} /></button>
+                    </div>)}
+                  </div>
                 </div>
               </div>
               <label className="admin-note-field">Lưu ý<textarea rows={3} value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="Ví dụ: dùng với danh từ, động/tính từ có quy tắc riêng…" /></label>

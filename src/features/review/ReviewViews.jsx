@@ -232,31 +232,34 @@ function buildCoverageSelection(difficulty, fullPool, history, seed, vocabulary 
 }
 
 // Chọn N câu Shadowing (phản xạ có đồng hồ đếm ngược) từ SHADOW_LINES thật.
-function pickShadowingLines(count, seed) {
+function pickShadowingLines(lines, count, seed) {
+  const source = Array.isArray(lines) ? lines.filter(Boolean) : [];
   const shuffle = seed ? (arr) => seededShuffle(arr, seed + 777) : shuffleArr;
-  return shuffle(SHADOW_LINES).slice(0, count);
+  return shuffle(source).slice(0, count);
 }
 
 /* --- sinh đề "Ứng dụng" — người học tự viết câu, không chép nguyên văn --- */
-function generateWritingPrompts(stars) {
-  const words = shuffleArr(VOCAB_SAMPLE).map((w) => w.word);
-  const gram = shuffleArr(GRAMMAR_SAMPLE);
+function generateWritingPrompts(stars, vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE) {
+  const words = shuffleArr(vocabulary).map((word) => word?.word).filter(Boolean);
+  const patterns = shuffleArr(grammar).map((item) => item?.pattern).filter(Boolean);
+  const wordAt = (index) => words.length ? words[index % words.length] : "một từ vựng trong bài";
+  const grammarAt = (index) => patterns.length ? patterns[index % patterns.length] : "một cấu trúc ngữ pháp trong bài";
   if (stars === 3) {
     return [
-      { id: "w1", instruction: `Viết một câu sử dụng từ vựng: **${words[0]}**`, dialogue: false },
-      { id: "w2", instruction: `Viết một câu sử dụng ngữ pháp: **${gram[0].pattern}**`, dialogue: false },
+      { id: "w1", instruction: `Viết một câu sử dụng từ vựng: **${wordAt(0)}**`, dialogue: false },
+      { id: "w2", instruction: `Viết một câu sử dụng ngữ pháp: **${grammarAt(0)}**`, dialogue: false },
     ];
   }
   if (stars === 4) {
     return [
-      { id: "w1", instruction: `Viết một câu có chứa ít nhất 2 từ vựng: **${words[0]}**, **${words[1]}**`, dialogue: false },
-      { id: "w2", instruction: `Viết một câu sử dụng từ vựng **${words[2]}** và ngữ pháp **${gram[0].pattern}**`, dialogue: false },
+      { id: "w1", instruction: `Viết một câu có chứa ít nhất 2 từ vựng: **${wordAt(0)}**, **${wordAt(1)}**`, dialogue: false },
+      { id: "w2", instruction: `Viết một câu sử dụng từ vựng **${wordAt(2)}** và ngữ pháp **${grammarAt(0)}**`, dialogue: false },
     ];
   }
   return [
-    { id: "w1", instruction: `Viết một câu có chứa ít nhất 3 từ vựng: **${words[0]}**, **${words[1]}**, **${words[2]}**`, dialogue: false },
-    { id: "w2", instruction: `Viết một câu sử dụng từ vựng **${words[3]}** và ngữ pháp **${gram[0].pattern}**`, dialogue: false },
-    { id: "w3", instruction: `Viết đoạn hội thoại ngắn (2 câu) sử dụng **${words[4]}**, **${words[5]}** và ngữ pháp **${gram[1]?.pattern || gram[0].pattern}**`, dialogue: true },
+    { id: "w1", instruction: `Viết một câu có chứa ít nhất 3 từ vựng: **${wordAt(0)}**, **${wordAt(1)}**, **${wordAt(2)}**`, dialogue: false },
+    { id: "w2", instruction: `Viết một câu sử dụng từ vựng **${wordAt(3)}** và ngữ pháp **${grammarAt(0)}**`, dialogue: false },
+    { id: "w3", instruction: `Viết đoạn hội thoại ngắn (2 câu) sử dụng **${wordAt(4)}**, **${wordAt(5)}** và ngữ pháp **${grammarAt(1)}**`, dialogue: true },
   ];
 }
 
@@ -317,10 +320,10 @@ export function SkillCompletionView({ title, description, assessment, loading, o
   );
 }
 
-function buildReviewPool(vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, lines = SHADOW_LINES, exercises = []) {
+function buildReviewPool(vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, dictationLines = SHADOW_LINES) {
   const VOCAB_SAMPLE = vocabulary;
   const GRAMMAR_SAMPLE = grammar;
-  const SHADOW_LINES = lines;
+  const DICTATION_LINES = Array.isArray(dictationLines) ? dictationLines : [];
   const pool = [];
 
   // 1) Chọn hình đúng — dùng ảnh 28 từ vựng
@@ -339,9 +342,9 @@ function buildReviewPool(vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, li
     pool.push({ type: "meaning", category: "tuvung", prompt: w.word, options, correctExplain: w.pron ? `phát âm: ${w.pron}` : null, key: `vocab:${w.word}`, label: w.word });
   });
 
-  // 3) Nghe hiểu — dùng audio + nghĩa 6 câu Shadowing
-  SHADOW_LINES.forEach((line, i) => {
-    const distractors = pickDistractors(SHADOW_LINES, i, 3, (x) => x.vi);
+  // 3) Nghe hiểu — chỉ dùng nội dung Nghe chép chính tả của bài đang chọn.
+  DICTATION_LINES.forEach((line, i) => {
+    const distractors = pickDistractors(DICTATION_LINES, i, 3, (x) => x.vi);
     const options = shuffleArr([{ text: line.vi, correct: true }, ...distractors.map((d) => ({ text: d, correct: false }))]);
     pool.push({ type: "listening", category: "nghehieu", prompt: line.ko, audio: line.audio, options, correctExplain: `nguyên văn: ${line.ko.replace(/\*\*/g, "")}`, key: `listen:${line.no}`, label: `Câu ${line.no} (nghe hiểu)` });
   });
@@ -402,43 +405,14 @@ function buildReviewPool(vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, li
 
   // 7) Hội thoại — chọn đúng câu tiếp theo trong mạch hội thoại thật (kiểm tra
   //    hiểu ngữ cảnh, không chỉ nghe/dịch từng câu rời rạc)
-  SHADOW_LINES.forEach((line, i) => {
-    if (i >= SHADOW_LINES.length - 1) return; // câu cuối không có "câu tiếp theo"
-    const correctNext = SHADOW_LINES[i + 1];
-    const otherIdx = SHADOW_LINES.map((_, j) => j).filter((j) => j !== i && j !== i + 1);
-    const distractors = shuffleArr(otherIdx).slice(0, 3).map((j) => SHADOW_LINES[j].ko);
+  DICTATION_LINES.forEach((line, i) => {
+    if (i >= DICTATION_LINES.length - 1) return; // câu cuối không có "câu tiếp theo"
+    const correctNext = DICTATION_LINES[i + 1];
+    const otherIdx = DICTATION_LINES.map((_, j) => j).filter((j) => j !== i && j !== i + 1);
+    const distractors = shuffleArr(otherIdx).slice(0, 3).map((j) => DICTATION_LINES[j].ko);
     if (distractors.length < 3) return;
     const options = shuffleArr([{ text: correctNext.ko, correct: true, isKo: true }, ...distractors.map((d) => ({ text: d, correct: false, isKo: true }))]);
     pool.push({ type: "dialogue", category: "hoithoai", prompt: line.ko, options, correctExplain: correctNext.vi, key: `dlg:${line.no}`, label: `Câu ${line.no} (mạch hội thoại)` });
-  });
-
-  exercises.filter((exercise) => exercise.skillType === "review").forEach((exercise) => {
-    const correct = String(exercise.answer?.correct || "");
-    if (!correct) return;
-    if (exercise.exerciseType === "fill_blank") {
-      const distractors = shuffleArr(vocabulary.map((word) => word.word).filter((word) => word !== correct)).slice(0, 3);
-      pool.push({
-        type: "fillblank",
-        category: "tuvung",
-        prompt: exercise.promptKo,
-        options: shuffleArr([{ text: correct, correct: true, isKo: true }, ...distractors.map((text) => ({ text, correct: false, isKo: true }))]),
-        correctExplain: exercise.promptVi || exercise.explanationVi,
-        key: `exercise:${exercise.id}`,
-        label: correct,
-      });
-    }
-    if (exercise.exerciseType === "multiple_choice_meaning") {
-      const distractors = shuffleArr(vocabulary.map((word) => word.meaningVi).filter((meaning) => meaning !== correct)).slice(0, 3);
-      pool.push({
-        type: "meaning",
-        category: "tuvung",
-        prompt: exercise.promptKo,
-        options: shuffleArr([{ text: correct, correct: true }, ...distractors.map((text) => ({ text, correct: false }))]),
-        correctExplain: exercise.explanationVi,
-        key: `exercise:${exercise.id}`,
-        label: exercise.promptKo,
-      });
-    }
   });
 
   return pool;
@@ -523,18 +497,21 @@ export function ReviewLessonSelectView({ onBack, onNext, lessons = FALLBACK_LESS
 }
 
 
-export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, lines = SHADOW_LINES, exercises = [], onBack, onStart }) {
+export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, dictationLines = SHADOW_LINES, shadowingLines = SHADOW_LINES, onBack, onStart }) {
   const [stars, setStars] = useState(3);
   const [hasStandard, setHasStandard] = useState(null); // random mode: null=đang kiểm tra, false=lần đầu (đề chuẩn), true=đã làm rồi (đề mới)
-  const poolSize = useMemo(() => buildReviewPool(vocabulary, grammar, lines, exercises).length, [vocabulary, grammar, lines, exercises]);
+  const poolSize = useMemo(() => buildReviewPool(vocabulary, grammar, dictationLines).length, [vocabulary, grammar, dictationLines]);
   const diff = REVIEW_DIFFICULTY[stars - 1];
   const stats = [
     { label: "Từ vựng", count: vocabulary.length, icon: BookOpen, color: "#7C6FE4", bg: "#F0EEFC" },
     { label: "Ngữ pháp", count: grammar.length, icon: NotebookPen, color: "#3FA95C", bg: "#EBF7EE" },
-    { label: "Hội thoại", count: lines.length, icon: MessageCircle, color: "#E8912E", bg: "#FDF3E7" },
-    { label: "Nghe hiểu", count: lines.length, icon: Headphones, color: "#4A90E2", bg: "#EEF4FD" },
+    { label: "Nghe hiểu", count: dictationLines.length, icon: Headphones, color: "#4A90E2", bg: "#EEF4FD" },
+    { label: "Shadowing phản xạ", count: shadowingLines.length, icon: MessageCircle, color: "#E8912E", bg: "#FDF3E7" },
   ];
-  const isFull = diff.vocabCount >= VOCAB_SAMPLE.length && diff.dialogueCount >= SHADOW_LINES.length - 1 && diff.listeningCount >= SHADOW_LINES.length;
+  const isFull = diff.vocabCount >= vocabulary.length
+    && diff.dialogueCount >= Math.max(0, dictationLines.length - 1)
+    && diff.listeningCount >= dictationLines.length
+    && diff.shadowingCount >= shadowingLines.length;
   const estimatedCount = diff.vocabCount + diff.listeningCount + diff.dialogueCount + diff.grammarQuestions;
 
   useEffect(() => {
@@ -632,14 +609,14 @@ export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabul
 }
 
 /* ---------- Màn 2: Làm bài ôn tập ---------- */
-export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, lines = SHADOW_LINES, exercises = [], isRecheck = false, onBack, onFinish, onProgress, onChangeSet }) {
+export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, dictationLines = SHADOW_LINES, shadowingLines = SHADOW_LINES, isRecheck = false, onBack, onFinish, onProgress, onChangeSet }) {
   const [history, setHistory] = useState(null);
   const [pool, setPool] = useState(null);
   const [idx, setIdx] = useState(0);
   const [picked, setPicked] = useState(null);
   const [answers, setAnswers] = useState([]); // { correct, category, key, label }
   const [phase, setPhase] = useState("mc"); // "mc" | "writing" | "shadowing"
-  const [writingPrompts, setWritingPrompts] = useState(() => (difficulty.writingCount > 0 ? generateWritingPrompts(difficulty.stars).slice(0, difficulty.writingCount) : []));
+  const [writingPrompts, setWritingPrompts] = useState(() => (difficulty.writingCount > 0 ? generateWritingPrompts(difficulty.stars, vocabulary, grammar).slice(0, difficulty.writingCount) : []));
   const [wIdx, setWIdx] = useState(0);
   const [wDraft, setWDraft] = useState("");
   const [wGrading, setWGrading] = useState(false);
@@ -650,7 +627,7 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
   const autoAdvanceRef = useRef(null);
 
   // ---- Shadowing phản xạ (đồng hồ đếm ngược) — chỉ có khi difficulty.shadowingCount > 0 ----
-  const [shadowLines, setShadowLines] = useState(() => (difficulty.shadowingCount > 0 ? pickShadowingLines(difficulty.shadowingCount, seed) : []));
+  const [shadowLines, setShadowLines] = useState(() => (difficulty.shadowingCount > 0 ? pickShadowingLines(shadowingLines, difficulty.shadowingCount, seed) : []));
   const [sIdx, setSIdx] = useState(0);
   const [sPhaseState, setSPhaseState] = useState("intro"); // intro | counting | recording | grading | done | timeout | unsupported
   const [sTimeLeft, setSTimeLeft] = useState(0);
@@ -667,7 +644,7 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
     let alive = true;
     loadReviewHistory(lesson, userId).then((h) => {
       if (!alive) return;
-      const fullPool = buildReviewPool(vocabulary, grammar, lines, exercises);
+      const fullPool = buildReviewPool(vocabulary, grammar, dictationLines);
       const selected = buildCoverageSelection(difficulty, fullPool, h, seed, vocabulary);
       setHistory(h);
       setPool(selected);
@@ -756,11 +733,11 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
   // thật (không seed), và tính là đã "dùng hết" đề chuẩn của mức sao này.
   const regenerate = async () => {
     if (seed) await markStandardExamTaken(difficulty.stars, lesson, userId);
-    const fullPool = buildReviewPool();
+    const fullPool = buildReviewPool(vocabulary, grammar, dictationLines);
     const selected = buildCoverageSelection(difficulty, fullPool, history || {}, null);
     setPool(selected);
-    setWritingPrompts(difficulty.writingCount > 0 ? generateWritingPrompts(difficulty.stars).slice(0, difficulty.writingCount) : []);
-    setShadowLines(difficulty.shadowingCount > 0 ? pickShadowingLines(difficulty.shadowingCount, null) : []);
+    setWritingPrompts(difficulty.writingCount > 0 ? generateWritingPrompts(difficulty.stars, vocabulary, grammar).slice(0, difficulty.writingCount) : []);
+    setShadowLines(difficulty.shadowingCount > 0 ? pickShadowingLines(shadowingLines, difficulty.shadowingCount, null) : []);
     setIdx(0); setPicked(null); setAnswers([]); setPhase("mc");
     setWIdx(0); setWDraft(""); setWResult(null); setWritingResults([]);
     setSIdx(0); setSPhaseState("intro"); setSReflexResults([]);

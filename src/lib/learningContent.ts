@@ -96,6 +96,9 @@ export type LearningVocabulary = {
   mnemonic?: string | null
   img?: string | null
   audio?: string | null
+  collocations?: { ko: string; vi: string }[]
+  dialogue?: { speaker?: string; ko: string; vi: string }[]
+  example?: { ko: string; vi: string }
   sortOrder: number
 }
 
@@ -113,7 +116,7 @@ export type LearningGrammar = {
 export type LearningExercise = {
   id: string
   lessonId: string
-  skillType: 'vocabulary_grammar' | 'dictation' | 'shadowing' | 'review'
+  skillType: 'vocabulary_grammar' | 'dictation' | 'shadowing'
   exerciseType: string
   promptKo?: string | null
   promptVi?: string | null
@@ -155,6 +158,7 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
     supabase
       .from('lesson_exercises')
       .select('id, lesson_id, skill_type, exercise_type, prompt_ko, prompt_vi, answer, explanation_vi, media_url, image_url, audio_url, sort_order')
+      .in('skill_type', ['vocabulary_grammar', 'dictation', 'shadowing'])
       .order('sort_order'),
   ])
   if (vocabularyResult.error || grammarResult.error || exerciseResult.error) return null
@@ -295,6 +299,27 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
     .map((row) => {
       const answer = asRecord(row.answer)
       const word = textFrom(answer.word) ?? textFrom(answer.correct) ?? textFrom(row.prompt_ko) ?? ''
+      const collocations = Array.isArray(answer.collocations)
+        ? answer.collocations.map((entry) => {
+          const value = asRecord(entry)
+          return { ko: textFrom(value.ko) ?? '', vi: textFrom(value.vi) ?? '' }
+        }).filter((entry) => entry.ko || entry.vi)
+        : []
+      const example = asRecord(answer.example)
+      const dialogueSource = Array.isArray(answer.dialogues)
+        ? answer.dialogues
+        : Array.isArray(answer.dialogue) ? answer.dialogue : []
+      const dialogue = dialogueSource.map((entry) => {
+        const value = asRecord(entry)
+        return {
+          speaker: textFrom(value.speaker) ?? 'A',
+          ko: textFrom(value.ko) ?? textFrom(value.korean) ?? '',
+          vi: textFrom(value.vi) ?? textFrom(value.vietnamese) ?? textFrom(value.meaning) ?? '',
+        }
+      }).filter((line) => line.ko || line.vi)
+      const firstDialogue = dialogue[0]
+      const exampleKo = textFrom(example.ko) ?? textFrom(answer.exampleKo) ?? firstDialogue?.ko ?? ''
+      const exampleVi = textFrom(example.vi) ?? textFrom(answer.exampleVi) ?? firstDialogue?.vi ?? ''
       return {
         id: `exercise-vocab-${row.id}`,
         lessonId: row.lesson_id,
@@ -305,6 +330,9 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
         mnemonic: textFrom(answer.mnemonic) ?? textFrom(row.explanation_vi),
         img: textFrom(answer.imageUrl) ?? textFrom(row.image_url) ?? textFrom(row.media_url),
         audio: textFrom(answer.audioUrl) ?? textFrom(row.audio_url),
+        collocations: collocations.length ? collocations : undefined,
+        dialogue: dialogue.length ? dialogue : undefined,
+        example: exampleKo || exampleVi ? { ko: exampleKo, vi: exampleVi } : undefined,
         sortOrder: row.sort_order,
       }
     })
@@ -360,7 +388,8 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
     }),
   ].sort((a, b) => a.sortOrder - b.sortOrder)
   const exercises: LearningExercise[] = (exerciseResult.data ?? [])
-    .filter((row) => activeLessonIds.has(row.lesson_id))
+    .filter((row) => activeLessonIds.has(row.lesson_id)
+      && ['vocabulary_grammar', 'dictation', 'shadowing'].includes(row.skill_type))
     .map((row) => ({
       id: row.id,
       lessonId: row.lesson_id,
