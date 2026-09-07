@@ -78,6 +78,13 @@ const skills = [
   { value: 'shadowing', label: 'Shadowing', icon: Mic },
 ] as const
 
+const filterSkills = [
+  { value: 'vocabulary', label: 'Từ vựng', icon: BookOpen },
+  { value: 'grammar', label: 'Ngữ pháp', icon: NotebookPen },
+  { value: 'dictation', label: 'Nghe chép chính tả', icon: Headphones },
+  { value: 'shadowing', label: 'Shadowing', icon: Mic },
+] as const
+
 const emptyDraft: Draft = {
   lessonId: '',
   skillType: 'vocabulary_grammar',
@@ -141,6 +148,20 @@ function inferVocabularyGrammarKind(item?: Exercise): VocabularyGrammarKind {
   if (item.exercise_type === 'grammar') return 'grammar'
   if (asRecord(item.answer).formulaLines || asRecord(item.answer).contextVi) return 'grammar'
   return 'vocabulary'
+}
+
+function getExerciseSkillMeta(item: Exercise) {
+  if (item.skill_type === 'vocabulary_grammar') {
+    const kind = inferVocabularyGrammarKind(item)
+    if (kind === 'grammar') {
+      return { value: 'grammar', label: 'Ngữ pháp', icon: NotebookPen }
+    }
+    return { value: 'vocabulary', label: 'Từ vựng', icon: BookOpen }
+  }
+  if (item.skill_type === 'dictation') {
+    return { value: 'dictation', label: 'Nghe chép chính tả', icon: Headphones }
+  }
+  return { value: 'shadowing', label: 'Shadowing', icon: Mic }
 }
 
 function normalizeTtsVoice(value: unknown): TtsVoice {
@@ -378,10 +399,14 @@ export default function AdminExercises() {
   useEffect(() => { void load() }, [])
 
   const filtered = items.filter((item) =>
-    skills.some((option) => option.value === item.skill_type)
-    && (book === 'all' || item.lessons?.textbook_id === book)
+    (book === 'all' || item.lessons?.textbook_id === book)
     && (lesson === 'all' || item.lesson_id === lesson)
-    && (skill === 'all' || item.skill_type === skill)
+    && (
+      skill === 'all'
+      || (skill === 'vocabulary' && item.skill_type === 'vocabulary_grammar' && inferVocabularyGrammarKind(item) === 'vocabulary')
+      || (skill === 'grammar' && item.skill_type === 'vocabulary_grammar' && inferVocabularyGrammarKind(item) === 'grammar')
+      || (skill === item.skill_type)
+    )
     && `${item.prompt_ko} ${item.prompt_vi || ''} ${item.lessons?.title_ko || ''}`.toLowerCase().includes(search.trim().toLowerCase()),
   )
 
@@ -389,7 +414,14 @@ export default function AdminExercises() {
     setPendingImage(null)
     setEditing(item || null)
     if (!item) {
-      setDraft({ ...emptyDraft, lessonId: availableLessons[0]?.id || lessons[0]?.id || '' })
+      const defaultKind = skill === 'grammar' ? 'grammar' : 'vocabulary'
+      const defaultSkillType = skill === 'dictation' || skill === 'shadowing' ? skill : 'vocabulary_grammar'
+      setDraft({
+        ...emptyDraft,
+        skillType: defaultSkillType,
+        vocabularyGrammarKind: defaultKind,
+        lessonId: availableLessons[0]?.id || lessons[0]?.id || '',
+      })
       return
     }
     const answer = asRecord(item.answer)
@@ -628,16 +660,23 @@ export default function AdminExercises() {
     </div>
     <div className="admin-skill-filters" aria-label="Lọc theo kỹ năng">
       <button className={skill === 'all' ? 'active' : ''} onClick={() => setSkill('all')}><Grid3X3 size={17} /><span>Tất cả</span><em>{items.length}</em></button>
-      {skills.map(({ value, label, icon: Icon }) => <button key={value} className={skill === value ? 'active' : ''} onClick={() => setSkill(value)}><Icon size={17} /><span>{label}</span><em>{items.filter((item) => item.skill_type === value).length}</em></button>)}
+      {filterSkills.map(({ value, label, icon: Icon }) => {
+        const count = items.filter((item) => {
+          if (value === 'vocabulary') return item.skill_type === 'vocabulary_grammar' && inferVocabularyGrammarKind(item) === 'vocabulary'
+          if (value === 'grammar') return item.skill_type === 'vocabulary_grammar' && inferVocabularyGrammarKind(item) === 'grammar'
+          return item.skill_type === value
+        }).length
+        return <button key={value} className={skill === value ? 'active' : ''} onClick={() => setSkill(value)}><Icon size={17} /><span>{label}</span><em>{count}</em></button>
+      })}
     </div>
     <div className={`admin-exercise-results view-${view}`}>
       <div className="admin-exercise-table-wrap"><table className="admin-exercise-table"><thead><tr><th>Nội dung</th><th>Giáo trình · Bài học</th><th>Kỹ năng</th><th>Dữ liệu lưu</th><th>Tệp đính kèm</th><th>Thao tác</th></tr></thead><tbody>{filtered.map((item) => {
-        const meta = skills.find((option) => option.value === item.skill_type) ?? skills[0]
+        const meta = getExerciseSkillMeta(item)
         const Icon = meta.icon
         return <tr key={item.id}><td><strong>{item.prompt_ko}</strong>{item.prompt_vi && <small>{item.prompt_vi}</small>}</td><td><span>{item.lessons?.textbooks?.title_ko || 'Giáo trình'}</span><small>Bài {item.lessons?.lesson_number}</small></td><td><span className="admin-skill-cell"><Icon size={16} />{meta.label}</span></td><td><span className="admin-answer-cell">{exerciseAnswerSummary(item)}</span></td><td><span className="admin-media-cell">{(item.image_url || item.media_url) && <Image size={16} />} {item.audio_url && <Music size={16} />} {!item.image_url && !item.media_url && !item.audio_url && '—'}</span></td><td><div className="admin-row-actions"><button onClick={() => open(item)} aria-label="Sửa"><Pencil size={16} /></button><button className="danger" onClick={() => setDeleteTarget(item)} aria-label="Xóa"><Trash2 size={16} /></button></div></td></tr>
       })}</tbody></table></div>
       <div className="admin-exercise-grid">{filtered.map((item) => {
-        const meta = skills.find((option) => option.value === item.skill_type) ?? skills[0]
+        const meta = getExerciseSkillMeta(item)
         const Icon = meta.icon
         return <article key={item.id} className="admin-exercise-card"><div className="admin-exercise-head"><span><Icon size={17} />{meta.label}</span><div><button onClick={() => open(item)} aria-label="Sửa"><Pencil size={16} /></button><button className="danger" onClick={() => setDeleteTarget(item)} aria-label="Xóa"><Trash2 size={16} /></button></div></div><small>{item.lessons?.textbooks?.title_ko || 'Giáo trình'} · Bài {item.lessons?.lesson_number}</small><h3>{item.prompt_ko}</h3>{item.prompt_vi && <p>{item.prompt_vi}</p>}<div className="admin-exercise-media">{(item.image_url || item.media_url) && <span><Image size={15} /> Hình ảnh</span>}{item.audio_url && <span><Music size={15} /> Audio</span>}</div></article>
       })}</div>

@@ -89,6 +89,8 @@ function localDateKey(value: string | Date = new Date()): string {
 export type LearningVocabulary = {
   id: string
   lessonId: string
+  textbookId?: string
+  lessonNo?: number
   word: string
   meaningVi: string
   type?: string | null
@@ -105,8 +107,12 @@ export type LearningVocabulary = {
 export type LearningGrammar = {
   id: string
   lessonId: string
+  textbookId?: string
+  lessonNo?: number
   pattern: string
   meaningVi: string
+  translation?: string
+  context?: string
   usageVi?: string | null
   conjugationVi?: string | null
   notesVi?: string | null
@@ -116,6 +122,8 @@ export type LearningGrammar = {
 export type LearningExercise = {
   id: string
   lessonId: string
+  textbookId?: string
+  lessonNo?: number
   skillType: 'vocabulary_grammar' | 'dictation' | 'shadowing'
   exerciseType: string
   promptKo?: string | null
@@ -279,24 +287,30 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
   const nextLesson = lessons.find((lesson) => lesson.status === 'current' && lesson.progressPercent < 100)
   const continueLesson = explicitlySelectedLesson ?? completedTodayLesson ?? latestInProgress ?? nextLesson
   const continueCompletedToday = Boolean(completedTodayLesson && continueLesson?.id === completedTodayLesson.id)
-  const activeLessonIds = new Set(lessons.map((lesson) => lesson.id))
+  const allLessonsMap = new Map((lessonResult.data ?? []).map((row) => [row.id, row]))
   const vocabularyFromTable: LearningVocabulary[] = (vocabularyResult.data ?? [])
-    .filter((row) => activeLessonIds.has(row.lesson_id))
-    .map((row) => ({
-      id: row.id,
-      lessonId: row.lesson_id,
-      word: row.word_ko,
-      meaningVi: row.meaning_vi,
-      type: row.part_of_speech,
-      pron: row.pronunciation,
-      mnemonic: row.mnemonic,
-      img: row.image_url,
-      audio: row.audio_url,
-      sortOrder: row.sort_order,
-    }))
-  const vocabularyFromExercises: LearningVocabulary[] = exerciseVocabularyRows
-    .filter((row) => activeLessonIds.has(row.lesson_id))
+    .filter((row) => allLessonsMap.has(row.lesson_id))
     .map((row) => {
+      const lessonInfo = allLessonsMap.get(row.lesson_id)
+      return {
+        id: row.id,
+        lessonId: row.lesson_id,
+        textbookId: lessonInfo?.textbook_id,
+        lessonNo: lessonInfo?.lesson_number,
+        word: row.word_ko,
+        meaningVi: row.meaning_vi,
+        type: row.part_of_speech,
+        pron: row.pronunciation,
+        mnemonic: row.mnemonic,
+        img: row.image_url,
+        audio: row.audio_url,
+        sortOrder: row.sort_order,
+      }
+    })
+  const vocabularyFromExercises: LearningVocabulary[] = exerciseVocabularyRows
+    .filter((row) => allLessonsMap.has(row.lesson_id))
+    .map((row) => {
+      const lessonInfo = allLessonsMap.get(row.lesson_id)
       const answer = asRecord(row.answer)
       const word = textFrom(answer.word) ?? textFrom(answer.correct) ?? textFrom(row.prompt_ko) ?? ''
       const collocations = Array.isArray(answer.collocations)
@@ -321,8 +335,10 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
       const exampleKo = textFrom(example.ko) ?? textFrom(answer.exampleKo) ?? firstDialogue?.ko ?? ''
       const exampleVi = textFrom(example.vi) ?? textFrom(answer.exampleVi) ?? firstDialogue?.vi ?? ''
       return {
-        id: `exercise-vocab-${row.id}`,
+        id: row.id,
         lessonId: row.lesson_id,
+        textbookId: lessonInfo?.textbook_id,
+        lessonNo: lessonInfo?.lesson_number,
         word,
         meaningVi: textFrom(answer.meaning) ?? textFrom(row.prompt_vi) ?? '',
         type: textFrom(answer.partOfSpeech),
@@ -349,27 +365,39 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
   ].sort((a, b) => a.sortOrder - b.sortOrder)
 
   const grammarFromTable: LearningGrammar[] = (grammarResult.data ?? [])
-    .filter((row) => activeLessonIds.has(row.lesson_id))
-    .map((row) => ({
-      id: row.id,
-      lessonId: row.lesson_id,
-      pattern: row.structure,
-      meaningVi: row.meaning_vi,
-      usageVi: row.usage_vi,
-      conjugationVi: row.conjugation_vi,
-      notesVi: row.notes_vi,
-      sortOrder: row.sort_order,
-    }))
-  const grammarFromExercises: LearningGrammar[] = (exerciseResult.data ?? [])
-    .filter((row) => activeLessonIds.has(row.lesson_id) && isVocabularyGrammarGrammar(row))
+    .filter((row) => allLessonsMap.has(row.lesson_id))
     .map((row) => {
+      const lessonInfo = allLessonsMap.get(row.lesson_id)
+      return {
+        id: row.id,
+        lessonId: row.lesson_id,
+        textbookId: lessonInfo?.textbook_id,
+        lessonNo: lessonInfo?.lesson_number,
+        pattern: row.structure,
+        meaningVi: row.meaning_vi,
+        translation: row.meaning_vi,
+        context: row.notes_vi || row.usage_vi || '',
+        usageVi: row.usage_vi,
+        conjugationVi: row.conjugation_vi,
+        notesVi: row.notes_vi,
+        sortOrder: row.sort_order,
+      }
+    })
+  const grammarFromExercises: LearningGrammar[] = (exerciseResult.data ?? [])
+    .filter((row) => allLessonsMap.has(row.lesson_id) && isVocabularyGrammarGrammar(row))
+    .map((row) => {
+      const lessonInfo = allLessonsMap.get(row.lesson_id)
       const answer = asRecord(row.answer)
       const formulaLines = textListFrom(answer.formulaLines)
       return {
-        id: `exercise-grammar-${row.id}`,
+        id: row.id,
         lessonId: row.lesson_id,
+        textbookId: lessonInfo?.textbook_id,
+        lessonNo: lessonInfo?.lesson_number,
         pattern: textFrom(answer.correct) ?? textFrom(row.prompt_ko) ?? '',
         meaningVi: textFrom(row.prompt_vi) ?? textFrom(answer.contextVi) ?? '',
+        translation: textFrom(row.prompt_vi) ?? textFrom(answer.contextVi) ?? '',
+        context: formulaLines.join('\n') || (textFrom(answer.note) ?? textFrom(row.explanation_vi) ?? ''),
         usageVi: formulaLines.join('\n') || null,
         conjugationVi: null,
         notesVi: textFrom(answer.note) ?? textFrom(row.explanation_vi),
@@ -388,22 +416,27 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
     }),
   ].sort((a, b) => a.sortOrder - b.sortOrder)
   const exercises: LearningExercise[] = (exerciseResult.data ?? [])
-    .filter((row) => activeLessonIds.has(row.lesson_id)
+    .filter((row) => allLessonsMap.has(row.lesson_id)
       && ['vocabulary_grammar', 'dictation', 'shadowing'].includes(row.skill_type))
-    .map((row) => ({
-      id: row.id,
-      lessonId: row.lesson_id,
-      skillType: row.skill_type as LearningExercise['skillType'],
-      exerciseType: row.exercise_type,
-      promptKo: row.prompt_ko,
-      promptVi: row.prompt_vi,
-      answer: (row.answer ?? {}) as Record<string, unknown>,
-      explanationVi: row.explanation_vi,
-      mediaUrl: row.media_url,
-      imageUrl: row.image_url,
-      audioUrl: row.audio_url,
-      sortOrder: row.sort_order,
-    }))
+    .map((row) => {
+      const lessonInfo = allLessonsMap.get(row.lesson_id)
+      return {
+        id: row.id,
+        lessonId: row.lesson_id,
+        textbookId: lessonInfo?.textbook_id,
+        lessonNo: lessonInfo?.lesson_number,
+        skillType: row.skill_type as LearningExercise['skillType'],
+        exerciseType: row.exercise_type,
+        promptKo: row.prompt_ko,
+        promptVi: row.prompt_vi,
+        answer: (row.answer ?? {}) as Record<string, unknown>,
+        explanationVi: row.explanation_vi,
+        mediaUrl: row.media_url,
+        imageUrl: row.image_url,
+        audioUrl: row.audio_url,
+        sortOrder: row.sort_order,
+      }
+    })
   return { textbooks, myTextbooks, availableTextbooks, lessons, activeTextbook, continueLesson, continueCompletedToday, hasStarted, vocabulary, grammar, exercises }
 }
 

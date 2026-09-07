@@ -219,18 +219,23 @@ export function saveRemoteVocabularyState(lesson: LessonIdentity, userId: string
   return write
 }
 
+const IS_UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const isUuid = (id?: string | null): boolean => Boolean(id && IS_UUID_REGEX.test(id))
+
 async function loadRemoteVocabularyStateForWordsUncached(words: IdentifiedVocabulary[], userId?: string | null): Promise<LocalVocabularyState | null> {
   if (!supabase || !userId || !words.length) return null
   const ownerId = await authenticatedUserId(userId)
   if (!ownerId) return null
-  const ids = words.map((word) => word.id)
+  const validWords = words.filter((word) => isUuid(word.id))
+  if (!validWords.length) return null
+  const ids = validWords.map((word) => word.id)
   const [progress, bookmarks, notes] = await Promise.all([
     supabase.from('vocabulary_progress').select('vocabulary_id, mastery, last_rating, next_review_at, times_reviewed').eq('user_id', ownerId).in('vocabulary_id', ids),
     supabase.from('vocabulary_bookmarks').select('vocabulary_id').eq('user_id', ownerId).in('vocabulary_id', ids),
     supabase.from('vocabulary_notes').select('vocabulary_id, note').eq('user_id', ownerId).in('vocabulary_id', ids),
   ])
   if (progress.error || bookmarks.error || notes.error) return null
-  const byId = new Map(words.map((word) => [word.id, word]))
+  const byId = new Map(validWords.map((word) => [word.id, word]))
   const state: LocalVocabularyState = {}
   for (const item of progress.data ?? []) {
     const word = byId.get(item.vocabulary_id)?.word
@@ -270,8 +275,10 @@ async function saveRemoteVocabularyStateForWordsNow(words: IdentifiedVocabulary[
   if (!supabase || !userId || !words.length) return false
   const ownerId = await authenticatedUserId(userId)
   if (!ownerId) return false
+  const validWords = words.filter((word) => isUuid(word.id))
+  if (!validWords.length) return false
   const operations: PromiseLike<unknown>[] = []
-  for (const word of words) {
+  for (const word of validWords) {
     const item = state[word.word]
     if (!item) continue
     if (item.box || item.lastRating || item.dueAt || item.timesReviewed) {

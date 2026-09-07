@@ -160,8 +160,8 @@ export function GrammarHubView({ onBack, onAddBook, books = [], vocabulary = [],
                   <span className="grammar-catalog-number">{index + 1}</span>
                   <span className="grammar-catalog-content">
                     <b lang="ko">{item.pattern}</b>
-                    <small>{item.translation}</small>
-                    <span>{item.context}</span>
+                    <small>{item.translation || item.meaningVi}</small>
+                    <span>{item.context || item.usageVi || item.notesVi}</span>
                   </span>
                   <span className="grammar-catalog-book"><BookOpen size={13} /> Bài {item.lessonNo || item.no || 1}</span>
                 </article>

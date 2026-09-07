@@ -5,11 +5,13 @@ export const mapDatabaseGrammar = (grammar, index) => ({
   no: index + 1,
   id: grammar.id,
   lessonId: grammar.lessonId,
+  textbookId: grammar.textbookId,
+  lessonNo: grammar.lessonNo,
   pattern: grammar.pattern,
   color: ['#7C6FE4', '#E5566B', '#3FA95C', '#E8912E'][index % 4],
   img: null,
-  context: grammar.usageVi || grammar.meaningVi,
-  translation: grammar.meaningVi,
+  context: grammar.context || grammar.usageVi || grammar.meaningVi,
+  translation: grammar.translation || grammar.meaningVi,
   formula: grammar.conjugationVi
     ? String(grammar.conjugationVi).split(/\r?\n/).filter(Boolean).map((form) => ({ subject: '', condition: 'Cách dùng', form }))
     : [{ subject: '', condition: 'Cấu trúc', form: grammar.pattern }],
