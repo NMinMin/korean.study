@@ -11,7 +11,7 @@ const exerciseSkillTypes = ['vocabulary_grammar', 'dictation', 'shadowing'] as c
 function isExerciseSkillType(value: unknown): value is SkillType {
   return typeof value === 'string' && exerciseSkillTypes.includes(value as SkillType)
 }
-const DASHBOARD_CACHE_VERSION = 3
+const DASHBOARD_CACHE_VERSION = 5
 const APP_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 
 function appDateKey(date = new Date()) {
@@ -44,16 +44,32 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const todayKey = appDateKey()
     const startKey = shiftDateKey(todayKey, -days + 1)
     const previousStartKey = shiftDateKey(startKey, -days)
-    const [{ data: stats, error: statsError }, { data: progress, error: progressError }, { data: vocabProgress, error: vocabError }, textbookCount, lessonCount, userCount, pendingReportCount] = await Promise.all([
+    const [{ data: stats, error: statsError }, { data: progress, error: progressError }, { data: vocabProgress, error: vocabError }, textbookResult, lessonCount, userCount, pendingReportCount] = await Promise.all([
       supabaseAdmin.from('daily_study_stats').select('user_id, study_date, minutes').gte('study_date', previousStartKey).lte('study_date', todayKey),
-      supabaseAdmin.from('lesson_progress').select('user_id, textbook_id, progress_percent, textbooks(title_ko)'),
-      supabaseAdmin.from('vocabulary_progress').select('vocabulary_id, incorrect_count, correct_count, vocabulary(word_ko, meaning_vi), textbooks(title_ko)').gt('incorrect_count', 0),
-      supabaseAdmin.from('textbooks').select('*', { count: 'exact', head: true }),
+      supabaseAdmin.from('lesson_progress').select('user_id, textbook_id, progress_percent'),
+      supabaseAdmin.from('vocabulary_progress').select('vocabulary_id, textbook_id, incorrect_count, correct_count').gt('incorrect_count', 0),
+      supabaseAdmin.from('textbooks').select('id, title_ko', { count: 'exact' }),
       supabaseAdmin.from('lessons').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('content_reports').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
     ])
-    if (statsError || progressError || vocabError) return reply.code(500).send({ code: 'DASHBOARD_READ_FAILED', message: 'Không thể tải thống kê dashboard.', requestId: request.id })
+    const countError = textbookResult.error || lessonCount.error || userCount.error || pendingReportCount.error
+    if (statsError || progressError || vocabError || countError) {
+      request.log.error({ statsError, progressError, vocabError, countError }, 'Admin dashboard base query failed')
+      return reply.code(500).send({ code: 'DASHBOARD_READ_FAILED', message: 'Không thể tải thống kê dashboard.', requestId: request.id })
+    }
+    const vocabularyIds = [...new Set((vocabProgress ?? []).map((item) => item.vocabulary_id).filter(Boolean))]
+    let exerciseRows: { id: string; prompt_ko: string; prompt_vi: string | null }[] = []
+    if (vocabularyIds.length) {
+      const { data, error } = await supabaseAdmin.from('lesson_exercises').select('id, prompt_ko, prompt_vi').in('id', vocabularyIds)
+      if (error) {
+        request.log.error({ error }, 'Admin dashboard canonical vocabulary query failed')
+        return reply.code(500).send({ code: 'DASHBOARD_READ_FAILED', message: 'Không thể tải thống kê dashboard.', requestId: request.id })
+      }
+      exerciseRows = data ?? []
+    }
+    const textbookTitles = new Map((textbookResult.data ?? []).map((item) => [item.id, item.title_ko]))
+    const exercisesById = new Map(exerciseRows.map((item) => [item.id, item]))
     const recent = (stats ?? []).filter((item) => item.study_date >= startKey)
     const previous = (stats ?? []).filter((item) => item.study_date < startKey)
     const activeUsers = new Set(recent.map((item) => item.user_id))
@@ -67,13 +83,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     })
     const courseMap = new Map<string, { title: string; total: number; count: number }>()
     for (const item of progress ?? []) {
-      const current = courseMap.get(item.textbook_id) ?? { title: (item.textbooks as { title_ko?: string } | null)?.title_ko || 'Giáo trình', total: 0, count: 0 }
+      const current = courseMap.get(item.textbook_id) ?? { title: textbookTitles.get(item.textbook_id) || 'Giáo trình', total: 0, count: 0 }
       current.total += Number(item.progress_percent || 0); current.count += 1; courseMap.set(item.textbook_id, current)
     }
     const hardMap = new Map<string, { word: string; meaning: string; course: string; incorrect: number; total: number }>()
     for (const item of vocabProgress ?? []) {
-      const vocab = item.vocabulary as { word_ko?: string; meaning_vi?: string } | null
-      const current = hardMap.get(item.vocabulary_id) ?? { word: vocab?.word_ko || '—', meaning: vocab?.meaning_vi || '—', course: (item.textbooks as { title_ko?: string } | null)?.title_ko || '—', incorrect: 0, total: 0 }
+      const vocab = exercisesById.get(item.vocabulary_id)
+      const current = hardMap.get(item.vocabulary_id) ?? { word: vocab?.prompt_ko || '—', meaning: vocab?.prompt_vi || '—', course: textbookTitles.get(item.textbook_id) || '—', incorrect: 0, total: 0 }
       current.incorrect += Number(item.incorrect_count || 0); current.total += Number(item.incorrect_count || 0) + Number(item.correct_count || 0); hardMap.set(item.vocabulary_id, current)
     }
     const payload = {
@@ -81,7 +97,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       averageMinutes: activeUsers.size ? totalMinutes / activeUsers.size / days : 0,
       retentionRate: previousUsers.size ? retained / previousUsers.size * 100 : 0,
       pendingReports: pendingReportCount.count ?? 0,
-      totalTextbooks: textbookCount.count ?? 0, totalLessons: lessonCount.count ?? 0, totalUsers: userCount.count ?? 0,
+      totalTextbooks: textbookResult.count ?? 0, totalLessons: lessonCount.count ?? 0, totalUsers: userCount.count ?? 0,
       chart, courses: [...courseMap.values()].map((item) => ({ title: item.title, percent: item.count ? item.total / item.count : 0 })).sort((a, b) => b.percent - a.percent).slice(0, 5),
       hardVocabulary: [...hardMap.values()].map((item) => ({ ...item, errorRate: item.total ? item.incorrect / item.total * 100 : 0 })).sort((a, b) => b.errorRate - a.errorRate).slice(0, 8),
     }
@@ -210,6 +226,48 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return reply.code(201).send({ data })
   })
 
+  app.patch<{ Body: { exerciseIds: string[]; lessonId: string } }>('/admin/exercises/actions/bulk-move', async (request, reply) => {
+    const exerciseIds = Array.isArray(request.body?.exerciseIds)
+      ? [...new Set(request.body.exerciseIds.filter((id): id is string => typeof id === 'string' && id.length > 0))]
+      : []
+    const lessonId = typeof request.body?.lessonId === 'string' ? request.body.lessonId.trim() : ''
+    if (!exerciseIds.length || !lessonId) return reply.code(400).send({ code: 'BULK_MOVE_FIELDS_REQUIRED', message: 'Hãy chọn ít nhất một bài tập và bài học đích.', requestId: request.id })
+    if (exerciseIds.length > 1000) return reply.code(400).send({ code: 'BULK_MOVE_LIMIT_EXCEEDED', message: 'Mỗi lần chỉ được chuyển tối đa 1.000 bài tập.', requestId: request.id })
+
+    const { data: targetLesson, error: lessonError } = await supabaseAdmin.from('lessons').select('id').eq('id', lessonId).maybeSingle()
+    if (lessonError || !targetLesson) return reply.code(404).send({ code: 'TARGET_LESSON_NOT_FOUND', message: 'Không tìm thấy bài học đích.', requestId: request.id })
+
+    const { data: selectedExercises, error: selectedError } = await supabaseAdmin
+      .from('lesson_exercises')
+      .select('id, lesson_id')
+      .in('id', exerciseIds)
+    if (selectedError) return reply.code(400).send({ code: 'EXERCISES_BULK_MOVE_READ_FAILED', message: 'Không thể đọc bài học nguồn của các bài tập.', requestId: request.id })
+    const sourceLessonIds = [...new Set((selectedExercises ?? []).map((item) => item.lesson_id).filter((id) => id !== lessonId))]
+
+    const { data, error } = await supabaseAdmin
+      .from('lesson_exercises')
+      .update({ lesson_id: lessonId, updated_at: new Date().toISOString() })
+      .in('id', exerciseIds)
+      .select('id')
+    if (error) return reply.code(400).send({ code: 'EXERCISES_BULK_MOVE_FAILED', message: 'Không thể chuyển các bài tập đã chọn.', requestId: request.id })
+
+    const movedIds = new Set((data ?? []).map((item) => item.id))
+    await supabaseAdmin.from('lessons').update({ status: 'published', updated_at: new Date().toISOString() }).eq('id', lessonId).eq('status', 'no_content')
+    const sourceCounts = await Promise.all(sourceLessonIds.map(async (sourceLessonId) => {
+      const { count } = await supabaseAdmin
+        .from('lesson_exercises')
+        .select('*', { count: 'exact', head: true })
+        .eq('lesson_id', sourceLessonId)
+        .eq('status', 'published')
+      return { sourceLessonId, count: count ?? 0 }
+    }))
+    const emptySourceLessonIds = sourceCounts.filter((item) => item.count === 0).map((item) => item.sourceLessonId)
+    if (emptySourceLessonIds.length) {
+      await supabaseAdmin.from('lessons').update({ status: 'no_content', updated_at: new Date().toISOString() }).in('id', emptySourceLessonIds).eq('status', 'published')
+    }
+    return { data: { movedIds: [...movedIds], count: movedIds.size, lessonId } }
+  })
+
   app.patch<{ Params: { id: string }; Body: { lessonId?: string; skillType?: SkillType; exerciseType?: string; promptKo?: string; promptVi?: string; answer?: unknown; explanationVi?: string; mediaUrl?: string; imageUrl?: string; audioUrl?: string; sortOrder?: number; status?: Status } }>('/admin/exercises/:id', async (request, reply) => {
     const body = request.body
     if (body.skillType !== undefined && !isExerciseSkillType(body.skillType)) return reply.code(400).send({ code: 'EXERCISE_SKILL_INVALID', message: 'Không thể lưu kỹ năng Ôn tập. Nội dung ôn tập được AI tạo từ ba kỹ năng nền tảng.', requestId: request.id })
@@ -220,7 +278,29 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return { data }
   })
 
+async function deleteStorageAsset(url?: string | null): Promise<void> {
+  if (!url || typeof url !== 'string') return
+  const match = url.match(/^(https?:\/\/api-cloud-u4v8\.onrender\.com)\/files\/(.+)$/i)
+  const [, origin, filePath] = match ?? []
+  if (!origin || !filePath) return
+  const deleteUrl = `${origin.replace(/^http:/i, 'https:')}/delete/${filePath}`
+  try {
+    await fetch(deleteUrl, { method: 'DELETE' })
+  } catch (err) {
+    console.warn('Lỗi khi xóa file storage:', deleteUrl, err)
+  }
+}
+
   app.delete<{ Params: { id: string } }>('/admin/exercises/:id', async (request, reply) => {
+    const { data: ex } = await supabaseAdmin.from('lesson_exercises').select('audio_url, image_url, media_url, answer').eq('id', request.params.id).maybeSingle()
+    if (ex) {
+      const urls: (string | null | undefined)[] = [ex.audio_url, ex.image_url, ex.media_url]
+      if (ex.answer && typeof ex.answer === 'object') {
+        const ans = ex.answer as Record<string, any>
+        urls.push(ans.audioUrl, ans.imageUrl, ans.mediaUrl)
+      }
+      await Promise.allSettled(urls.map((u) => deleteStorageAsset(u)))
+    }
     const { error } = await supabaseAdmin.from('lesson_exercises').delete().eq('id', request.params.id)
     if (error) return reply.code(400).send({ code: 'EXERCISE_DELETE_FAILED', message: error.message, requestId: request.id })
     return reply.code(204).send()

@@ -50,11 +50,12 @@ export async function saveRemoteDailyGoal(goal: DailyGoalData) {
   if (!supabase) return false
   const userId = await currentUserId()
   if (!userId) return false
-  const [settings, stats] = await Promise.all([
-    supabase.from('user_settings').upsert({ user_id: userId, daily_goal_minutes: goal.targetMinutes, updated_at: new Date().toISOString() }),
-    supabase.from('daily_study_stats').upsert({ user_id: userId, study_date: goal.todayDate, minutes: goal.todayMinutes, updated_at: new Date().toISOString() }),
-  ])
-  return !settings.error && !stats.error
+  const { error } = await supabase.from('user_settings').upsert({
+    user_id: userId,
+    daily_goal_minutes: goal.targetMinutes,
+    updated_at: new Date().toISOString(),
+  })
+  return !error
 }
 
 export async function recordRemoteStudyMinutes(minutes: number): Promise<DailyGoalData | null> {

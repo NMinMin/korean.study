@@ -14,10 +14,9 @@ import {
   dictationProgressKey,
   legacyDictationProgressKey,
   readScopedProgress,
-  saveScopedProgress
 } from '../../services/storageShim';
 import { loadRemoteActivityProgress, saveRemoteActivityProgress } from '../../lib/activityProgress';
-import { correctDictationResults } from '../dashboard/progressService';
+import { DICTATION_PASS_PERCENT, correctDictationResults } from '../dashboard/progressService';
 import { SkillCompletionView } from '../review/ReviewViews';
 
 const FILL_BLANK_ITEMS = [
@@ -310,7 +309,6 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
   const [retryRound, setRetryRound] = useState(0);
   const [retryNotice, setRetryNotice] = useState("");
   const [showCompletion, setShowCompletion] = useState(false);
-  const [isRecheck, setIsRecheck] = useState(false);
   const audioRef = useRef(null);
   const autoAdvanceRef = useRef(null);
 
@@ -322,7 +320,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
   const maxReveal = target.replace(/\s/g, "").length;
   const value = inputs[idx] || "";
   const st = status[idx];
-  const questionLocked = st === "correct" || (mode === "test" && st === "failed");
+  const questionLocked = st === "correct" || (mode === "test" && (st === "failed" || st === "skipped"));
   const storageKey = dictationProgressKey(lesson, userId);
   const itemIdentity = (item, index) => item?.no ?? lines.indexOf(item) ?? index;
   const progressKey = (route, item = line, index = idx) => `${route}:${itemIdentity(item, index)}`;
@@ -337,16 +335,21 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
       if (!alive) return;
       const localRaw = res?.value ? JSON.parse(res.value) : {};
       const remoteSaved = remoteRows.find((row) => row.activityType === "nghechep")?.completedItems || {};
-      const rawSaved = { ...localRaw, ...remoteSaved };
+      // Trạng thái cục bộ mới hơn (đặc biệt là "forgot" sau khi bỏ qua)
+      // phải thắng bản từ xa nếu thao tác đồng bộ vẫn đang chạy.
+      const rawSaved = { ...remoteSaved, ...localRaw };
       const saved = {};
       Object.entries(rawSaved).forEach(([key, savedValue]) => {
         const correct = savedValue === "correct" || (typeof savedValue === "object" && savedValue?.correct === true);
-        if (!correct) return;
-        if (key.startsWith("practice:") || key.startsWith("test:")) saved[key] = "correct";
+        const forgot = savedValue === "forgot" || (typeof savedValue === "object" && savedValue?.lastRating === "forgot");
+        if (key.startsWith("practice:") || key.startsWith("test:")) {
+          if (correct) saved[key] = "correct";
+          else if (forgot) saved[key] = "forgot";
+        }
         else if (/^\d+$/.test(key)) {
           const oldIndex = Number(key);
           const oldLine = lines[oldIndex];
-          if (oldLine) saved[progressKey("test", oldLine, oldIndex)] = "correct";
+          if (oldLine && correct) saved[progressKey("test", oldLine, oldIndex)] = "correct";
         }
       });
       if (!Object.keys(saved).length) return;
@@ -449,13 +452,23 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
     const nextVerified = ok ? { ...verified, [progressKey(mode)]: "correct" } : verified;
     if (ok) {
       setVerified(nextVerified);
-      const fullyCorrect = orderedLines.every((item, questionIndex) => nextVerified[progressKey(mode, item, questionIndex)] === "correct");
-      if (!isRecheck) {
-        window.storage.set(storageKey, JSON.stringify(nextVerified)).catch(() => { });
-        saveRemoteActivityProgress(lesson.textbookId, lesson.id, "nghechep", nextVerified, total * 2)
-          .then((percent) => onProgress?.("nghechep", percent))
-          .catch(() => { });
-      }
+      window.storage.set(storageKey, JSON.stringify(nextVerified)).catch(() => { });
+      const testResults = correctDictationResults(nextVerified);
+      const testHasSkippedQuestion = mode === "test" && Object.values(newStatus).includes("skipped");
+      // completedItems lưu cả hai tuyến để màn chọn chế độ biết Luyện tập đã đủ 100%.
+      // completedCount chỉ tính câu đúng của Kiểm tra vào phần trăm hoạt động.
+      saveRemoteActivityProgress(
+        lesson.textbookId,
+        lesson.id,
+        "nghechep",
+        nextVerified,
+        total,
+        100,
+        mode === "test" && !testHasSkippedQuestion ? DICTATION_PASS_PERCENT : 101,
+        Object.keys(testResults).length,
+      )
+        .then((percent) => { if (mode === "test") onProgress?.("nghechep", percent); })
+        .catch(() => { });
     }
     if (ok) {
       clearTimeout(autoAdvanceRef.current);
@@ -496,14 +509,20 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
 
   const goto = (i) => setIdx(i);
   const goNext = (statusSnapshot = status, verifiedSnapshot = verified) => {
-    const currentDone = statusSnapshot[idx] === "correct" || statusSnapshot[idx] === "failed";
+    const currentDone = statusSnapshot[idx] === "correct" || statusSnapshot[idx] === "failed" || statusSnapshot[idx] === "skipped";
     if (!currentDone) return;
     const nextIndex = mode === "test"
-      ? Array.from({ length: total }).findIndex((_, questionIndex) => questionIndex > idx && verifiedSnapshot[progressKey(mode, orderedLines[questionIndex], questionIndex)] !== "correct")
-      : idx < total - 1 ? idx + 1 : -1;
+      ? Array.from({ length: total }).findIndex((_, questionIndex) => questionIndex > idx
+        && verifiedSnapshot[progressKey(mode, orderedLines[questionIndex], questionIndex)] !== "correct"
+        && statusSnapshot[questionIndex] !== "skipped")
+      : Array.from({ length: total }).findIndex((_, questionIndex) => questionIndex > idx
+        && statusSnapshot[questionIndex] !== "correct");
     if (nextIndex >= 0) { goto(nextIndex); return; }
     const pending = mode === "test"
-      ? Array.from({ length: total }, (_, questionIndex) => questionIndex).filter((questionIndex) => verifiedSnapshot[progressKey(mode, orderedLines[questionIndex], questionIndex)] !== "correct")
+      ? Array.from({ length: total }, (_, questionIndex) => questionIndex).filter((questionIndex) =>
+        verifiedSnapshot[progressKey(mode, orderedLines[questionIndex], questionIndex)] !== "correct"
+        && statusSnapshot[questionIndex] !== "skipped"
+      )
       : retryQueue.filter((questionIndex) => statusSnapshot[questionIndex] !== "correct");
     if (pending.length) {
       if (mode === "test") {
@@ -513,7 +532,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
           return;
         }
         setRetryRound((round) => round + 1);
-        setRetryNotice(`Bạn đã đi hết lượt. Có ${pending.length} câu chưa đúng — bắt đầu lượt làm lại.`);
+        setRetryNotice(`Bạn đã đi hết lượt. Làm lại ${pending.map((questionIndex) => `câu ${questionIndex + 1}`).join(", ")}.`);
         setStatus((current) => {
           const next = { ...current };
           pending.forEach((questionIndex) => { delete next[questionIndex]; });
@@ -564,6 +583,8 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
           pending.forEach((questionIndex) => { delete next[questionIndex]; });
           return next;
         });
+      } else {
+        setRetryNotice(`Các câu đã bỏ qua được tính là chưa thuộc. Làm lại ${pending.map((questionIndex) => `câu ${questionIndex + 1}`).join(", ")}.`);
       }
       goto(pending[0]);
       return;
@@ -581,16 +602,41 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
   const skipCurrentQuestion = () => {
     if (questionLocked) return;
     playIncorrectSound();
-    const nextStatus = { ...status, [idx]: "failed" };
+    // Ở bài Kiểm tra, bỏ qua là kết quả cuối của câu và được tính là không thuộc.
+    const nextStatus = { ...status, [idx]: "skipped" };
     setStatus(nextStatus);
     setAttempted((current) => ({ ...current, [idx]: true }));
-    setRetryQueue((queue) => queue.includes(idx) ? queue : [...queue, idx]);
-    window.setTimeout(() => goNext(nextStatus, verified), 250);
+    if (mode === "practice") {
+      setRetryQueue((queue) => queue.includes(idx) ? queue : [...queue, idx]);
+      window.setTimeout(() => goNext(nextStatus, verified), 250);
+      return;
+    }
+
+    // Bỏ qua ở Kiểm tra làm câu tương ứng quay về "chưa thuộc" ở cả hai tuyến.
+    // Nhờ vậy Kiểm tra khóa lại cho tới khi người học luyện đúng câu này.
+    const nextVerified = {
+      ...verified,
+      [progressKey("practice")]: "forgot",
+      [progressKey("test")]: "forgot",
+    };
+    const testResults = correctDictationResults(nextVerified);
+    setVerified(nextVerified);
+    window.storage.set(storageKey, JSON.stringify(nextVerified)).catch(() => { });
+    saveRemoteActivityProgress(
+      lesson.textbookId,
+      lesson.id,
+      "nghechep",
+      nextVerified,
+      total,
+      100,
+      101,
+      Object.keys(testResults).length,
+    ).then((percent) => onProgress?.("nghechep", percent)).catch(() => { });
+    window.setTimeout(() => goNext(nextStatus, nextVerified), 250);
   };
 
   const retryDictation = () => {
     setShowCompletion(false);
-    setIsRecheck(true);
     setIdx(0);
     setInputs({});
     setStatus({});
@@ -607,18 +653,25 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
 
   if (showCompletion) {
     const correctCount = orderedLines.filter((item, questionIndex) => verified[progressKey(mode, item, questionIndex)] === "correct").length;
+    const skippedCount = orderedLines.filter((_, questionIndex) => status[questionIndex] === "skipped").length;
     const routePercent = total ? Math.round((correctCount / total) * 100) : 0;
+    const mustPracticeAgain = mode === "test" && skippedCount > 0;
+    const passed = mode === "test" && !mustPracticeAgain && routePercent >= DICTATION_PASS_PERCENT;
     return (
       <SkillCompletionView
-        title={mode === "test" ? "Bạn đã hoàn thành Kiểm tra nghe chép!" : "Bạn đã hoàn thành Luyện tập nghe chép!"}
+        title={mode === "test"
+          ? mustPracticeAgain ? "Hãy luyện tập lại các câu chưa thuộc" : passed ? "Bạn đã hoàn thành Kiểm tra nghe chép!" : `Bạn chưa đạt ${DICTATION_PASS_PERCENT}%`
+          : "Bạn đã hoàn thành Luyện tập nghe chép!"}
         description={mode === "test"
-          ? correctCount === total
-            ? "Bạn đã hoàn thành cả hai tuyến Nghe chép chính tả. Bạn có muốn kiểm tra lại không?"
-            : `Bạn hoàn thành đúng ${correctCount}/${total} câu (${routePercent}%) ở tuyến Kiểm tra. Các câu chưa đúng không được cộng vào tiến trình.`
+          ? mustPracticeAgain
+            ? `Bạn đã bỏ qua ${skippedCount} câu nên Kiểm tra tạm khóa. Hãy luyện đúng 100% các câu trong Luyện tập để mở lại Kiểm tra.`
+            : passed
+            ? `Bạn trả lời đúng ${correctCount}/${total} câu (${routePercent}%)${skippedCount ? `; ${skippedCount} câu bỏ qua được tính là không thuộc` : ""}. Tiến trình Nghe chép chính tả được tính 100%.`
+            : `Bạn trả lời đúng ${correctCount}/${total} câu (${routePercent}%)${skippedCount ? `; ${skippedCount} câu bỏ qua được tính là không thuộc` : ""}. Cần đạt ít nhất ${DICTATION_PASS_PERCENT}% để hoàn thành và được tính 100% tiến trình.`
           : "Luyện tập đã hoàn thành và tuyến Kiểm tra đã được mở."}
-        retryLabel={mode === "test" ? "Kiểm tra lại" : "Luyện lại"}
-        onBack={mode === "test" && !isRecheck ? (onFinish || onBack) : onBack}
-        onRetry={retryDictation}
+        retryLabel={mustPracticeAgain ? "Về luyện tập" : mode === "test" ? "Kiểm tra lại" : "Luyện lại"}
+        onBack={passed ? (onFinish || onBack) : onBack}
+        onRetry={mustPracticeAgain ? onBack : retryDictation}
       />
     );
   }
@@ -641,10 +694,10 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
       <div className={`dc-route-banner ${mode}`}>
         {mode === "practice" ? <Headphones size={15} /> : <Target size={15} />}
         <strong>{mode === "practice" ? "Tuyến Luyện tập" : "Tuyến Kiểm tra"}</strong>
-        <span>{mode === "practice" ? "Gợi ý tối đa 3 lần · chiếm 50% tiến trình" : "Tối đa 2 lượt nghe và 1 gợi ý/câu · chiếm 50% tiến trình"}</span>
+        <span>{mode === "practice" ? "Gợi ý tối đa 3 lần · hoàn thành để mở Kiểm tra" : `Tối đa 2 lượt nghe và 1 gợi ý/câu · đạt từ ${DICTATION_PASS_PERCENT}% để hoàn thành`}</span>
       </div>
       {retryNotice && (
-        <div className="dc-retry-notice"><RotateCcw size={15} /> <span>{retryNotice}</span><small>Lượt làm lại {retryRound}</small></div>
+        <div className="dc-retry-notice"><RotateCcw size={15} /> <span>{retryNotice}</span><small>{mode === "practice" ? "Câu chưa thuộc" : `Lượt làm lại ${retryRound}`}</small></div>
       )}
 
       <div className="dc-body">
@@ -685,7 +738,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
 
           <div className="dc-input-row">
             <textarea
-              className={`dc-textarea ${st === "correct" ? "ok" : st === "wrong" || st === "failed" ? "wrong" : ""}`}
+              className={`dc-textarea ${st === "correct" ? "ok" : st === "wrong" || st === "failed" || st === "skipped" ? "wrong" : ""}`}
               placeholder="Nhập câu tiếng Hàn tại đây..."
               value={value}
               onChange={(e) => {
@@ -728,6 +781,8 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
               {st === "correct" ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
               {st === "correct"
                 ? "Chính xác! Làm tốt lắm."
+                : st === "skipped"
+                  ? "Đã bỏ qua — câu này được tính là không thuộc."
                 : st === "failed"
                   ? "Đã sai lần thứ 3 — câu này được đánh dấu sai. Hãy làm tiếp và quay lại ở lượt cuối."
                   : mode === "test"
@@ -759,7 +814,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
           <div className="dc-tip-box">
             <div className="dc-tip-title"><Star size={15} fill="#F0C24E" color="#F0C24E" /> Mẹo</div>
             <ul>
-              <li>{mode === "practice" ? "Luyện tập chiếm 50% tiến trình và có tối đa 3 gợi ý mỗi câu." : "Kiểm tra chiếm 50% tiến trình, tối đa 2 lượt nghe và 1 gợi ý mỗi câu."}</li>
+              <li>{mode === "practice" ? "Hoàn thành Luyện tập để mở Kiểm tra; mỗi câu có tối đa 3 gợi ý." : `Đạt từ ${DICTATION_PASS_PERCENT}% câu đúng để tiến trình được tính 100%; câu bỏ qua tính là không thuộc.`}</li>
               <li>Dấu câu và khoảng trắng nhỏ không bị tính sai.</li>
               <li>Nghe theo cụm từ.</li>
             </ul>
@@ -784,14 +839,14 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
           {orderedLines.map((_, i) => (
             <button
               key={i}
-              className={`fc-dot ${i === idx ? "on" : ""} ${status[i] === "correct" ? "rated-good" : status[i] === "wrong" || status[i] === "failed" ? "rated-forgot" : ""}`}
+              className={`fc-dot ${i === idx ? "on" : ""} ${status[i] === "correct" ? "rated-good" : status[i] === "wrong" || status[i] === "failed" || status[i] === "skipped" ? "rated-forgot" : ""}`}
               onClick={() => (i === idx || status[i] === "correct") && goto(i)}
               disabled={i !== idx && status[i] !== "correct"}
               aria-label={`Câu ${i + 1}`}
             />
           ))}
         </div>
-        <button className="fc-nav-btn primary" disabled={status[idx] !== "correct" && status[idx] !== "failed"} onClick={() => goNext()}>
+        <button className="fc-nav-btn primary" disabled={status[idx] !== "correct" && status[idx] !== "failed" && status[idx] !== "skipped"} onClick={() => goNext()}>
           {idx === total - 1 && retryQueue.some((questionIndex) => status[questionIndex] !== "correct") ? "Làm lại câu sai" : idx === total - 1 ? "Hoàn thành" : "Câu tiếp"} <ChevronRight size={18} />
         </button>
       </div>

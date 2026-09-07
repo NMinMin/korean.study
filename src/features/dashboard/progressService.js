@@ -13,10 +13,22 @@ import {
 } from '../../services/storageShim';
 import { loadRemoteActivityProgress } from '../../lib/activityProgress';
 
+export const DICTATION_PASS_PERCENT = 80;
+
 export const correctDictationResults = (saved = {}) =>
   Object.fromEntries(
-    Object.entries(saved).filter(([, v]) => typeof v === 'object' && v !== null && v.correct === true)
+    Object.entries(saved).filter(([key, value]) => {
+      const isCorrect = value === 'correct' || (typeof value === 'object' && value !== null && value.correct === true);
+      const isTestResult = key.startsWith('test:') || /^\d+$/.test(key);
+      return isCorrect && isTestResult;
+    })
   );
+
+export const dictationProgressPercent = (saved = {}, total = 0) => {
+  if (!total) return 0;
+  const rawPercent = Math.min(100, Math.round((Object.keys(correctDictationResults(saved)).length / total) * 100));
+  return rawPercent >= DICTATION_PASS_PERCENT ? 100 : rawPercent;
+};
 
 export async function computeAndSyncUserStats(profile, lesson) {
   const userId = profile?.id;
@@ -96,7 +108,7 @@ export async function computeHomeProgress(lesson, userId, vocabulary = VOCAB_SAM
     if (d?.value) {
       const parsed = correctDictationResults(JSON.parse(d.value));
       const n = Object.keys(parsed).length;
-      out[1].pct = Math.round((n / SHADOW_LINES.length) * 100);
+      out[1].pct = dictationProgressPercent(parsed, SHADOW_LINES.length);
       out[1].detail = `${n} / ${SHADOW_LINES.length} câu`;
     }
   } catch (e) { }

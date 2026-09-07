@@ -67,11 +67,13 @@ export async function loadRemoteActivityProgress(lessonId?: string): Promise<Act
   return (data ?? []).map((row) => ({ activityType: row.activity_type as ActivityKind, progressPercent: Number(row.progress_percent || 0), completedItems: (row.completed_items || {}) as Record<string, unknown>, completedAt: row.completed_at }))
 }
 
-export async function saveRemoteActivityProgress(textbookId: string | undefined, lessonId: string | undefined, activityType: ActivityKind, completedItems: Record<string, unknown>, totalItems: number, maxPercent = 100): Promise<number> {
+export async function saveRemoteActivityProgress(textbookId: string | undefined, lessonId: string | undefined, activityType: ActivityKind, completedItems: Record<string, unknown>, totalItems: number, maxPercent = 100, completionThreshold = 100, completedCount?: number): Promise<number> {
   if (!supabase || !isDatabaseId(textbookId) || !isDatabaseId(lessonId)) return 0
   const userId = await currentAuthUserId()
   if (!userId) return 0
-  const progressPercent = totalItems > 0 ? Math.min(maxPercent, Math.round((Object.keys(completedItems).length / totalItems) * 100)) : 0
+  const countedItems = completedCount ?? Object.keys(completedItems).length
+  const rawPercent = totalItems > 0 ? Math.min(maxPercent, Math.round((countedItems / totalItems) * 100)) : 0
+  const progressPercent = rawPercent >= completionThreshold ? 100 : rawPercent
   await writeActivityProgress({
     user_id: userId, textbook_id: textbookId, lesson_id: lessonId, activity_type: activityType,
     progress_percent: progressPercent, completed_items: completedItems,

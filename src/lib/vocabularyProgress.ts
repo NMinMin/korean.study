@@ -96,13 +96,15 @@ export async function saveRemoteFlashcardSession(stateKey: string, userId: strin
 async function vocabularyRows(lesson: LessonIdentity): Promise<VocabularyRow[]> {
   if (!supabase || !lesson.id || !lesson.textbookId) return []
   const { data, error } = await supabase
-    .from('vocabulary')
-    .select('id, word_ko, lesson_id')
+    .from('lesson_exercises')
+    .select('id, prompt_ko, lesson_id')
     .eq('lesson_id', lesson.id)
+    .eq('skill_type', 'vocabulary_grammar')
+    .in('exercise_type', ['vocabulary', 'vocab', 'word', 'flashcard'])
   if (error || !data) return []
   return data.map((row) => ({
     id: row.id,
-    word_ko: row.word_ko,
+    word_ko: row.prompt_ko,
     lesson_id: row.lesson_id,
     textbook_id: lesson.textbookId as string,
   }))

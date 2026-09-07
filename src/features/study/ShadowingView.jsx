@@ -10,6 +10,8 @@ import { renderKo } from '../../utils/textUtils';
 import { SwBunnyEmpty, MiniBear } from '../../components/common/Mascots';
 import { SHADOW_LINES, DiamondIcon, UserGemCount, UserStreakCount } from '../../data/fallbackData';
 import {
+  dictationProgressKey,
+  legacyDictationProgressKey,
   shadowProgressKey,
   legacyShadowProgressKey,
   readScopedProgress,
@@ -21,16 +23,21 @@ import { compareSpeech, feedbackFor, toneForScore } from './speechAssessment';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
 
-export function DictationModeSelectView({ lesson, lines = SHADOW_LINES, onBack, onSelect }) {
+export function DictationModeSelectView({ lesson, userId, lines = SHADOW_LINES, onBack, onSelect }) {
   const [practiceComplete, setPracticeComplete] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(true);
 
   useEffect(() => {
     let alive = true;
     setLoadingProgress(true);
-    loadRemoteActivityProgress(lesson?.id).then((rows) => {
+    Promise.all([
+      loadRemoteActivityProgress(lesson?.id),
+      readScopedProgress(dictationProgressKey(lesson, userId), legacyDictationProgressKey(lesson), userId),
+    ]).then(([rows, local]) => {
       if (!alive) return;
-      const items = rows.find((row) => row.activityType === 'nghechep')?.completedItems || {};
+      const remoteItems = rows.find((row) => row.activityType === 'nghechep')?.completedItems || {};
+      const localItems = local?.value ? JSON.parse(local.value) : {};
+      const items = { ...remoteItems, ...localItems };
       const completed = lines.length > 0 && lines.every((line, index) =>
         items[`practice:${line?.no ?? index}`] === 'correct'
       );
@@ -41,7 +48,7 @@ export function DictationModeSelectView({ lesson, lines = SHADOW_LINES, onBack, 
       if (alive) setLoadingProgress(false);
     });
     return () => { alive = false; };
-  }, [lesson?.id, lines]);
+  }, [lesson?.id, lesson?.no, lesson?.textbookId, userId, lines]);
 
   return (
     <section className="card page dictation-mode-page">
@@ -49,14 +56,14 @@ export function DictationModeSelectView({ lesson, lines = SHADOW_LINES, onBack, 
         <button className="fc2-back" onClick={onBack} aria-label="Quay lại"><ChevronLeft size={20} /></button>
         <div>
           <div className="card-title"><Headphones size={19} color="#3FA95C" /> Nghe chép chính tả · Bài {lesson.no}</div>
-          <p className="dictation-mode-note">Hoàn thành Luyện tập để mở Kiểm tra. Mỗi tuyến chiếm 50% tiến trình.</p>
+          <p className="dictation-mode-note">Hoàn thành Luyện tập để mở Kiểm tra. Đạt từ 80% ở bài Kiểm tra để tiến trình được tính 100%.</p>
         </div>
       </div>
       <div className="dictation-mode-grid">
         <button className="dictation-mode-card practice" onClick={() => onSelect("practice")}>
           <span className="dictation-mode-icon"><Headphones size={27} /></span>
           <strong>Luyện tập</strong>
-          <p>Nghe không giới hạn, dùng gợi ý và luyện từng câu. Câu đúng được lưu vào tiến trình.</p>
+          <p>Nghe không giới hạn, dùng gợi ý và luyện từng câu để mở khóa bài Kiểm tra.</p>
           <span>Bắt đầu luyện <ChevronRight size={16} /></span>
         </button>
         <button
@@ -68,7 +75,7 @@ export function DictationModeSelectView({ lesson, lines = SHADOW_LINES, onBack, 
           {!practiceComplete && <span className="dictation-mode-lock"><Lock size={14} /> Chưa mở khóa</span>}
           <span className="dictation-mode-icon"><Target size={27} /></span>
           <strong>Kiểm tra</strong>
-          <p>{practiceComplete ? 'Mỗi câu chỉ được nghe tối đa 2 lần và dùng gợi ý 1 lần.' : 'Bạn cần hoàn thành tuyến Luyện tập trước.'}</p>
+          <p>{practiceComplete ? 'Mỗi câu được nghe tối đa 2 lần; câu bỏ qua tính là không thuộc. Đạt từ 80% để hoàn thành.' : 'Bạn cần hoàn thành tuyến Luyện tập trước.'}</p>
           <span>{practiceComplete ? <>Vào kiểm tra <ChevronRight size={16} /></> : <><Lock size={15} /> Hoàn thành Luyện tập để mở</>}</span>
         </button>
       </div>
@@ -625,16 +632,19 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
     setStatus("idle");
   };
 
+  const passedCount = Object.values(results).filter((item) => item?.score >= 80).length;
+  const isAllPassed = total > 0 && passedCount === total;
+
   if (showCompletion) {
     return (
       <SkillCompletionView
-        title="Bạn đã hoàn thành Shadowing!"
-        description={Object.keys(skipped).length
-          ? `Bạn đã đi hết bài. ${Object.keys(skipped).length} câu bỏ qua chưa được tính vào tiến trình.`
-          : "Tất cả câu đã đạt mức chính xác yêu cầu. Bạn có muốn luyện kiểm tra lại không?"}
+        title={isAllPassed ? "Bạn đã hoàn thành Shadowing!" : "Chưa hoàn thành hết Shadowing"}
+        description={isAllPassed
+          ? `Xuất sắc! Bạn đã luyện nói đạt toàn bộ ${total}/${total} câu với điểm số đạt chuẩn.`
+          : `Bạn đã luyện đạt ${passedCount}/${total} câu (${Math.round((passedCount / total) * 100)}%). Bạn cần luyện nói đạt tất cả các câu (>= 80 điểm) mới hoàn thành 100% tiến trình.`}
         assessment={finalAssessment}
         loading={assessingFinal}
-        onBack={isRecheck ? onBack : (onFinish || onBack)}
+        onBack={isRecheck ? onBack : isAllPassed ? (onFinish || onBack) : onBack}
         onRetry={retryShadowing}
       />
     );

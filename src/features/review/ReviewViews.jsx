@@ -27,7 +27,7 @@ import {
 import { loadRemoteActivityProgress, saveRemoteActivityProgress } from '../../lib/activityProgress';
 import { loadRemoteVocabularyState } from '../../lib/vocabularyProgress';
 import { activityCompletionKey, mergeVocabStates } from '../study/activityHelpers';
-import { correctDictationResults } from '../dashboard/progressService';
+import { dictationProgressPercent } from '../dashboard/progressService';
 import { gradeSpeechLocally, gradeSpeechWithAI, toneForScore } from '../study/speechAssessment';
 
 const gradeWithAI = (target, said, realPron, timing) => gradeSpeechWithAI(requestAIJson, target, said, realPron, timing);
@@ -1308,7 +1308,7 @@ async function loadActivityProgress(lesson, userId) {
   } catch (e) { }
   try {
     const d = await readScopedProgress(dictationProgressKey(lesson, userId), legacyDictationProgressKey(lesson), userId);
-    if (d?.value) out.nghechep = Math.max(out.nghechep, Math.round((Object.keys(correctDictationResults(JSON.parse(d.value))).length / SHADOW_LINES.length) * 100));
+    if (d?.value) out.nghechep = Math.max(out.nghechep, dictationProgressPercent(JSON.parse(d.value), SHADOW_LINES.length));
   } catch (e) { }
   try {
     const r = await readScopedProgress(reviewHistoryKey(lesson, userId), legacyLessonProgressKey("review-history", lesson.no), userId);

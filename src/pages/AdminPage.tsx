@@ -24,12 +24,19 @@ const statuses: { value: Status; label: string }[] = [
   { value: 'locked', label: 'Đã khóa' }, { value: 'no_content', label: 'Chưa có nội dung' },
 ]
 
-export function AdminSelect({ value, options, onChange, label }: { value: string; options: { value: string; label: string }[]; onChange: (value: string) => void; label?: string }) {
+type AdminSelectOption = { value: string; label: string; group?: string; searchText?: string }
+
+export function AdminSelect({ value, options, onChange, label, searchable = false, searchPlaceholder = 'Tìm kiếm…' }: { value: string; options: AdminSelectOption[]; onChange: (value: string) => void; label?: string; searchable?: boolean; searchPlaceholder?: string }) {
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const rootRef = useRef<HTMLDivElement>(null)
   const selected = options.find((option) => option.value === value) || options[0]
+  const normalizedQuery = query.trim().toLocaleLowerCase('vi').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const visibleOptions = normalizedQuery
+    ? options.filter((option) => `${option.label} ${option.group || ''} ${option.searchText || ''}`.toLocaleLowerCase('vi').normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(normalizedQuery))
+    : options
   useEffect(() => {
-    const close = (event: PointerEvent) => { if (!rootRef.current?.contains(event.target as Node)) setOpen(false) }
+    const close = (event: PointerEvent) => { if (!rootRef.current?.contains(event.target as Node)) { setOpen(false); setQuery('') } }
     document.addEventListener('pointerdown', close)
     return () => document.removeEventListener('pointerdown', close)
   }, [])
@@ -38,8 +45,11 @@ export function AdminSelect({ value, options, onChange, label }: { value: string
     onChange(options[(index + direction + options.length) % options.length].value)
   }
   return <div className={`admin-combobox ${open ? 'open' : ''}`} ref={rootRef}>
-    <button type="button" className="admin-combobox-trigger" data-value={value} aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((current) => !current)} onKeyDown={(event) => { if (event.key === 'ArrowDown') { event.preventDefault(); move(1); setOpen(true) } if (event.key === 'ArrowUp') { event.preventDefault(); move(-1); setOpen(true) } if (event.key === 'Escape') setOpen(false) }}><span>{selected?.label}</span><ChevronDown size={17} /></button>
-    {open && <div className="admin-combobox-menu" role="listbox">{options.map((option) => <button type="button" role="option" aria-selected={option.value === value} className={option.value === value ? 'selected' : ''} key={option.value} onClick={() => { onChange(option.value); setOpen(false) }}><span>{option.label}</span>{option.value === value && <Check size={16} />}</button>)}</div>}
+    <button type="button" className="admin-combobox-trigger" data-value={value} aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => { setOpen((current) => !current); setQuery('') }} onKeyDown={(event) => { if (event.key === 'ArrowDown') { event.preventDefault(); move(1); setOpen(true) } if (event.key === 'ArrowUp') { event.preventDefault(); move(-1); setOpen(true) } if (event.key === 'Escape') { setOpen(false); setQuery('') } }}><span>{selected?.label}</span><ChevronDown size={17} /></button>
+    {open && <div className="admin-combobox-menu" role="listbox">
+      {searchable && <div className="admin-combobox-search"><Search size={15} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.stopPropagation()} placeholder={searchPlaceholder} aria-label={searchPlaceholder} /></div>}
+      <div className="admin-combobox-options">{visibleOptions.map((option, index) => <Fragment key={option.value}>{option.group && option.group !== visibleOptions[index - 1]?.group && <div className="admin-combobox-group">{option.group}</div>}<button type="button" role="option" aria-selected={option.value === value} className={option.value === value ? 'selected' : ''} onClick={() => { onChange(option.value); setOpen(false); setQuery('') }}><span>{option.label}</span>{option.value === value && <Check size={16} />}</button></Fragment>)}{!visibleOptions.length && <div className="admin-combobox-empty">Không tìm thấy kết quả</div>}</div>
+    </div>}
   </div>
 }
 
@@ -68,6 +78,7 @@ export default function AdminPage() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [community, setCommunity] = useState<CommunityData>({ posts: [], reports: [], customLessons: [] })
   const [communityStatus, setCommunityStatus] = useState('all')
+  const [communityView, setCommunityView] = useState<'queue' | 'posts' | 'vocabulary'>('queue')
   const [communityDay, setCommunityDay] = useState('all')
   const [communityMonth, setCommunityMonth] = useState('all')
   const [communityYear, setCommunityYear] = useState('all')
@@ -259,6 +270,8 @@ export default function AdminPage() {
     (lessonStatusFilter === 'all' || item.status === lessonStatusFilter)
     && (lessonTextbookFilter === 'all' || item.textbook_id === lessonTextbookFilter)
     && [item.title_ko, item.title_vi, item.textbooks?.title_ko, String(item.lesson_number)].some((value) => value?.toLocaleLowerCase('vi').includes(query)))
+  const filteredUsers = users.filter((user) =>
+    [user.display_name, user.email, user.id].some((value) => value?.toLocaleLowerCase('vi').includes(query)))
   const lessonGroups = Array.from(filteredLessons.reduce((groups, lesson) => {
     const items = groups.get(lesson.textbook_id) || []
     items.push(lesson)
@@ -283,18 +296,29 @@ export default function AdminPage() {
     setExpandedTextbookGroups((current) => new Set(current).add(textbookId))
   }
   useEffect(() => () => { groupAnimationTimers.current.forEach((timer) => window.clearTimeout(timer)) }, [])
-  const communityYears = Array.from(new Set(community.posts.map((post) => new Date(post.created_at).getFullYear()).filter(Number.isFinite))).sort((a, b) => b - a)
-  const filteredCommunityPosts = community.posts.filter((post) => {
-    const createdAt = new Date(post.created_at)
-    const matchesDate = !Number.isNaN(createdAt.getTime())
+  const communityYears = Array.from(new Set([...community.posts, ...community.customLessons].map((item) => new Date(item.created_at).getFullYear()).filter(Number.isFinite))).sort((a, b) => b - a)
+  const matchesCommunityDate = (createdAtValue: string) => {
+    const createdAt = new Date(createdAtValue)
+    return !Number.isNaN(createdAt.getTime())
       && (communityDay === 'all' || createdAt.getDate() === Number(communityDay))
       && (communityMonth === 'all' || createdAt.getMonth() + 1 === Number(communityMonth))
       && (communityYear === 'all' || createdAt.getFullYear() === Number(communityYear))
-    return matchesDate
+  }
+  const filteredCommunityPosts = community.posts.filter((post) => {
+    return matchesCommunityDate(post.created_at)
     &&
     (communityStatus === 'all' || communityStatus === post.status || (communityStatus === 'reported' && post.reports.some((report) => report.status === 'pending')))
     && [post.content, post.profiles?.display_name].some((value) => value?.toLocaleLowerCase('vi').includes(query))
   })
+  const filteredCommunityVocabulary = community.customLessons.filter((lesson) =>
+    matchesCommunityDate(lesson.created_at)
+    && (communityStatus === 'all' || communityStatus === lesson.status || (communityStatus === 'reported' && community.reports.some((report) => report.custom_lesson_id === lesson.id && report.status === 'pending')))
+    && [lesson.title, lesson.code, lesson.profiles?.display_name].some((value) => value?.toLocaleLowerCase('vi').includes(query)))
+  const pendingCommunityReports = community.reports.filter((report) => report.status === 'pending')
+  const pendingCommunityPosts = filteredCommunityPosts.filter((post) => post.reports.some((report) => report.status === 'pending'))
+  const pendingCommunityVocabulary = filteredCommunityVocabulary.filter((lesson) => community.reports.some((report) => report.custom_lesson_id === lesson.id && report.status === 'pending'))
+  const displayedCommunityPosts = communityView === 'queue' ? pendingCommunityPosts : filteredCommunityPosts
+  const displayedCommunityVocabulary = communityView === 'queue' ? pendingCommunityVocabulary : filteredCommunityVocabulary
   const maxChart = Math.max(1, ...(dashboard?.chart.map((item) => item.minutes) || [1]))
   const exportDashboard = () => {
     if (!dashboard) return
@@ -404,7 +428,15 @@ export default function AdminPage() {
             </article>
           })}</div>
         </>}
-        {tab === 'users' && <><div className="admin-panel-title"><div><h2>Người dùng</h2><p>Quản lý vai trò và khóa tài khoản vi phạm.</p></div></div><div className="admin-table-wrap"><table><thead><tr><th>Học viên</th><th>Email</th><th>Vai trò</th><th>Cấp / XP</th><th>Trạng thái</th><th>Đăng nhập gần nhất</th><th>Thao tác</th></tr></thead><tbody>{users.map((user) => <tr key={user.id} className={user.is_locked ? 'admin-user-locked' : ''}><td><b>{user.display_name || 'Người học'}</b></td><td>{user.email || '—'}</td><td><AdminSelect value={user.role} options={[{ value: 'user', label: 'Học viên' }, { value: 'admin', label: 'Admin' }]} label={`Vai trò của ${user.display_name || user.email}`} onChange={(value) => void updateRole(user.id, value as 'user' | 'admin')} /></td><td>Lv. {user.level || 1} · {user.xp || 0} XP</td><td><span className={`admin-account-state ${user.is_locked ? 'locked' : 'active'}`}>{user.is_locked ? <Lock size={14}/> : <ShieldCheck size={14}/>} {user.is_locked ? 'Đã khóa' : 'Hoạt động'}</span></td><td>{user.lastSignInAt ? new Date(user.lastSignInAt).toLocaleString('vi-VN') : 'Chưa có'}</td><td><button className={`admin-lock-action ${user.is_locked ? 'unlock' : ''}`} onClick={() => void updateAccountLock(user)}>{user.is_locked ? <Unlock size={16}/> : <Lock size={16}/>} {user.is_locked ? 'Mở khóa' : 'Khóa'}</button></td></tr>)}</tbody></table></div></>}
+        {tab === 'users' && <>
+          <div className="admin-panel-title"><div><h2>Người dùng</h2><p>Quản lý vai trò và khóa tài khoản vi phạm.</p></div></div>
+          <div className="admin-toolbar admin-toolbar-with-filters">
+            <label><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo tên, email hoặc mã người dùng…" aria-label="Tìm kiếm người dùng" /></label>
+            <div className="admin-filter-controls"><span>{filteredUsers.length} người dùng</span></div>
+          </div>
+          <div className="admin-table-wrap"><table><thead><tr><th>Học viên</th><th>Email</th><th>Vai trò</th><th>Cấp / XP</th><th>Trạng thái</th><th>Đăng nhập gần nhất</th><th>Thao tác</th></tr></thead><tbody>{filteredUsers.map((user) => <tr key={user.id} className={user.is_locked ? 'admin-user-locked' : ''}><td><b>{user.display_name || 'Người học'}</b></td><td>{user.email || '—'}</td><td><AdminSelect value={user.role} options={[{ value: 'user', label: 'Học viên' }, { value: 'admin', label: 'Admin' }]} label={`Vai trò của ${user.display_name || user.email}`} onChange={(value) => void updateRole(user.id, value as 'user' | 'admin')} /></td><td>Lv. {user.level || 1} · {user.xp || 0} XP</td><td><span className={`admin-account-state ${user.is_locked ? 'locked' : 'active'}`}>{user.is_locked ? <Lock size={14}/> : <ShieldCheck size={14}/>} {user.is_locked ? 'Đã khóa' : 'Hoạt động'}</span></td><td>{user.lastSignInAt ? new Date(user.lastSignInAt).toLocaleString('vi-VN') : 'Chưa có'}</td><td><button className={`admin-lock-action ${user.is_locked ? 'unlock' : ''}`} onClick={() => void updateAccountLock(user)}>{user.is_locked ? <Unlock size={16}/> : <Lock size={16}/>} {user.is_locked ? 'Mở khóa' : 'Khóa'}</button></td></tr>)}</tbody></table></div>
+          {!filteredUsers.length && <div className="admin-empty">Không tìm thấy người dùng phù hợp.</div>}
+        </>}
       </section>}
       {previewLesson && <div className="admin-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewLesson(null) }}><section className="admin-modal admin-preview-modal" role="dialog" aria-modal="true" aria-labelledby="admin-preview-title"><header><div><span><Eye size={22} /></span><div><h2 id="admin-preview-title">Xem bài học</h2><p>Thông tin đang hiển thị cho bài học đã chọn.</p></div></div><button onClick={() => setPreviewLesson(null)} aria-label="Đóng"><X size={21} /></button></header><div className="admin-lesson-preview"><div className="admin-preview-number">Bài {previewLesson.lesson_number}</div><div className="admin-preview-copy"><span className={`admin-status ${previewLesson.status}`}>{statuses.find((item) => item.value === previewLesson.status)?.label}</span><small>Giáo trình</small><p>{previewLesson.textbooks?.title_ko || textbooks.find((book) => book.id === previewLesson.textbook_id)?.title_ko || '—'}</p><small>Tiêu đề tiếng Hàn</small><h3>{previewLesson.title_ko}</h3><small>Tiêu đề tiếng Việt</small><p>{previewLesson.title_vi || 'Chưa có tiêu đề tiếng Việt'}</p></div></div><footer><button className="admin-cancel" onClick={() => setPreviewLesson(null)}>Đóng</button><button className="admin-primary" onClick={() => { const lesson = previewLesson; setPreviewLesson(null); openEditor('lessons', lesson) }}><Pencil size={17} /> Chỉnh sửa bài học</button></footer></section></div>}
       {editor && <div className="admin-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditor(null) }}><section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="admin-editor-title"><header><div><span>{editor.kind === 'textbooks' ? <BookOpen size={22} /> : <BookText size={22} />}</span><div><h2 id="admin-editor-title">{editor.id ? 'Chỉnh sửa' : 'Thêm'} {editor.kind === 'textbooks' ? 'giáo trình' : 'bài học'}</h2><p>Những trường có dấu * là bắt buộc.</p></div></div><button onClick={() => setEditor(null)} aria-label="Đóng"><X size={21} /></button></header><div className="admin-form">

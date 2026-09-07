@@ -3748,16 +3748,26 @@ h1,
 .fc2-bubble-row {
   display: flex;
   align-items: flex-end;
-  gap: 8px
+  gap: 8px;
+  width: 100%
+}
+
+.fc2-bubble-row.a {
+  justify-content: flex-start;
+  padding-right: 10%
 }
 
 .fc2-bubble-row.b {
-  flex-direction: row-reverse
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+  padding-left: 10%
 }
 
 .fc2-bubble {
   position: relative;
-  flex: 1;
+  flex: 0 1 auto;
+  min-width: 0;
+  width: fit-content;
   max-width: 82%;
   background: #F3F1FC;
   border-radius: 4px 15px 15px 15px;
@@ -3767,7 +3777,7 @@ h1,
 .fc2-bubble-row.b .fc2-bubble {
   background: #FDF0F2;
   border-radius: 15px 4px 15px 15px;
-  margin-left: auto
+  margin-left: 0
 }
 
 .fc2-bubble-ko {

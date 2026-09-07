@@ -17,6 +17,7 @@ import {
 
 import {
   loadLearningCatalog,
+  invalidateLearningCatalogCache,
   addUserTextbook,
   markLessonStarted,
   syncLessonProgress,
@@ -79,6 +80,7 @@ import {
   VocabTestSelectView,
   WordOfDayWidget,
 } from './features/study/VocabViews';
+import VocabReviewQuizView from './features/study/VocabReviewQuizView';
 import DictationView, {
   FillBlankListenView,
   MatchPairsView,
@@ -106,7 +108,7 @@ const ROOT_PAGE_META = {
 };
 
 const ACTIVE_STUDY_VIEWS = new Set([
-  'lesson-detail', 'vocab-notebook', 'flashcards', 'flashcards-notebook', 'flashcards-schedule',
+  'lesson-detail', 'vocab-notebook', 'flashcards', 'flashcards-notebook', 'flashcards-schedule', 'vocab-schedule-quiz',
   'flashcards-grammar', 'nguphap-book', 'shadowing', 'dictation', 'review-quiz',
   'study-custom-lesson', 'test-custom-lesson', 'aiquiz', 'vocab-test-fillblank',
   'vocab-test-match', 'vocab-test-image',
@@ -324,41 +326,45 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     await handleLessonProgressChange(lessonProgress, activities);
   };
 
-  const handleActivityFinish = async (activityId) => {
+  const handleActivityFinish = (activityId) => {
     if (!lesson) return;
-    try {
-      const previousActivities = await loadActivityProgress(lesson, profile?.id);
-      if (await isActivityMarkedCompleted(lesson, profile?.id, activityId)) {
-        await markRemoteActivityCompleted(lesson?.textbookId, lesson?.id, activityId);
-        const lessonProgress = Math.round(Object.values(previousActivities).reduce((sum, value) => sum + value, 0) / ACTIVITIES.length);
-        await handleLessonProgressChange(lessonProgress, previousActivities);
-        setView('lesson-detail');
-        return;
-      }
-      await markActivityCompleted(lesson, profile?.id, activityId);
-      const activities = await loadActivityProgress(lesson, profile?.id);
-      const lessonProgress = Math.round(Object.values(activities).reduce((sum, value) => sum + value, 0) / ACTIVITIES.length);
-      await handleLessonProgressChange(lessonProgress, activities);
-      const lessonDone = ACTIVITIES.every((activity) => (activities[activity.id] || 0) >= 100);
-      if (lessonDone) {
-        let gemReward = null;
-        try {
-          gemReward = await awardLessonGems(lesson.textbookId || '2-1', lesson.id || lesson.no);
-          if (gemReward?.balance != null) setShop((current) => ({ ...current, balance: gemReward.balance }));
-        } catch (error) { }
-        goHome();
-        setLessonCelebration({
-          title: `Bài ${lesson.no}${lesson.title ? ` · ${lesson.title}` : ''}`,
-          gems: gemReward?.awarded ? 25 : 0,
-        });
-        if (isCelebrationSoundEnabled()) playCelebrationSound();
-        window.setTimeout(() => setLessonCelebration(false), 4500);
-      } else {
-        setView('lesson-detail');
-      }
-    } catch (error) {
-      setView('lesson-detail');
-    }
+    // Phản hồi điều hướng ngay khi bấm; các lệnh đọc/ghi Supabase chạy nền.
+    // Trước đây toàn bộ chuỗi request phải hoàn tất rồi giao diện mới đổi trang.
+    setView('lesson-detail');
+    void (async () => {
+      try {
+        const previousActivities = await loadActivityProgress(lesson, profile?.id);
+        if (activityId === 'shadowing' && (previousActivities.shadowing || 0) < 100) {
+          const lessonProgress = Math.round(Object.values(previousActivities).reduce((sum, value) => sum + value, 0) / ACTIVITIES.length);
+          await handleLessonProgressChange(lessonProgress, previousActivities);
+          return;
+        }
+        if (await isActivityMarkedCompleted(lesson, profile?.id, activityId)) {
+          await markRemoteActivityCompleted(lesson?.textbookId, lesson?.id, activityId);
+          const lessonProgress = Math.round(Object.values(previousActivities).reduce((sum, value) => sum + value, 0) / ACTIVITIES.length);
+          await handleLessonProgressChange(lessonProgress, previousActivities);
+          return;
+        }
+        await markActivityCompleted(lesson, profile?.id, activityId);
+        const activities = await loadActivityProgress(lesson, profile?.id);
+        const lessonProgress = Math.round(Object.values(activities).reduce((sum, value) => sum + value, 0) / ACTIVITIES.length);
+        await handleLessonProgressChange(lessonProgress, activities);
+        const lessonDone = ACTIVITIES.every((activity) => (activities[activity.id] || 0) >= 100);
+        if (lessonDone) {
+          let gemReward = null;
+          try {
+            gemReward = await awardLessonGems(lesson.textbookId || '2-1', lesson.id || lesson.no);
+            if (gemReward?.balance != null) setShop((current) => ({ ...current, balance: gemReward.balance }));
+          } catch (error) { }
+          setLessonCelebration({
+            title: `Bài ${lesson.no}${lesson.title ? ` · ${lesson.title}` : ''}`,
+            gems: gemReward?.awarded ? 25 : 0,
+          });
+          if (isCelebrationSoundEnabled()) playCelebrationSound();
+          window.setTimeout(() => setLessonCelebration(false), 4500);
+        }
+      } catch (error) { }
+    })();
   };
 
   useEffect(() => {
@@ -402,6 +408,46 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     })();
     return () => { alive = false; };
   }, [profile?.id]);
+
+  useEffect(() => {
+    if (!supabase || !profile?.id) return undefined;
+    let alive = true;
+    let refreshTimer;
+    const activeTextbookId = learningCatalog?.activeTextbook?.id;
+
+    const refreshCatalog = async () => {
+      invalidateLearningCatalogCache();
+      const catalog = prepareLearningCatalog(await loadLearningCatalog(activeTextbookId));
+      if (!alive || !catalog) return;
+      setLearningCatalog(catalog);
+      setLesson((current) => current
+        ? catalog.lessons.find((item) => item.id === current.id) || current
+        : current);
+    };
+    const scheduleRefresh = () => {
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => { void refreshCatalog(); }, 120);
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') scheduleRefresh();
+    };
+
+    const channel = supabase
+      .channel(`learning-content:${profile.id}:${activeTextbookId || 'active'}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lesson_exercises' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lessons' }, scheduleRefresh)
+      .subscribe();
+
+    window.addEventListener('focus', scheduleRefresh);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      alive = false;
+      window.clearTimeout(refreshTimer);
+      window.removeEventListener('focus', scheduleRefresh);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      void supabase.removeChannel(channel);
+    };
+  }, [profile?.id, learningCatalog?.activeTextbook?.id]);
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -586,7 +632,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 <div className="mid-row">
                   <ReviewSchedule
                     userId={profile.id}
-                    onReview={(words) => { setLesson(primaryLesson); setReviewDeck(words); setView('flashcards-schedule'); }}
+                    onReview={(words) => { setReviewDeck(words); setView('vocab-schedule-quiz'); }}
                   />
                   <MyTextbooks
                     books={learningCatalog?.myTextbooks || []}
@@ -845,6 +891,14 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 onFinish={() => setView('vocab-notebook')}
               />
             )}
+            {view === 'vocab-schedule-quiz' && reviewDeck && (
+              <VocabReviewQuizView
+                words={reviewDeck}
+                catalogVocabulary={catalogVocabulary}
+                onBack={goHome}
+                onFinish={goHome}
+              />
+            )}
             {view === 'flashcards-schedule' && lesson && reviewDeck && (
               <FlashcardView
                 key={`flashcards-schedule-${lesson.id}-${reviewDeck.map((word) => word.id || word.word).join('|')}`}
@@ -924,6 +978,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             {view === 'dictation-mode-select' && lesson && (
               <DictationModeSelectView
                 lesson={lesson}
+                userId={profile.id}
                 lines={databaseDictationLines.length ? databaseDictationLines : undefined}
                 onBack={() => setView(dictationEntryBackView)}
                 onSelect={(selectedMode) => { setDictationMode(selectedMode); setView('dictation'); }}

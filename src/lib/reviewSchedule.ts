@@ -69,13 +69,33 @@ export async function loadVocabularyReviewSchedule(userId: string, numberOfDays 
 
   const completedLessonIds = completedResult.data.map((item) => item.lesson_id)
   const vocabularyResult = await supabase
-    .from('vocabulary')
-    .select('id, lesson_id, word_ko, meaning_vi, part_of_speech, pronunciation, mnemonic, image_url, audio_url, sort_order')
+    .from('lesson_exercises')
+    .select('id, lesson_id, prompt_ko, prompt_vi, answer, explanation_vi, image_url, media_url, audio_url, sort_order')
     .in('lesson_id', completedLessonIds)
+    .eq('skill_type', 'vocabulary_grammar')
+    .in('exercise_type', ['vocabulary', 'vocab', 'word', 'flashcard'])
     .order('sort_order')
   if (vocabularyResult.error || !vocabularyResult.data?.length) return emptyDays
 
-  const vocabularyIds = vocabularyResult.data.map((item) => item.id)
+  const vocabulary = vocabularyResult.data.map((item) => {
+    const answer = item.answer && typeof item.answer === 'object' && !Array.isArray(item.answer)
+      ? item.answer as Record<string, unknown>
+      : {}
+    const text = (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null
+    return {
+      id: item.id,
+      lesson_id: item.lesson_id,
+      word_ko: text(answer.word) ?? text(answer.correct) ?? item.prompt_ko,
+      meaning_vi: text(answer.meaning) ?? item.prompt_vi ?? '',
+      part_of_speech: text(answer.partOfSpeech),
+      pronunciation: text(answer.pronunciation),
+      mnemonic: text(answer.mnemonic) ?? item.explanation_vi,
+      image_url: text(answer.imageUrl) ?? item.image_url ?? item.media_url,
+      audio_url: text(answer.audioUrl) ?? item.audio_url,
+      sort_order: item.sort_order,
+    }
+  })
+  const vocabularyIds = vocabulary.map((item) => item.id)
   const progressResult = await supabase
     .from('vocabulary_progress')
     .select('vocabulary_id, mastery, correct_count, incorrect_count, last_rating, next_review_at, times_reviewed, updated_at')
@@ -85,7 +105,7 @@ export async function loadVocabularyReviewSchedule(userId: string, numberOfDays 
 
   const lessonMeta = new Map(completedResult.data.map((item) => [item.lesson_id, item]))
   const progressByWord = new Map((progressResult.data ?? []).map((item) => [item.vocabulary_id, item]))
-  const candidates = vocabularyResult.data.map((item) => {
+  const candidates = vocabulary.map((item) => {
     const progress = progressByWord.get(item.id)
     const lesson = lessonMeta.get(item.lesson_id)
     const completedKey = localDateKey(new Date(lesson?.updated_at || Date.now()))

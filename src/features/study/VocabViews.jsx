@@ -891,10 +891,12 @@ export function FlashcardView({ lesson, userId, onBack, onFinish, onProgress, in
           </button>
           <span className="fc2-title"><BookOpen size={18} color="#7C6FE4" /> Từ vựng & Ngữ pháp</span>
         </div>
-        <div className="fc2-top-mid">
-          <span className="fc2-progress-text">{contentTab === "vocab" ? `Đã thuộc ${masteredCount} / ${total}` : `${grammar.length} điểm`}</span>
-          <div className="fc2-progress-bar">{contentTab === "vocab" && <div style={{ width: `${(masteredCount / total) * 100}%` }} />}</div>
-        </div>
+        {contentTab === "vocab" && (
+          <div className="fc2-top-mid">
+            <span className="fc2-progress-text">{`Đã thuộc ${masteredCount} / ${total}`}</span>
+            <div className="fc2-progress-bar"><div style={{ width: `${(masteredCount / total) * 100}%` }} /></div>
+          </div>
+        )}
         <div className="fc2-top-right">
           <span className="fc2-pill xp"><Star size={13} fill="#F0C24E" color="#F0C24E" /> <UserXpCount /> XP</span>
           <span className="fc2-pill gem"><DiamondIcon size={14} /> <UserGemCount /></span>
@@ -1111,22 +1113,28 @@ export function FlashcardView({ lesson, userId, onBack, onFinish, onProgress, in
                         <MessageSquare size={14} color="#7C6FE4" /> Ví dụ minh họa <small>(Câu giao tiếp thường dùng)</small>
                       </div>
                       <div className="fc2-dialog-list">
-                        {card.dialogue.map((d, i) => (
-                          <div key={i} className={`fc2-bubble-row ${d.spk === "B" ? "b" : ""}`}>
-                            {d.spk === "A" ? <GirlAvatar /> : <BoyAvatar />}
-                            <div className="fc2-bubble">
-                              <p className="fc2-bubble-ko" lang="ko">{renderKo(d.ko)}</p>
-                              <p className="fc2-bubble-vi">{d.vi}</p>
-                              <button
-                                className="fc2-bubble-audio"
-                                onClick={() => speakKo(d.ko, { spk: d.spk })}
-                                aria-label="Nghe câu"
-                              >
-                                <Volume2 size={11} color="#fff" />
-                              </button>
+                        {card.dialogue.map((d, i) => {
+                          const speaker = String(d.spk ?? d.speaker ?? (i % 2 === 0 ? "A" : "B"))
+                            .trim()
+                            .toUpperCase() === "B" ? "B" : "A";
+
+                          return (
+                            <div key={i} className={`fc2-bubble-row ${speaker.toLowerCase()}`}>
+                              {speaker === "A" ? <GirlAvatar /> : <BoyAvatar />}
+                              <div className="fc2-bubble">
+                                <p className="fc2-bubble-ko" lang="ko">{renderKo(d.ko)}</p>
+                                <p className="fc2-bubble-vi">{d.vi}</p>
+                                <button
+                                  className="fc2-bubble-audio"
+                                  onClick={() => speakKo(d.ko, { spk: speaker })}
+                                  aria-label={`Nghe câu của người ${speaker}`}
+                                >
+                                  <Volume2 size={11} color="#fff" />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}

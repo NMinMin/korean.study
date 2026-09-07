@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
 import { createPortal } from 'react-dom'
 import {
+  ArrowRight,
   BookOpen,
   Check,
   ChevronDown,
@@ -212,6 +213,32 @@ function normalizeAssetUrl(url: string): string {
   return url.replace(/^http:\/\/api-cloud-u4v8\.onrender\.com/i, 'https://api-cloud-u4v8.onrender.com')
 }
 
+export async function deleteStorageAsset(url?: string | null): Promise<void> {
+  if (!url || typeof url !== 'string') return
+  const match = url.match(/^(https?:\/\/api-cloud-u4v8\.onrender\.com)\/files\/(.+)$/i)
+  if (!match) return
+  const deleteUrl = `${match[1].replace(/^http:/i, 'https:')}/delete/${match[2]}`
+  try {
+    await fetch(deleteUrl, { method: 'DELETE' })
+  } catch (err) {
+    console.warn('Lỗi khi xóa file storage trên cloud:', deleteUrl, err)
+  }
+}
+
+function extractExerciseStorageUrls(item?: Exercise | null): string[] {
+  if (!item) return []
+  const urls: (string | null | undefined)[] = [
+    item.audio_url,
+    item.image_url,
+    item.media_url,
+  ]
+  if (item.answer && typeof item.answer === 'object') {
+    const ans = item.answer as Record<string, any>
+    urls.push(ans.audioUrl, ans.imageUrl, ans.mediaUrl)
+  }
+  return urls.filter((u): u is string => typeof u === 'string' && /api-cloud-u4v8\.onrender\.com\/files\//i.test(u))
+}
+
 function ttsFilename(text: string): string {
   const safe = text.trim().replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'korean'
   return `${Date.now()}-${safe}-speech.mp3`
@@ -367,7 +394,7 @@ function TtsPanel({
         {previewing ? 'Đang tạo…' : 'Nghe thử câu này'}
       </button>
       {draft.audioUrl
-        ? <div className="admin-tts-audio-wrap"><audio className="admin-tts-audio" controls src={draft.audioUrl} /><button type="button" className="admin-tts-audio-clear" title="Xóa audio, tạo lại khi lưu" onClick={() => setDraft((cur) => ({ ...cur, audioUrl: '' }))}><X size={13} /></button></div>
+        ? <div className="admin-tts-audio-wrap"><audio className="admin-tts-audio" controls src={draft.audioUrl} /><button type="button" className="admin-tts-audio-clear" title="Xóa audio, tạo lại khi lưu" onClick={() => { if (draft.audioUrl && !draft.audioUrl.startsWith('blob:')) void deleteStorageAsset(draft.audioUrl); setDraft((cur) => ({ ...cur, audioUrl: '' })) }}><X size={13} /></button></div>
         : <p className="admin-tts-empty"><Music size={14} /> Chưa có audio · hệ thống sẽ tạo sau khi lưu</p>
       }
     </div>
@@ -395,6 +422,12 @@ export default function AdminExercises() {
   const voicePreviewAudioRef = useRef<HTMLAudioElement | null>(null)
   const [pendingImage, setPendingImage] = useState<File | null>(null)
   const [draggedFormulaIndex, setDraggedFormulaIndex] = useState<number | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false)
+  const [moveBookId, setMoveBookId] = useState('')
+  const [moveLessonId, setMoveLessonId] = useState('')
+  const [moving, setMoving] = useState(false)
+  const [collapsedExerciseGroups, setCollapsedExerciseGroups] = useState<Set<string>>(new Set())
 
   const moveFormulaLine = (fromIndex: number, toIndex: number) => {
     if (fromIndex === toIndex) return
@@ -408,6 +441,24 @@ export default function AdminExercises() {
 
   const selectedBookId = lessons.find((item) => item.id === draft.lessonId)?.textbook_id || textbooks[0]?.id || ''
   const availableLessons = useMemo(() => lessons.filter((item) => book === 'all' || item.textbook_id === book), [book, lessons])
+  const lessonFilterOptions = useMemo(() => {
+    const textbookOrder = new Map(textbooks.map((item, index) => [item.id, index]))
+    const textbookTitles = new Map(textbooks.map((item) => [item.id, item.title_ko]))
+    return [...availableLessons]
+      .sort((left, right) => {
+        const textbookDifference = (textbookOrder.get(left.textbook_id) ?? Number.MAX_SAFE_INTEGER) - (textbookOrder.get(right.textbook_id) ?? Number.MAX_SAFE_INTEGER)
+        return textbookDifference || left.lesson_number - right.lesson_number || left.title_ko.localeCompare(right.title_ko, 'ko')
+      })
+      .map((item) => {
+        const textbookTitle = textbookTitles.get(item.textbook_id) || item.textbooks?.title_ko || 'Giáo trình khác'
+        return {
+          value: item.id,
+          label: `Bài ${item.lesson_number} · ${item.title_ko}`,
+          group: book === 'all' ? textbookTitle : undefined,
+          searchText: textbookTitle,
+        }
+      })
+  }, [availableLessons, book, textbooks])
   const modalLessons = lessons.filter((item) => item.textbook_id === selectedBookId)
   const isVocabularyGrammar = draft.skillType === 'vocabulary_grammar'
   const isVocabularyExercise = isVocabularyGrammar && draft.vocabularyGrammarKind === 'vocabulary'
@@ -450,6 +501,80 @@ export default function AdminExercises() {
     )
     && `${item.prompt_ko} ${item.prompt_vi || ''} ${item.lessons?.title_ko || ''}`.toLowerCase().includes(search.trim().toLowerCase()),
   )
+  const gridGroups = filterSkills
+    .map((group) => ({
+      ...group,
+      items: filtered.filter((item) => getExerciseSkillMeta(item).value === group.value),
+    }))
+    .filter((group) => group.items.length > 0)
+  const moveLessons = lessons.filter((item) => item.textbook_id === moveBookId)
+  const allFilteredSelected = filtered.length > 0 && filtered.every((item) => selectedIds.has(item.id))
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleAllFiltered = () => {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (allFilteredSelected) filtered.forEach((item) => next.delete(item.id))
+      else filtered.forEach((item) => next.add(item.id))
+      return next
+    })
+  }
+
+  const toggleExerciseGroup = (groupItems: Exercise[]) => {
+    const allSelected = groupItems.length > 0 && groupItems.every((item) => selectedIds.has(item.id))
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      groupItems.forEach((item) => {
+        if (allSelected) next.delete(item.id)
+        else next.add(item.id)
+      })
+      return next
+    })
+  }
+
+  const toggleCollapsedExerciseGroup = (groupValue: string) => {
+    setCollapsedExerciseGroups((current) => {
+      const next = new Set(current)
+      if (next.has(groupValue)) next.delete(groupValue)
+      else next.add(groupValue)
+      return next
+    })
+  }
+
+  const openMoveDialog = () => {
+    const initialBookId = book !== 'all' ? book : textbooks[0]?.id || ''
+    const initialLessonId = lessons.find((item) => item.textbook_id === initialBookId)?.id || ''
+    setMoveBookId(initialBookId)
+    setMoveLessonId(initialLessonId)
+    setMoveDialogOpen(true)
+  }
+
+  const moveSelectedExercises = async () => {
+    if (!selectedIds.size || !moveLessonId) return setError('Hãy chọn bài tập và bài học đích.')
+    setMoving(true)
+    try {
+      const result = await adminApi<{ movedIds: string[]; count: number; lessonId: string }>('/exercises/actions/bulk-move', {
+        method: 'PATCH',
+        body: JSON.stringify({ exerciseIds: [...selectedIds], lessonId: moveLessonId }),
+      })
+      if (result.count !== selectedIds.size) setError(`Đã chuyển ${result.count}/${selectedIds.size} bài tập. Một số bài tập không còn tồn tại.`)
+      setSelectedIds(new Set())
+      setMoveDialogOpen(false)
+      await load()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Không thể chuyển các bài tập đã chọn.')
+    } finally {
+      setMoving(false)
+    }
+  }
 
   const open = (item?: Exercise) => {
     setPendingImage(null)
@@ -653,6 +778,16 @@ export default function AdminExercises() {
         method: editing?.id ? 'PATCH' : 'POST',
         body: JSON.stringify(body),
       })
+      if (editing) {
+        const oldAudio = editing.audio_url || (editing.answer as any)?.audioUrl
+        if (oldAudio && oldAudio !== audioUrl && !oldAudio.startsWith('blob:')) {
+          void deleteStorageAsset(oldAudio)
+        }
+        const oldImage = editing.image_url || (editing.answer as any)?.imageUrl
+        if (oldImage && oldImage !== imageUrl && !oldImage.startsWith('blob:')) {
+          void deleteStorageAsset(oldImage)
+        }
+      }
       if (draft.imageUrl.startsWith('blob:')) URL.revokeObjectURL(draft.imageUrl)
       if (draft.audioUrl.startsWith('blob:')) URL.revokeObjectURL(draft.audioUrl)
       setPendingImage(null)
@@ -671,7 +806,10 @@ export default function AdminExercises() {
     if (!deleteTarget) return
     setDeleting(true)
     try {
+      const urls = extractExerciseStorageUrls(deleteTarget)
+      await Promise.allSettled(urls.map((u) => deleteStorageAsset(u)))
       await adminApi(`/exercises/${deleteTarget.id}`, { method: 'DELETE' })
+      setSelectedIds((current) => { const next = new Set(current); next.delete(deleteTarget.id); return next })
       setDeleteTarget(null)
       await load()
     } catch (cause) {
@@ -683,8 +821,8 @@ export default function AdminExercises() {
 
   return <div className="admin-exercises">
     <BlockingLoader
-      show={saving || deleting || uploading !== null}
-      label={deleting ? 'Đang xóa bài tập…' : uploading ? 'Đang tải tệp lên…' : 'Đang lưu bài tập…'}
+      show={saving || deleting || moving || uploading !== null}
+      label={moving ? 'Đang chuyển bài tập…' : deleting ? 'Đang xóa bài tập…' : uploading ? 'Đang tải tệp lên…' : 'Đang lưu bài tập…'}
     />
     <div className="admin-panel-title">
       <div><h2>Bài tập theo kỹ năng</h2><p>Nội dung được gắn với đúng giáo trình, bài học và ba kỹ năng nền tảng. Phần ôn tập được AI tạo tự động.</p></div>
@@ -694,8 +832,8 @@ export default function AdminExercises() {
     <div className="admin-toolbar admin-toolbar-with-filters">
       <label><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm nội dung bài tập…" /></label>
       <div className="admin-filter-controls">
-        <AdminSelect value={book} options={[{ value: 'all', label: 'Tất cả giáo trình' }, ...textbooks.map((item) => ({ value: item.id, label: item.title_ko }))]} onChange={(value) => { setBook(value); setLesson('all') }} />
-        <AdminSelect value={lesson} options={[{ value: 'all', label: 'Tất cả bài học' }, ...availableLessons.map((item) => ({ value: item.id, label: `Bài ${item.lesson_number} · ${item.title_ko}` }))]} onChange={setLesson} />
+        <AdminSelect searchable searchPlaceholder="Tìm giáo trình…" value={book} options={[{ value: 'all', label: 'Tất cả giáo trình' }, ...textbooks.map((item) => ({ value: item.id, label: item.title_ko }))]} onChange={(value) => { setBook(value); setLesson('all') }} />
+        <AdminSelect searchable searchPlaceholder="Tìm bài học hoặc giáo trình…" value={lesson} options={[{ value: 'all', label: 'Tất cả bài học' }, ...lessonFilterOptions]} onChange={setLesson} />
         <span>{filtered.length} mục</span>
         <div className="admin-view-switch" aria-label="Kiểu hiển thị">
           <button className={view === 'table' ? 'active' : ''} onClick={() => setView('table')} title="Dạng bảng"><List size={17} /><span>Bảng</span></button>
@@ -714,19 +852,79 @@ export default function AdminExercises() {
         return <button key={value} className={skill === value ? 'active' : ''} onClick={() => setSkill(value)}><Icon size={17} /><span>{label}</span><em>{count}</em></button>
       })}
     </div>
+    {selectedIds.size > 0 && <div className="admin-exercise-bulk-bar">
+      <span><Check size={17} /><strong>{selectedIds.size}</strong> bài tập đã chọn</span>
+      <div>
+        <button type="button" className="admin-bulk-clear" onClick={() => setSelectedIds(new Set())}>Bỏ chọn</button>
+        <button type="button" className="admin-bulk-move" onClick={openMoveDialog}><ArrowRight size={17} /> Chuyển sang bài học khác</button>
+      </div>
+    </div>}
     <div className={`admin-exercise-results view-${view}`}>
-      <div className="admin-exercise-table-wrap"><table className="admin-exercise-table"><thead><tr><th>Nội dung</th><th>Giáo trình · Bài học</th><th>Kỹ năng</th><th>Dữ liệu lưu</th><th>Tệp đính kèm</th><th>Thao tác</th></tr></thead><tbody>{filtered.map((item) => {
-        const meta = getExerciseSkillMeta(item)
-        const Icon = meta.icon
-        return <tr key={item.id}><td><strong>{item.prompt_ko}</strong>{item.prompt_vi && <small>{item.prompt_vi}</small>}</td><td><span>{item.lessons?.textbooks?.title_ko || 'Giáo trình'}</span><small>Bài {item.lessons?.lesson_number}</small></td><td><span className="admin-skill-cell"><Icon size={16} />{meta.label}</span></td><td><span className="admin-answer-cell">{exerciseAnswerSummary(item)}</span></td><td><span className="admin-media-cell">{(item.image_url || item.media_url) && <Image size={16} />} {item.audio_url && <Music size={16} />} {!item.image_url && !item.media_url && !item.audio_url && '—'}</span></td><td><div className="admin-row-actions"><button onClick={() => open(item)} aria-label="Sửa"><Pencil size={16} /></button><button className="danger" onClick={() => setDeleteTarget(item)} aria-label="Xóa"><Trash2 size={16} /></button></div></td></tr>
+      <div className="admin-exercise-table-wrap"><table className="admin-exercise-table"><thead><tr><th className="admin-exercise-select-cell"><input type="checkbox" checked={allFilteredSelected} onChange={toggleAllFiltered} aria-label="Chọn tất cả bài tập đang hiển thị" /></th><th>Nội dung</th><th>Giáo trình · Bài học</th><th>Kỹ năng</th><th>Dữ liệu lưu</th><th>Tệp đính kèm</th><th>Thao tác</th></tr></thead><tbody>{(skill === 'all' ? gridGroups : [{ value: skill, label: '', icon: BookOpen, items: filtered }]).map((group) => {
+        const GroupIcon = group.icon
+        return <Fragment key={group.value}>
+          {skill === 'all' && <tr className="admin-exercise-table-group"><td colSpan={7}><span><label className="admin-exercise-group-check"><input type="checkbox" checked={group.items.every((item) => selectedIds.has(item.id))} onChange={() => toggleExerciseGroup(group.items)} aria-label={`Chọn tất cả bài tập ${group.label}`} /></label><button type="button" className="admin-exercise-group-toggle" onClick={() => toggleCollapsedExerciseGroup(group.value)} aria-expanded={!collapsedExerciseGroups.has(group.value)}><GroupIcon size={17} />{group.label}<ChevronDown className={collapsedExerciseGroups.has(group.value) ? 'is-collapsed' : ''} size={16} /></button></span><em>{group.items.length} bài tập</em></td></tr>}
+          {!collapsedExerciseGroups.has(group.value) && group.items.map((item) => {
+            const meta = getExerciseSkillMeta(item)
+            const Icon = meta.icon
+            return <tr key={item.id} className={selectedIds.has(item.id) ? 'is-selected' : ''}><td className="admin-exercise-select-cell"><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelected(item.id)} aria-label={`Chọn bài tập ${item.prompt_ko}`} /></td><td><strong>{item.prompt_ko}</strong>{item.prompt_vi && <small>{item.prompt_vi}</small>}</td><td><span>{item.lessons?.textbooks?.title_ko || 'Giáo trình'}</span><small>Bài {item.lessons?.lesson_number}</small></td><td><span className="admin-skill-cell"><Icon size={16} />{meta.label}</span></td><td><span className="admin-answer-cell">{exerciseAnswerSummary(item)}</span></td><td><span className="admin-media-cell">{(item.image_url || item.media_url) && <Image size={16} />} {item.audio_url && <Music size={16} />} {!item.image_url && !item.media_url && !item.audio_url && '—'}</span></td><td><div className="admin-row-actions"><button onClick={() => open(item)} aria-label="Sửa"><Pencil size={16} /></button><button className="danger" onClick={() => setDeleteTarget(item)} aria-label="Xóa"><Trash2 size={16} /></button></div></td></tr>
+          })}
+        </Fragment>
       })}</tbody></table></div>
-      <div className="admin-exercise-grid">{filtered.map((item) => {
-        const meta = getExerciseSkillMeta(item)
-        const Icon = meta.icon
-        return <article key={item.id} className="admin-exercise-card"><div className="admin-exercise-head"><span><Icon size={17} />{meta.label}</span><div><button onClick={() => open(item)} aria-label="Sửa"><Pencil size={16} /></button><button className="danger" onClick={() => setDeleteTarget(item)} aria-label="Xóa"><Trash2 size={16} /></button></div></div><small>{item.lessons?.textbooks?.title_ko || 'Giáo trình'} · Bài {item.lessons?.lesson_number}</small><h3>{item.prompt_ko}</h3>{item.prompt_vi && <p>{item.prompt_vi}</p>}<div className="admin-exercise-media">{(item.image_url || item.media_url) && <span><Image size={15} /> Hình ảnh</span>}{item.audio_url && <span><Music size={15} /> Audio</span>}</div></article>
+      <div className={`admin-exercise-grid${skill === 'all' ? ' is-grouped' : ''}`}>{(skill === 'all' ? gridGroups : [{ value: skill, label: '', icon: BookOpen, items: filtered }]).map((group) => {
+        const GroupIcon = group.icon
+        return <section className="admin-exercise-group" key={group.value}>
+          {skill === 'all' && <header className="admin-exercise-group-title"><span><label className="admin-exercise-group-check"><input type="checkbox" checked={group.items.every((item) => selectedIds.has(item.id))} onChange={() => toggleExerciseGroup(group.items)} aria-label={`Chọn tất cả bài tập ${group.label}`} /></label><button type="button" className="admin-exercise-group-toggle" onClick={() => toggleCollapsedExerciseGroup(group.value)} aria-expanded={!collapsedExerciseGroups.has(group.value)}><GroupIcon size={18} />{group.label}<ChevronDown className={collapsedExerciseGroups.has(group.value) ? 'is-collapsed' : ''} size={17} /></button></span><em>{group.items.length} bài tập</em></header>}
+          {!collapsedExerciseGroups.has(group.value) && <div className="admin-exercise-group-grid">{group.items.map((item) => {
+            const meta = getExerciseSkillMeta(item)
+            const Icon = meta.icon
+            return <article key={item.id} className={`admin-exercise-card${selectedIds.has(item.id) ? ' is-selected' : ''}`}><div className="admin-exercise-head"><label className="admin-exercise-card-select"><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelected(item.id)} aria-label={`Chọn bài tập ${item.prompt_ko}`} /></label><span><Icon size={17} />{meta.label}</span><div><button onClick={() => open(item)} aria-label="Sửa"><Pencil size={16} /></button><button className="danger" onClick={() => setDeleteTarget(item)} aria-label="Xóa"><Trash2 size={16} /></button></div></div><small>{item.lessons?.textbooks?.title_ko || 'Giáo trình'} · Bài {item.lessons?.lesson_number}</small><h3>{item.prompt_ko}</h3>{item.prompt_vi && <p>{item.prompt_vi}</p>}<div className="admin-exercise-media">{(item.image_url || item.media_url) && <span><Image size={15} /> Hình ảnh</span>}{item.audio_url && <span><Music size={15} /> Audio</span>}</div></article>
+          })}</div>}
+        </section>
       })}</div>
     </div>
     {!filtered.length && <div className="admin-empty">Chưa có bài tập phù hợp với bộ lọc.</div>}
+    {moveDialogOpen && <div className="admin-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !moving) setMoveDialogOpen(false) }}>
+      <section className="admin-modal admin-bulk-move-dialog" role="dialog" aria-modal="true" aria-labelledby="bulk-move-title">
+        <header>
+          <div><span><ArrowRight size={22} /></span><div><h2 id="bulk-move-title">Chuyển bài tập hàng loạt</h2><p>Chọn giáo trình và bài học đích cho {selectedIds.size} bài tập.</p></div></div>
+          <button type="button" onClick={() => setMoveDialogOpen(false)} disabled={moving} aria-label="Đóng"><X size={21} /></button>
+        </header>
+        <div className="admin-bulk-move-form">
+          <label>Giáo trình đích
+            <AdminSelect
+              searchable
+              searchPlaceholder="Tìm giáo trình…"
+              value={moveBookId}
+              options={textbooks.map((item) => ({ value: item.id, label: item.title_ko }))}
+              onChange={(value) => {
+                setMoveBookId(value)
+                setMoveLessonId(lessons.find((item) => item.textbook_id === value)?.id || '')
+              }}
+              label="Chọn giáo trình đích"
+            />
+          </label>
+          <label>Bài học đích
+            <AdminSelect
+              searchable
+              searchPlaceholder="Tìm bài học…"
+              value={moveLessonId}
+              options={moveLessons.length
+                ? moveLessons.map((item) => ({ value: item.id, label: `Bài ${item.lesson_number} · ${item.title_ko}` }))
+                : [{ value: '', label: 'Chưa có bài học' }]}
+              onChange={setMoveLessonId}
+              label="Chọn bài học đích"
+            />
+          </label>
+          {!moveLessons.length && <p className="admin-bulk-move-empty">Giáo trình này chưa có bài học để chuyển đến.</p>}
+          <div className="admin-bulk-move-note"><strong>{selectedIds.size} bài tập sẽ được chuyển.</strong><span>Nội dung, kỹ năng, đáp án và tệp đính kèm được giữ nguyên.</span></div>
+        </div>
+        <footer>
+          <button type="button" className="admin-cancel" onClick={() => setMoveDialogOpen(false)} disabled={moving}>Hủy</button>
+          <button type="button" className="admin-primary" onClick={() => void moveSelectedExercises()} disabled={moving || !moveLessonId}><ArrowRight size={17} /> {moving ? 'Đang chuyển…' : 'Chuyển bài tập'}</button>
+        </footer>
+      </section>
+    </div>}
     {editing !== undefined && <div className="admin-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditing(undefined) }}>
       {(() => {
         const modalSkills = [
@@ -755,8 +953,8 @@ export default function AdminExercises() {
               <section className="admin-form-section admin-general-section">
                 <div className="admin-section-title"><span>Thông tin bài học & Kỹ năng</span></div>
                 <div className="admin-general-grid">
-                  <label>Giáo trình<AdminSelect value={selectedBookId} options={textbooks.map((item) => ({ value: item.id, label: item.title_ko }))} onChange={(value) => setDraft({ ...draft, lessonId: lessons.find((item) => item.textbook_id === value)?.id || '' })} /></label>
-                  <label>Bài học *<AdminSelect value={draft.lessonId} options={modalLessons.map((item) => ({ value: item.id, label: `Bài ${item.lesson_number} · ${item.title_ko}` }))} onChange={(value) => setDraft({ ...draft, lessonId: value })} /></label>
+                  <label>Giáo trình<AdminSelect searchable searchPlaceholder="Tìm giáo trình…" value={selectedBookId} options={textbooks.map((item) => ({ value: item.id, label: item.title_ko }))} onChange={(value) => setDraft({ ...draft, lessonId: lessons.find((item) => item.textbook_id === value)?.id || '' })} /></label>
+                  <label>Bài học *<AdminSelect searchable searchPlaceholder="Tìm bài học…" value={draft.lessonId} options={modalLessons.map((item) => ({ value: item.id, label: `Bài ${item.lesson_number} · ${item.title_ko}` }))} onChange={(value) => setDraft({ ...draft, lessonId: value })} /></label>
                 </div>
                 <div className="admin-skill-selector-block">
                   <span className="admin-skill-selector-label">Kỹ năng bài tập *</span>
@@ -799,7 +997,7 @@ export default function AdminExercises() {
                 <label className="admin-vocab-input admin-voice-field">Phát âm thanh (TTS)<div className="admin-voice-preview-row"><VoiceSelect value={draft.ttsVoice} onChange={(value) => setDraft({ ...draft, ttsVoice: value, audioUrl: '' })} onPreview={(value) => void previewVoice(value)} previewing={previewingVoice} /><button type="button" className={`admin-voice-preview${playingPreviewVoice === draft.ttsVoice ? ' is-playing' : ''}`} disabled={previewingVoice} onClick={() => void previewVoice()}>{previewingVoice ? <LoaderCircle className="spin" size={16} /> : <Volume2 size={16} />} {playingPreviewVoice === draft.ttsVoice ? 'Dừng nghe' : 'Nghe thử giọng'}</button></div></label>
               </div>
               <div className="admin-vocab-side">
-                <div className="admin-upload-field admin-image-field"><span>Hình ảnh</span><label className={uploading === 'image' ? 'uploading' : ''}>{uploading === 'image' ? <LoaderCircle className="spin" /> : <Image />}<strong>{draft.imageUrl ? 'Đổi hình ảnh' : 'Tải hình ảnh'}</strong><small>PNG, JPG, WEBP · tối đa 10 MB</small><input type="file" accept="image/*" onChange={(event) => previewUpload('image', event.target.files?.[0])} /></label>{draft.imageUrl && <div className="admin-uploaded-file image-preview"><img src={draft.imageUrl} alt="Xem trước hình bài tập" /><a href={draft.imageUrl} target="_blank" rel="noreferrer">Xem hình đã tải</a><button onClick={() => setDraft({ ...draft, imageUrl: '' })}><X size={15} /></button></div>}{draft.audioUrl && <div className="admin-uploaded-file"><audio controls src={draft.audioUrl} /><button title="Tạo lại audio khi lưu" onClick={() => setDraft({ ...draft, audioUrl: '' })}><X size={15} /></button></div>}</div>
+                <div className="admin-upload-field admin-image-field"><span>Hình ảnh</span><label className={uploading === 'image' ? 'uploading' : ''}>{uploading === 'image' ? <LoaderCircle className="spin" /> : <Image />}<strong>{draft.imageUrl ? 'Đổi hình ảnh' : 'Tải hình ảnh'}</strong><small>PNG, JPG, WEBP · tối đa 10 MB</small><input type="file" accept="image/*" onChange={(event) => previewUpload('image', event.target.files?.[0])} /></label>{draft.imageUrl && <div className="admin-uploaded-file image-preview"><img src={draft.imageUrl} alt="Xem trước hình bài tập" /><a href={draft.imageUrl} target="_blank" rel="noreferrer">Xem hình đã tải</a><button onClick={() => { if (draft.imageUrl && !draft.imageUrl.startsWith('blob:')) void deleteStorageAsset(draft.imageUrl); setDraft({ ...draft, imageUrl: '' }) }}><X size={15} /></button></div>}{draft.audioUrl && <div className="admin-uploaded-file"><audio controls src={draft.audioUrl} /><button title="Tạo lại audio khi lưu" onClick={() => { if (draft.audioUrl && !draft.audioUrl.startsWith('blob:')) void deleteStorageAsset(draft.audioUrl); setDraft({ ...draft, audioUrl: '' }) }}><X size={15} /></button></div>}</div>
               </div>
               <label className="admin-mnemonic-field">Mẹo nhớ<textarea rows={2} value={draft.mnemonic} onChange={(event) => setDraft({ ...draft, mnemonic: event.target.value })} placeholder="Ví dụ: 꽃(hoa) + 다발(bó) = bó hoa" /></label>
               <div className="admin-vocab-enrichment">

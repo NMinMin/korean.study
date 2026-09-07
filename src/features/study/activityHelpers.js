@@ -12,7 +12,7 @@ import {
   readScopedProgress,
 } from '../../services/storageShim';
 import { markRemoteActivityCompleted, loadRemoteActivityProgress } from '../../lib/activityProgress';
-import { correctDictationResults } from '../dashboard/progressService';
+import { dictationProgressPercent } from '../dashboard/progressService';
 
 export const ACTIVITIES = [
   {
@@ -88,7 +88,7 @@ export async function loadActivityProgress(lesson, userId) {
   } catch (e) { }
   try {
     const d = await readScopedProgress(dictationProgressKey(lesson, userId), legacyDictationProgressKey(lesson), userId);
-    if (d?.value) out.nghechep = Math.max(out.nghechep, Math.round((Object.keys(correctDictationResults(JSON.parse(d.value))).length / SHADOW_LINES.length) * 100));
+    if (d?.value) out.nghechep = Math.max(out.nghechep, dictationProgressPercent(JSON.parse(d.value), SHADOW_LINES.length));
   } catch (e) { }
   try {
     const r = await readScopedProgress(reviewHistoryKey(lesson, userId), legacyLessonProgressKey('review-history', lesson.no), userId);
