@@ -18,6 +18,7 @@ type AuthContextValue = {
   configured: boolean
   session: Session | null
   profile: AppProfile | null
+  passwordRecovery: boolean
   signIn: (email: string, password: string, remember?: boolean) => Promise<void>
   signUp: (input: SignUpInput) => Promise<{ needsEmailConfirmation: boolean }>
   requestPasswordReset: (email: string) => Promise<void>
@@ -115,6 +116,7 @@ function isAuthRestError(error: unknown) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<AppProfile | null>(null)
+  const [passwordRecovery, setPasswordRecovery] = useState(() => new URLSearchParams(window.location.hash.replace(/^#/, '')).get('type') === 'recovery')
   const [loading, setLoading] = useState(true)
   const authLoadVersion = useRef(0)
 
@@ -186,6 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .then(({ data, error }) => error ? clearInvalidSession() : loadProfile(data.session))
       .finally(() => setLoading(false))
     const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true)
       if (event === 'SIGNED_OUT') {
         clearAuthState()
         return
@@ -223,6 +226,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     configured: isSupabaseConfigured,
     session,
     profile,
+    passwordRecovery,
     async signIn(email, password, remember = false) {
       if (!supabase) throw new Error('Supabase chưa được cấu hình.')
       setSessionPreference(remember)
@@ -263,10 +267,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     async requestPasswordReset(email) {
       if (!supabase) throw new Error('Supabase chưa được cấu hình.')
+      // Không đặt route sau dấu # trong redirectTo: Supabase cũng dùng fragment
+      // để gửi recovery token. GitHub Pages 404 sẽ giữ token rồi ứng dụng tự
+      // chuyển sang #/auth/reset-password sau khi khôi phục phiên thành công.
+      const basePath = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`
+      const resetRedirectUrl = import.meta.env.BASE_URL === '/'
+        ? `${window.location.origin}/auth/reset-password`
+        : `${window.location.origin}${basePath}auth/reset-password`
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: import.meta.env.BASE_URL === '/'
-          ? `${window.location.origin}/auth/reset-password`
-          : `${window.location.origin}${import.meta.env.BASE_URL}#/auth/reset-password`,
+        redirectTo: resetRedirectUrl,
       })
       if (error) throw error
     },
@@ -274,6 +283,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!supabase) throw new Error('Supabase chưa được cấu hình.')
       const { error } = await supabase.auth.updateUser({ password })
       if (error) throw error
+      setPasswordRecovery(false)
     },
     async signOut() {
       if (!supabase) return
@@ -286,7 +296,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearSessionPreference()
       }
     },
-  }), [clearAuthState, loadProfile, loading, profile, session])
+  }), [clearAuthState, loadProfile, loading, passwordRecovery, profile, session])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

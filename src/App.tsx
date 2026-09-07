@@ -1,5 +1,5 @@
 import { useEffect, type ComponentType } from 'react'
-import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import LegacyDashboard from './App.jsx'
 import { AuthProvider, useAuth, type AppProfile } from './contexts/AuthContext'
 import AuthPage from './pages/AuthPage'
@@ -15,6 +15,7 @@ const Dashboard = LegacyDashboard as ComponentType<{
 
 function AppRoutes() {
   const auth = useAuth()
+  const location = useLocation()
 
   useEffect(() => {
     if (!auth.profile) return
@@ -35,7 +36,9 @@ function AppRoutes() {
   const recoveryHash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
   const recoveryQuery = new URLSearchParams(window.location.search)
   const isRecoveryRedirect = recoveryHash.get('type') === 'recovery' || recoveryQuery.get('type') === 'recovery'
-  if (isRecoveryRedirect) return <Navigate to="/auth/reset-password" replace />
+  if ((auth.passwordRecovery || isRecoveryRedirect) && location.pathname !== '/auth/reset-password') {
+    return <Navigate to="/auth/reset-password" replace />
+  }
 
   return <Routes>
     <Route path="/auth" element={auth.profile ? <Navigate to={auth.profile.role === 'admin' ? '/admin' : '/'} replace /> : <AuthPage />} />
