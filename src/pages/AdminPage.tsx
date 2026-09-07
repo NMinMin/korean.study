@@ -6,6 +6,7 @@ import { BookOpen, BookText, Users, LayoutDashboard, LogOut, X, ShieldCheck, Gra
 import { playEffect } from '../services/audioService'
 import notificationSoundUrl from '../../Sound Effect/Notification.mp3'
 import AdminExercises from './AdminExercises'
+import { BlockingLoader, useAppDialog } from '../components/common/AppDialog'
 import './admin.css'
 
 type Status = 'draft' | 'published' | 'locked' | 'no_content'
@@ -43,6 +44,7 @@ export function AdminSelect({ value, options, onChange, label }: { value: string
 }
 
 export default function AdminPage() {
+  const dialog = useAppDialog()
   const { profile, signOut } = useAuth()
   const [tab, setTab] = useState<'dashboard' | 'textbooks' | 'lessons' | 'exercises' | 'community' | 'users'>('dashboard')
   const [textbooks, setTextbooks] = useState<Textbook[]>([])
@@ -61,6 +63,7 @@ export default function AdminPage() {
   const [previewLesson, setPreviewLesson] = useState<Lesson | null>(null)
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [actionBusy, setActionBusy] = useState('')
   const [range, setRange] = useState<7 | 30>(7)
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [community, setCommunity] = useState<CommunityData>({ posts: [], reports: [], customLessons: [] })
@@ -121,30 +124,44 @@ export default function AdminPage() {
   }, [tab])
 
   const updateStatus = async (kind: 'textbooks' | 'lessons', id: string, status: Status) => {
+    setActionBusy('Đang cập nhật trạng thái…')
     try {
       await adminApi(`/${kind}/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) })
       if (kind === 'textbooks') setTextbooks((items) => items.map((item) => item.id === id ? { ...item, status } : item))
       else setLessons((items) => items.map((item) => item.id === id ? { ...item, status } : item))
       await refreshDashboard()
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể cập nhật.') }
+    finally { setActionBusy('') }
   }
 
   const updateRole = async (id: string, role: 'user' | 'admin') => {
+    setActionBusy('Đang cập nhật quyền…')
     try {
       await adminApi(`/users/${id}/role`, { method: 'PATCH', body: JSON.stringify({ role }) })
       setUsers((items) => items.map((item) => item.id === id ? { ...item, role } : item))
       await refreshDashboard()
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể cập nhật vai trò.') }
+    finally { setActionBusy('') }
   }
 
   const updateAccountLock = async (user: AdminUser) => {
     const locked = !user.is_locked
-    if (!confirm(locked ? `Khóa tài khoản “${user.display_name || user.email}”? Người dùng sẽ không thể đăng nhập hoặc tiếp tục dùng API.` : `Mở khóa tài khoản “${user.display_name || user.email}”?`)) return
+    const accepted = await dialog.confirm({
+      title: locked ? 'Khóa tài khoản?' : 'Mở khóa tài khoản?',
+      message: locked
+        ? `Người dùng “${user.display_name || user.email}” sẽ không thể đăng nhập hoặc tiếp tục sử dụng hệ thống.`
+        : `Người dùng “${user.display_name || user.email}” sẽ có thể đăng nhập trở lại.`,
+      variant: locked ? 'warning' : 'info',
+      confirmLabel: locked ? 'Khóa tài khoản' : 'Mở khóa',
+    })
+    if (!accepted) return
+    setActionBusy(locked ? 'Đang khóa tài khoản…' : 'Đang mở khóa tài khoản…')
     try {
       await adminApi(`/users/${user.id}/lock`, { method: 'PATCH', body: JSON.stringify({ locked }) })
       setUsers((items) => items.map((item) => item.id === user.id ? { ...item, is_locked: locked, locked_at: locked ? new Date().toISOString() : undefined } : item))
       await refreshDashboard()
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể cập nhật trạng thái tài khoản.') }
+    finally { setActionBusy('') }
   }
 
   const openEditor = (kind: 'textbooks' | 'lessons', item?: Textbook | Lesson) => {
@@ -174,25 +191,44 @@ export default function AdminPage() {
 
   const deleteItem = async (kind: 'textbooks' | 'lessons', item: Textbook | Lesson) => {
     const label = 'slug' in item ? item.title_ko : `Bài ${item.lesson_number} — ${item.title_ko}`
-    if (!window.confirm(`Xóa “${label}”?${kind === 'textbooks' ? ' Toàn bộ bài học thuộc giáo trình này cũng sẽ bị xóa.' : ''}`)) return
+    const accepted = await dialog.confirm({
+      title: kind === 'textbooks' ? 'Xóa giáo trình?' : 'Xóa bài học?',
+      message: `Bạn sắp xóa “${label}”.${kind === 'textbooks' ? '\nToàn bộ bài học thuộc giáo trình này cũng sẽ bị xóa.' : ''}`,
+      variant: 'error',
+      confirmLabel: 'Xóa vĩnh viễn',
+    })
+    if (!accepted) return
+    setActionBusy(kind === 'textbooks' ? 'Đang xóa giáo trình…' : 'Đang xóa bài học…')
     try { await adminApi(`/${kind}/${item.id}`, { method: 'DELETE' }); await Promise.all([load(), refreshDashboard()]) }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể xóa dữ liệu.') }
+    finally { setActionBusy('') }
   }
 
   const moderatePost = async (post: CommunityPost, patch: { hidden?: boolean; commentsLocked?: boolean }) => {
+    setActionBusy('Đang cập nhật bài viết…')
     try {
       const updated = await adminApi<CommunityPost>(`/community/posts/${post.id}`, { method: 'PATCH', body: JSON.stringify(patch) })
       setCommunity((current) => ({ ...current, posts: current.posts.map((item) => item.id === post.id ? { ...item, ...updated, reports: item.reports } : item) }))
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể kiểm duyệt bài viết.') }
+    finally { setActionBusy('') }
   }
   const deleteCommunityPost = async (post: CommunityPost) => {
-    if (!window.confirm('Xóa vĩnh viễn bài viết này và toàn bộ bình luận, báo cáo liên quan?')) return
+    const accepted = await dialog.confirm({
+      title: 'Xóa bài viết?',
+      message: 'Bài viết cùng toàn bộ bình luận và báo cáo liên quan sẽ bị xóa vĩnh viễn.',
+      variant: 'error',
+      confirmLabel: 'Xóa bài viết',
+    })
+    if (!accepted) return
+    setActionBusy('Đang xóa bài viết…')
     try {
       await adminApi(`/community/posts/${post.id}`, { method: 'DELETE' })
       setCommunity((current) => ({ ...current, posts: current.posts.filter((item) => item.id !== post.id), reports: current.reports.filter((report) => report.post_id !== post.id) }))
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể xóa bài viết.') }
+    finally { setActionBusy('') }
   }
   const resolveReport = async (report: CommunityReport, status: 'resolved' | 'dismissed') => {
+    setActionBusy('Đang xử lý báo cáo…')
     try {
       await adminApi(`/community/reports/${report.id}`, { method: 'PATCH', body: JSON.stringify({ status }) })
       setCommunity((current) => ({
@@ -202,14 +238,17 @@ export default function AdminPage() {
       }))
       if (report.status === 'pending') setDashboard((current) => current ? { ...current, pendingReports: Math.max(0, current.pendingReports - 1) } : current)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể xử lý báo cáo.') }
+    finally { setActionBusy('') }
   }
 
   const moderateVocabularySet = async (lesson: CommunityVocabularySet) => {
+    setActionBusy('Đang cập nhật bộ từ vựng…')
     try {
       const hidden = lesson.status !== 'hidden'
       await adminApi(`/community/custom-lessons/${lesson.id}`, { method: 'PATCH', body: JSON.stringify({ hidden }) })
       setCommunity((current) => ({ ...current, customLessons: current.customLessons.map((item) => item.id === lesson.id ? { ...item, status: hidden ? 'hidden' : 'visible' } : item) }))
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể kiểm duyệt bộ từ vựng.') }
+    finally { setActionBusy('') }
   }
 
   const query = search.trim().toLocaleLowerCase('vi')
@@ -265,6 +304,7 @@ export default function AdminPage() {
   }
 
   return <div className="admin-shell">
+    <BlockingLoader show={saving || Boolean(actionBusy)} label={actionBusy || 'Đang lưu thay đổi…'} />
     <aside className="admin-sidebar">
       <div className="admin-brand"><span>한</span><strong>Korean <em>Study</em></strong></div>
       <nav className="admin-menu" aria-label="Menu quản trị">

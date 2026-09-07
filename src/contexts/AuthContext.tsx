@@ -226,13 +226,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async signIn(email, password, remember = false) {
       if (!supabase) throw new Error('Supabase chưa được cấu hình.')
       setSessionPreference(remember)
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) {
         clearAuthState()
         clearSessionPreference()
         throw error
       }
       startRememberedSessionLifetime()
+      // Không phụ thuộc hoàn toàn vào auth event: nạp hồ sơ trực tiếp để cả
+      // phiên session-only và phiên ghi nhớ đều chuyển trang ổn định.
+      await loadProfile(data.session)
     },
     async signUp({ displayName, email, password, remember = false }) {
       if (!supabase) throw new Error('Supabase chưa được cấu hình.')
@@ -283,7 +286,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearSessionPreference()
       }
     },
-  }), [clearAuthState, loading, profile, session])
+  }), [clearAuthState, loadProfile, loading, profile, session])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

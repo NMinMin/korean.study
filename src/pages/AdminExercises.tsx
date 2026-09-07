@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { adminApi } from '../lib/adminApi'
 import { AdminSelect } from './AdminPage'
+import { BlockingLoader } from '../components/common/AppDialog'
 
 type Status = 'draft' | 'published' | 'locked' | 'no_content'
 type Skill = 'vocabulary_grammar' | 'dictation' | 'shadowing'
@@ -323,13 +324,53 @@ function TtsPanel({
   showSpeed?: boolean
 }) {
   return <aside className="admin-tts-panel">
-    <div className="admin-tts-heading"><Volume2 size={16} /><strong>{showSpeed ? 'Audio mẫu (tự sinh)' : 'Giọng đọc TTS'}</strong></div>
-    <label>Giọng đọc<VoiceSelect value={draft.ttsVoice} onChange={(value) => setDraft((current) => ({ ...current, ttsVoice: value, audioUrl: '' }))} onPreview={(value) => void previewVoice(value)} previewing={previewing} /></label>
-    {showSpeed && <div className="admin-speed-field"><span>Tốc độ đọc</span><div>{([0.75, 1, 1.25] as const).map((speed) => <button type="button" key={speed} className={draft.ttsSpeed === speed ? 'active' : ''} onClick={() => setDraft((current) => ({ ...current, ttsSpeed: speed, audioUrl: '' }))}>{speed}x</button>)}</div></div>}
-    <button type="button" className="admin-tts-preview" disabled={previewing} onClick={() => void previewVoice()}>{previewing ? <LoaderCircle className="spin" size={17} /> : <Volume2 size={17} />} Nghe thử giọng</button>
-    {draft.audioUrl
-      ? <audio className="admin-tts-audio" controls src={draft.audioUrl} />
-      : <div className="admin-tts-empty"><Mic size={25} /><span>Audio của bài sẽ được tạo khi lưu</span></div>}
+    <div className="admin-tts-heading">
+      <span className="admin-tts-icon-badge"><Volume2 size={15} /></span>
+      <div>
+        <strong>Audio mẫu</strong>
+        <small>Tự động tạo khi lưu bài</small>
+      </div>
+    </div>
+    <div className="admin-tts-body">
+      <label className="admin-tts-label"><span>Giọng đọc</span>
+        <VoiceSelect
+          value={draft.ttsVoice}
+          onChange={(value) => setDraft((current) => ({ ...current, ttsVoice: value, audioUrl: '' }))}
+          onPreview={(value) => void previewVoice(value)}
+          previewing={previewing}
+        />
+      </label>
+      {showSpeed && (
+        <div className="admin-speed-field">
+          <span>Tốc độ đọc</span>
+          <div>
+            {([0.75, 1, 1.25] as const).map((speed) => (
+              <button
+                type="button"
+                key={speed}
+                className={draft.ttsSpeed === speed ? 'active' : ''}
+                onClick={() => setDraft((current) => ({ ...current, ttsSpeed: speed, audioUrl: '' }))}
+              >
+                {speed === 1 ? '1x (chuẩn)' : `${speed}x`}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <button
+        type="button"
+        className="admin-tts-preview"
+        disabled={previewing || !draft.promptKo.trim()}
+        onClick={() => void previewVoice()}
+      >
+        {previewing ? <LoaderCircle className="spin" size={16} /> : <Volume2 size={16} />}
+        {previewing ? 'Đang tạo…' : 'Nghe thử câu này'}
+      </button>
+      {draft.audioUrl
+        ? <div className="admin-tts-audio-wrap"><audio className="admin-tts-audio" controls src={draft.audioUrl} /><button type="button" className="admin-tts-audio-clear" title="Xóa audio, tạo lại khi lưu" onClick={() => setDraft((cur) => ({ ...cur, audioUrl: '' }))}><X size={13} /></button></div>
+        : <p className="admin-tts-empty"><Music size={14} /> Chưa có audio · hệ thống sẽ tạo sau khi lưu</p>
+      }
+    </div>
   </aside>
 }
 
@@ -641,6 +682,10 @@ export default function AdminExercises() {
   }
 
   return <div className="admin-exercises">
+    <BlockingLoader
+      show={saving || deleting || uploading !== null}
+      label={deleting ? 'Đang xóa bài tập…' : uploading ? 'Đang tải tệp lên…' : 'Đang lưu bài tập…'}
+    />
     <div className="admin-panel-title">
       <div><h2>Bài tập theo kỹ năng</h2><p>Nội dung được gắn với đúng giáo trình, bài học và ba kỹ năng nền tảng. Phần ôn tập được AI tạo tự động.</p></div>
       <button className="admin-primary" onClick={() => open()}><Plus size={18} /> Thêm bài tập</button>
@@ -683,26 +728,65 @@ export default function AdminExercises() {
     </div>
     {!filtered.length && <div className="admin-empty">Chưa có bài tập phù hợp với bộ lọc.</div>}
     {editing !== undefined && <div className="admin-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditing(undefined) }}>
-      <section className={`admin-modal admin-exercise-modal${isVocabularyGrammar ? ' is-vocabulary-grammar' : ''}${isDictation ? ' is-dictation' : ''}${isShadowing ? ' is-shadowing' : ''}`}>
-        <header><div><span><NotebookPen size={22} /></span><div><h2>{editing ? 'Chỉnh sửa' : 'Thêm'} bài tập</h2><p>Chọn đúng bài học, kỹ năng và tải học liệu nếu cần.</p></div></div><button onClick={() => setEditing(undefined)}><X /></button></header>
-        <div className="admin-form admin-exercise-form">
-          <section className="admin-form-section admin-general-section">
-            <div className="admin-section-title"><span>Thông tin chung</span></div>
-            <div className="admin-general-grid">
-              <label>Giáo trình<AdminSelect value={selectedBookId} options={textbooks.map((item) => ({ value: item.id, label: item.title_ko }))} onChange={(value) => setDraft({ ...draft, lessonId: lessons.find((item) => item.textbook_id === value)?.id || '' })} /></label>
-              <label>Bài học *<AdminSelect value={draft.lessonId} options={modalLessons.map((item) => ({ value: item.id, label: `Bài ${item.lesson_number} · ${item.title_ko}` }))} onChange={(value) => setDraft({ ...draft, lessonId: value })} /></label>
-              <label>Kỹ năng *<AdminSelect value={draft.skillType} options={skills.map(({ value, label }) => ({ value, label }))} onChange={(value) => setDraft({ ...draft, skillType: value as Skill })} /></label>
-            </div>
-            {isVocabularyGrammar && <div className={`admin-kind-tabs is-${draft.vocabularyGrammarKind}`} role="tablist" aria-label="Phân loại nội dung">
-              <span className="admin-kind-tab-indicator" aria-hidden="true" />
-              <button type="button" role="tab" aria-selected={draft.vocabularyGrammarKind === 'vocabulary'} className={draft.vocabularyGrammarKind === 'vocabulary' ? 'is-active' : ''} onClick={() => setDraft({ ...draft, vocabularyGrammarKind: 'vocabulary' })}>
-                <BookOpen size={17} /><span>Từ vựng</span>
-              </button>
-              <button type="button" role="tab" aria-selected={draft.vocabularyGrammarKind === 'grammar'} className={draft.vocabularyGrammarKind === 'grammar' ? 'is-active' : ''} onClick={() => setDraft({ ...draft, vocabularyGrammarKind: 'grammar' })}>
-                <NotebookPen size={17} /><span>Ngữ pháp</span>
-              </button>
-            </div>}
-          </section>
+      {(() => {
+        const modalSkills = [
+          { value: 'vocabulary', label: 'Từ vựng', icon: BookOpen, description: 'Nhập từ vựng tiếng Hàn, nghĩa tiếng Việt, phát âm và mẹo ghi nhớ.' },
+          { value: 'grammar', label: 'Ngữ pháp', icon: NotebookPen, description: 'Nhập mẫu cấu trúc ngữ pháp, bối cảnh sử dụng và các công thức chia.' },
+          { value: 'dictation', label: 'Nghe chép chính tả', icon: Headphones, description: 'Nhập câu tiếng Hàn kèm bản dịch và thiết lập audio mẫu phát âm.' },
+          { value: 'shadowing', label: 'Shadowing', icon: Mic, description: 'Nhập câu luyện nói theo ngữ điệu kèm ghi chú phát âm.' },
+        ] as const
+        const currentSkillKey = draft.skillType === 'vocabulary_grammar' ? draft.vocabularyGrammarKind : draft.skillType
+        const currentSkillMeta = modalSkills.find((s) => s.value === currentSkillKey) || modalSkills[0]
+        const CurrentSkillIcon = currentSkillMeta.icon
+
+        return (
+          <section className={`admin-modal admin-exercise-modal${isVocabularyGrammar ? ' is-vocabulary-grammar' : ''}${isDictation ? ' is-dictation' : ''}${isShadowing ? ' is-shadowing' : ''}`}>
+            <header className="admin-exercise-modal-header">
+              <div className="admin-modal-header-main">
+                <span className={`admin-modal-header-icon is-${currentSkillKey}`}><CurrentSkillIcon size={22} /></span>
+                <div>
+                  <h2>{editing ? 'Chỉnh sửa bài tập' : 'Thêm bài tập mới'} · {currentSkillMeta.label}</h2>
+                  <p>{currentSkillMeta.description}</p>
+                </div>
+              </div>
+              <button className="admin-modal-close" onClick={() => setEditing(undefined)} aria-label="Đóng"><X size={19} /></button>
+            </header>
+            <div className="admin-form admin-exercise-form">
+              <section className="admin-form-section admin-general-section">
+                <div className="admin-section-title"><span>Thông tin bài học & Kỹ năng</span></div>
+                <div className="admin-general-grid">
+                  <label>Giáo trình<AdminSelect value={selectedBookId} options={textbooks.map((item) => ({ value: item.id, label: item.title_ko }))} onChange={(value) => setDraft({ ...draft, lessonId: lessons.find((item) => item.textbook_id === value)?.id || '' })} /></label>
+                  <label>Bài học *<AdminSelect value={draft.lessonId} options={modalLessons.map((item) => ({ value: item.id, label: `Bài ${item.lesson_number} · ${item.title_ko}` }))} onChange={(value) => setDraft({ ...draft, lessonId: value })} /></label>
+                </div>
+                <div className="admin-skill-selector-block">
+                  <span className="admin-skill-selector-label">Kỹ năng bài tập *</span>
+                  <div className="admin-modal-skill-tabs" role="tablist" aria-label="Phân loại kỹ năng bài tập">
+                    {modalSkills.map(({ value, label, icon: Icon }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        role="tab"
+                        aria-selected={currentSkillKey === value}
+                        className={`admin-modal-skill-tab${currentSkillKey === value ? ' is-active' : ''}`}
+                        onClick={() => {
+                          if (value === 'vocabulary') {
+                            setDraft((cur) => ({ ...cur, skillType: 'vocabulary_grammar', vocabularyGrammarKind: 'vocabulary' }))
+                          } else if (value === 'grammar') {
+                            setDraft((cur) => ({ ...cur, skillType: 'vocabulary_grammar', vocabularyGrammarKind: 'grammar' }))
+                          } else if (value === 'dictation') {
+                            setDraft((cur) => ({ ...cur, skillType: 'dictation' }))
+                          } else if (value === 'shadowing') {
+                            setDraft((cur) => ({ ...cur, skillType: 'shadowing' }))
+                          }
+                        }}
+                      >
+                        <Icon size={16} />
+                        <span>{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </section>
 
           <section className={`admin-form-section admin-content-section${isVocabularyExercise ? ' is-vocab' : ''}${isGrammarExercise ? ' is-grammar' : ''}${isDictation ? ' is-dictation' : ''}${isShadowing ? ' is-shadowing' : ''}`}>
             <div className="admin-section-title"><span>{isVocabularyExercise ? 'Nội dung từ vựng' : isGrammarExercise ? 'Nội dung ngữ pháp' : isDictation ? 'Nội dung nghe' : 'Câu luyện nói'}</span></div>
@@ -778,13 +862,42 @@ export default function AdminExercises() {
             </>}
             {isGrammarExercise && <>
               <div className="admin-grammar-main">
-                <label className="admin-ko-field">Nội dung tiếng Hàn *<textarea rows={3} value={draft.promptKo} onChange={(event) => setDraft({ ...draft, promptKo: event.target.value })} /></label>
-                <label>Nội dung tiếng Việt<input value={draft.promptVi} onChange={(event) => setDraft({ ...draft, promptVi: event.target.value })} /></label>
-                <label>Bối cảnh<input value={draft.contextVi} onChange={(event) => setDraft({ ...draft, contextVi: event.target.value })} placeholder="Ví dụ: dùng khi muốn chọn một trong nhiều lựa chọn…" /></label>
+                <label className="admin-ko-field">
+                  Mẫu ngữ pháp (tiếng Hàn) *
+                  <input
+                    value={draft.promptKo}
+                    onChange={(event) => setDraft({ ...draft, promptKo: event.target.value })}
+                    placeholder="Ví dụ: -(으)ㄴ, -고 싶다, (이)나 / -거나…"
+                  />
+                </label>
+                <label>
+                  Ý nghĩa tiếng Việt *
+                  <input
+                    value={draft.promptVi}
+                    onChange={(event) => setDraft({ ...draft, promptVi: event.target.value })}
+                    placeholder="Ví dụ: Đã... (Định ngữ thì quá khứ cho động từ)"
+                  />
+                </label>
+                <label>
+                  Bối cảnh sử dụng
+                  <input
+                    value={draft.contextVi}
+                    onChange={(event) => setDraft({ ...draft, contextVi: event.target.value })}
+                    placeholder="Ví dụ: Dùng khi bổ nghĩa cho danh từ đứng sau về một hành động đã xảy ra…"
+                  />
+                </label>
               </div>
               <div className="admin-grammar-side">
                 <div className="admin-formula-builder">
-                  <div><span className="admin-formula-title">Công thức / cách dùng<small><GripVertical size={13} /> Kéo thả để xếp</small></span><button type="button" onClick={() => setDraft({ ...draft, formulaLines: [...draft.formulaLines, ''] })}><Plus size={15} /> Thêm cách dùng</button></div>
+                  <div className="admin-formula-builder-head">
+                    <span className="admin-formula-title">
+                      <strong>Công thức / Cách chia</strong>
+                      <small><GripVertical size={13} /> Kéo thả để xếp thứ tự</small>
+                    </span>
+                    <button type="button" onClick={() => setDraft({ ...draft, formulaLines: [...draft.formulaLines, ''] })}>
+                      <Plus size={14} /> Thêm cách chia
+                    </button>
+                  </div>
                   <div className="admin-formula-list">
                     {draft.formulaLines.map((line, index) => <div
                       className={`admin-formula-row${draggedFormulaIndex === index ? ' is-dragging' : ''}`}
@@ -805,37 +918,116 @@ export default function AdminExercises() {
                       }}
                       onDragEnd={() => setDraggedFormulaIndex(null)}
                     >
-                      <span className="admin-formula-drag" title="Kéo để sắp xếp" aria-hidden="true"><GripVertical size={17} /></span>
-                      <input value={line} onChange={(event) => setDraft({ ...draft, formulaLines: draft.formulaLines.map((item, itemIndex) => itemIndex === index ? event.target.value : item) })} placeholder={`Cách dùng ${index + 1}`} />
-                      <button type="button" disabled={draft.formulaLines.length === 1} aria-label={`Xóa cách dùng ${index + 1}`} onClick={() => setDraft({ ...draft, formulaLines: draft.formulaLines.filter((_, itemIndex) => itemIndex !== index) })}><X size={14} /></button>
+                      <span className="admin-formula-drag" title="Kéo để sắp xếp" aria-hidden="true"><GripVertical size={16} /></span>
+                      <input
+                        value={line}
+                        onChange={(event) => setDraft({ ...draft, formulaLines: draft.formulaLines.map((item, itemIndex) => itemIndex === index ? event.target.value : item) })}
+                        placeholder={`Ví dụ: Động từ có patchim + -은 (Cách ${index + 1})`}
+                      />
+                      <button type="button" disabled={draft.formulaLines.length === 1} aria-label={`Xóa cách chia ${index + 1}`} onClick={() => setDraft({ ...draft, formulaLines: draft.formulaLines.filter((_, itemIndex) => itemIndex !== index) })}><X size={14} /></button>
                     </div>)}
                   </div>
                 </div>
               </div>
-              <label className="admin-note-field">Lưu ý<textarea rows={3} value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="Ví dụ: dùng với danh từ, động/tính từ có quy tắc riêng…" /></label>
+              <label className="admin-note-field">
+                Lưu ý ngữ pháp
+                <textarea
+                  rows={2}
+                  value={draft.note}
+                  onChange={(event) => setDraft({ ...draft, note: event.target.value })}
+                  placeholder="Ví dụ: Với thân động từ kết thúc bằng 'ㄹ' thì khi gặp 'ㄴ' sẽ bị lược bỏ 'ㄹ' (만들다 -> 만든)..."
+                />
+              </label>
             </>}
             {isDictation && <>
-              <div className="admin-listening-main">
-                <label className="admin-ko-field"><span>Nội dung tiếng Hàn * <em>{draft.promptKo.length}/200</em></span><textarea maxLength={200} rows={4} value={draft.promptKo} onChange={(event) => setDraft({ ...draft, promptKo: event.target.value, audioUrl: '' })} placeholder="Nhập câu tiếng Hàn để học viên nghe và chép…" /><small>Nội dung này đồng thời là đáp án chuẩn để đối chiếu.</small></label>
-                <label>Nội dung tiếng Việt (Bản dịch)<textarea rows={2} value={draft.promptVi} onChange={(event) => setDraft({ ...draft, promptVi: event.target.value })} placeholder="Nhập bản dịch tiếng Việt…" /></label>
+              <div className="admin-listening-main admin-listening-card">
+                <div className="admin-listening-card-head"><span className="admin-listening-step">1</span><div><strong>Nội dung câu nghe</strong><small>Nhập câu gốc trước để có thể nghe thử audio</small></div></div>
+                <label className="admin-ko-field">
+                  <span>Câu tiếng Hàn * <em className={draft.promptKo.length >= 180 ? 'is-near-limit' : ''}>{draft.promptKo.length}/200</em></span>
+                  <textarea
+                    maxLength={200}
+                    rows={4}
+                    value={draft.promptKo}
+                    onChange={(event) => setDraft({ ...draft, promptKo: event.target.value, audioUrl: '' })}
+                    placeholder="Ví dụ: 날씨가 추워서 목도리를 했어요."
+                  />
+                  <small>Đây cũng là đáp án chuẩn để chấm bài của học viên.</small>
+                </label>
+                <label className="admin-vi-field">
+                  Bản dịch tiếng Việt
+                  <input
+                    value={draft.promptVi}
+                    onChange={(event) => setDraft({ ...draft, promptVi: event.target.value })}
+                    placeholder="Ví dụ: Vì trời lạnh nên tôi đã quàng khăn."
+                  />
+                </label>
+                <details className="admin-listening-optional" open={Boolean(draft.explanationVi)}>
+                  <summary><span>Ghi chú / Giải thích</span><small>Tùy chọn</small></summary>
+                  <label>
+                    <span className="sr-only">Ghi chú / Giải thích</span>
+                    <textarea
+                      rows={2}
+                      value={draft.explanationVi}
+                      onChange={(event) => setDraft({ ...draft, explanationVi: event.target.value })}
+                      placeholder="Quy tắc biến âm, ngữ pháp hoặc từ vựng trọng tâm…"
+                    />
+                  </label>
+                </details>
               </div>
               <TtsPanel draft={draft} setDraft={setDraft} previewVoice={previewVoice} previewing={previewingVoice} />
-              <label className="admin-note-field">Ghi chú / giải thích<textarea rows={2} value={draft.explanationVi} onChange={(event) => setDraft({ ...draft, explanationVi: event.target.value })} placeholder="Nhập lưu ý ngữ pháp, từ quan trọng hoặc cách phát âm…" /></label>
             </>}
             {isShadowing && <>
-              <div className="admin-listening-main">
-                <label className="admin-ko-field"><span>Nội dung tiếng Hàn * <em>{draft.promptKo.length}/200</em></span><textarea maxLength={200} rows={4} value={draft.promptKo} onChange={(event) => setDraft({ ...draft, promptKo: event.target.value, audioUrl: '' })} placeholder="Nhập câu luyện Shadowing…" /><small>Đây là câu chuẩn dùng để đối chiếu phát âm.</small></label>
-                <label>Nội dung tiếng Việt<textarea rows={2} value={draft.promptVi} onChange={(event) => setDraft({ ...draft, promptVi: event.target.value })} placeholder="Nhập bản dịch tiếng Việt…" /></label>
-                <label>Giải thích / lưu ý phát âm<input value={draft.pronunciation} onChange={(event) => setDraft({ ...draft, pronunciation: event.target.value })} placeholder="Ví dụ: nối âm, nhấn nhẹ cuối câu…" /></label>
+              <div className="admin-listening-main admin-listening-card">
+                <div className="admin-listening-card-head"><span className="admin-listening-step">1</span><div><strong>Nội dung câu nói</strong><small>Câu ngắn, tự nhiên sẽ dễ luyện theo hơn</small></div></div>
+                <label className="admin-ko-field">
+                  <span>Câu luyện Shadowing * <em className={draft.promptKo.length >= 180 ? 'is-near-limit' : ''}>{draft.promptKo.length}/200</em></span>
+                  <textarea
+                    maxLength={200}
+                    rows={4}
+                    value={draft.promptKo}
+                    onChange={(event) => setDraft({ ...draft, promptKo: event.target.value, audioUrl: '' })}
+                    placeholder="Ví dụ: 제 꿈은 한국어를 유창하게 말하는 것이에요."
+                  />
+                  <small>Câu chuẩn người bản xứ đọc — học viên nghe và nhái lại theo đúng ngữ điệu.</small>
+                </label>
+                <label className="admin-vi-field">
+                  Bản dịch tiếng Việt
+                  <input
+                    value={draft.promptVi}
+                    onChange={(event) => setDraft({ ...draft, promptVi: event.target.value })}
+                    placeholder="Ví dụ: Ước mơ của tôi là nói tiếng Hàn thành thạo."
+                  />
+                </label>
+                <label>
+                  Lưu ý phát âm &amp; ngữ điệu
+                  <input
+                    value={draft.pronunciation}
+                    onChange={(event) => setDraft({ ...draft, pronunciation: event.target.value })}
+                    placeholder="Ví dụ: Lên giọng cuối câu, nối âm [유창하게→유창하게], nhấn vần -게…"
+                  />
+                </label>
+                <details className="admin-listening-optional" open={Boolean(draft.note)}>
+                  <summary><span>Ghi chú thêm</span><small>Tùy chọn</small></summary>
+                  <label>
+                    <span className="sr-only">Ghi chú thêm</span>
+                    <textarea
+                      rows={2}
+                      value={draft.note}
+                      onChange={(event) => setDraft({ ...draft, note: event.target.value })}
+                      placeholder="Ngữ pháp đặc biệt hoặc bối cảnh văn hóa liên quan…"
+                    />
+                  </label>
+                </details>
               </div>
               <TtsPanel draft={draft} setDraft={setDraft} previewVoice={previewVoice} previewing={previewingVoice} showSpeed />
-              <label className="admin-note-field">Ghi chú<textarea rows={2} value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="Lưu ý thêm cho người học…" /></label>
             </>}
           </section>
         </div>
         <footer><button className="admin-cancel" onClick={() => setEditing(undefined)}>Hủy</button><button className="admin-primary" disabled={saving || uploading !== null || !draft.lessonId || !draft.promptKo.trim()} onClick={() => void save()}>{saving ? 'Đang lưu…' : 'Lưu bài tập'}</button></footer>
       </section>
-    </div>}
+    )
+  })()}
+</div>}
     {deleteTarget && <div className="admin-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !deleting) setDeleteTarget(null) }}>
       <section className="admin-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-exercise-title">
         <header>

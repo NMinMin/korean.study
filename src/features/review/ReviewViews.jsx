@@ -32,6 +32,7 @@ import { gradeSpeechLocally, gradeSpeechWithAI, toneForScore } from '../study/sp
 
 const gradeWithAI = (target, said, realPron, timing) => gradeSpeechWithAI(requestAIJson, target, said, realPron, timing);
 const gradeLocally = gradeSpeechLocally;
+const REVIEW_PASS_PERCENT = 80;
 
 function pickDistractors(all, excludeIdx, n, getter) {
   const pool = all.map((_, i) => i).filter((i) => i !== excludeIdx);
@@ -693,7 +694,9 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
       await saveReviewHistory(lesson, userId, newHistory);
       if (finalReflex && finalReflex.length) await saveReflexAttempts(lesson, userId, finalReflex);
       if (seed) await markStandardExamTaken(difficulty.stars, lesson, userId);
-      if (mode === "bylesson") {
+    }
+    // Lần làm lại vẫn phải được phép cập nhật tiến độ và đạt mốc hoàn thành.
+    if (mode === "bylesson") {
         const completedItems = {};
         finalAnswers.forEach((answer, answerIndex) => {
           if (answer.correct) completedItems[`mc:${answerIndex}:${answer.key || "question"}`] = "correct";
@@ -706,8 +709,8 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
         });
         const totalItems = finalAnswers.length + (finalWriting?.length || 0) + (finalReflex?.length || 0);
         const { composite } = calculateReviewComposite(finalAnswers, finalWriting || [], finalReflex || [], elapsedMs);
-        // Từ 9/10 được xem là đã làm chủ bài ôn: lưu trọn vẹn tiến trình.
-        if (composite >= 90) {
+        // Từ 8/10 được xem là đạt bài ôn: quy đổi tiến độ Ôn tập thành 100%.
+        if (composite >= REVIEW_PASS_PERCENT) {
           finalAnswers.forEach((answer, answerIndex) => { completedItems[`mc:${answerIndex}:${answer.key || "question"}`] = "mastered"; });
           (finalWriting || []).forEach((answer, answerIndex) => { completedItems[`writing:${answerIndex}:${answer.id || "question"}`] = "mastered"; });
           (finalReflex || []).forEach((answer, answerIndex) => { completedItems[`shadowing:${answerIndex}:${answer.no || "question"}`] = "mastered"; });
@@ -724,7 +727,6 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
         } catch (error) {
           console.error("Không thể lưu kết quả ôn tập", error);
         }
-      }
     }
     onFinish(finalAnswers, finalWriting, elapsedMs, finalReflex || []);
   };
@@ -1124,7 +1126,8 @@ export function ReviewResultView({ answers, writingResults, elapsedMs, difficult
   const timeLabel = seconds >= 60 ? `${Math.floor(seconds / 60)} phút ${seconds % 60} giây` : `${seconds} giây`;
   const achievedStars = composite >= 90 ? 5 : composite >= 75 ? 4 : composite >= 60 ? 3 : composite >= 40 ? 2 : 1;
   const score = Math.round(composite) / 10;
-  const grade = composite >= 90 ? { label: "Hoàn thành xuất sắc!", icon: "🏆" } : composite >= 75 ? { label: "Nắm vững!", icon: "👍" } : composite >= 60 ? { label: "Đạt yêu cầu!", icon: "🙂" } : composite >= 40 ? { label: "Cần ôn thêm!", icon: "💪" } : { label: "Nên học lại bài!", icon: "📖" };
+  const passed = composite >= REVIEW_PASS_PERCENT;
+  const grade = composite >= 90 ? { label: "Hoàn thành xuất sắc!", icon: "🏆" } : composite >= REVIEW_PASS_PERCENT ? { label: "Đã hoàn thành!", icon: "👍" } : composite >= 60 ? { label: "Chưa đạt 8/10 — ôn thêm nhé!", icon: "💪" } : composite >= 40 ? { label: "Cần ôn thêm!", icon: "💪" } : { label: "Nên học lại bài!", icon: "📖" };
   const xpEarned = Math.round(composite * 0.8);
   const gemEarned = Math.round(composite * 0.3);
 
@@ -1252,7 +1255,7 @@ export function ReviewResultView({ answers, writingResults, elapsedMs, difficult
           <button className="rv-retry-btn change" onClick={onChangeSet}><Sparkles size={16} /> Đổi đề mới</button>
         )}
         <button className="rv-retry-btn" onClick={onRetry}><RotateCcw size={16} /> Ôn lại lần nữa</button>
-        <button className="rv-home-btn" onClick={onHome}><Home size={16} /> Hoàn thành</button>
+        <button className="rv-home-btn" onClick={() => onHome(passed)}><Home size={16} /> {mode === "bylesson" && !passed ? "Quay lại bài học" : "Hoàn thành"}</button>
       </div>
     </section>
   );

@@ -1,10 +1,11 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Mail, Moon, Sun } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import loginBackground from '../../UIUX/backgrounddangnhap.png'
 import registerBackground from '../../UIUX/backgrounddangky.png'
 import hidePasswordIcon from '../../UIUX/Hide.png'
 import showPasswordIcon from '../../UIUX/Show.png'
+import { BlockingLoader, useAppDialog } from '../components/common/AppDialog'
 import './auth.css'
 
 type Mode = 'register' | 'login'
@@ -23,6 +24,7 @@ function friendlyError(error: unknown) {
 
 export default function AuthPage() {
   const auth = useAuth()
+  const dialog = useAppDialog()
   const [mode, setMode] = useState<Mode>('login')
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
@@ -31,8 +33,7 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [remember, setRemember] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
+  const [busyLabel, setBusyLabel] = useState('Đang xử lý…')
   const [dark, setDark] = useState(() => localStorage.getItem('kstudy:theme') === 'dark')
 
   const title = mode === 'login' ? 'ĐĂNG NHẬP' : 'ĐĂNG KÝ'
@@ -40,9 +41,16 @@ export default function AuthPage() {
 
   const changeMode = (nextMode: Mode) => {
     setMode(nextMode)
-    setError('')
-    setNotice('')
   }
+
+  useEffect(() => {
+    if (auth.configured) return
+    void dialog.alert({
+      title: 'Chưa thể kết nối',
+      message: 'Hệ thống đăng nhập chưa được cấu hình. Vui lòng liên hệ quản trị viên.',
+      variant: 'error',
+    })
+  }, [auth.configured, dialog])
 
   const toggleTheme = () => {
     const next = !dark
@@ -52,45 +60,62 @@ export default function AuthPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    setError('')
-    setNotice('')
     const cleanEmail = email.trim().toLowerCase()
-    if (!cleanEmail || !password) return setError('Vui lòng nhập đầy đủ email và mật khẩu.')
+    if (!cleanEmail || !password) {
+      await dialog.alert({ title: 'Thiếu thông tin', message: 'Vui lòng nhập đầy đủ email và mật khẩu.', variant: 'warning' })
+      return
+    }
     if (mode === 'register') {
-      if (displayName.trim().length < 2) return setError('Tên hiển thị cần ít nhất 2 ký tự.')
-      if (!passwordValid) return setError('Mật khẩu cần ít nhất 8 ký tự, gồm chữ hoa, chữ thường và số.')
-      if (password !== confirmPassword) return setError('Xác nhận mật khẩu không khớp.')
+      if (displayName.trim().length < 2) {
+        await dialog.alert({ title: 'Tên chưa hợp lệ', message: 'Tên hiển thị cần ít nhất 2 ký tự.', variant: 'warning' })
+        return
+      }
+      if (!passwordValid) {
+        await dialog.alert({ title: 'Mật khẩu chưa an toàn', message: 'Mật khẩu cần ít nhất 8 ký tự, gồm chữ hoa, chữ thường và số.', variant: 'warning' })
+        return
+      }
+      if (password !== confirmPassword) {
+        await dialog.alert({ title: 'Mật khẩu không khớp', message: 'Vui lòng nhập lại phần xác nhận mật khẩu.', variant: 'warning' })
+        return
+      }
     }
     setBusy(true)
+    setBusyLabel(mode === 'login' ? 'Đang đăng nhập…' : 'Đang tạo tài khoản…')
     try {
       if (mode === 'login') {
         await auth.signIn(cleanEmail, password, remember)
       } else {
         const result = await auth.signUp({ displayName: displayName.trim(), email: cleanEmail, password, remember })
         if (result.needsEmailConfirmation) {
-          setNotice('Đăng ký thành công. Hãy mở email để xác minh tài khoản trước khi đăng nhập.')
+          setBusy(false)
+          await dialog.alert({ title: 'Hãy kiểm tra email', message: 'Tài khoản đã được tạo. Mở email chúng tôi vừa gửi để xác minh tài khoản trước khi đăng nhập.', variant: 'success', confirmLabel: 'Đã hiểu' })
           setMode('login')
           setPassword('')
           setConfirmPassword('')
         }
       }
     } catch (nextError) {
-      setError(friendlyError(nextError))
+      setBusy(false)
+      await dialog.alert({ title: mode === 'login' ? 'Đăng nhập chưa thành công' : 'Đăng ký chưa thành công', message: friendlyError(nextError), variant: 'error', confirmLabel: 'Thử lại' })
     } finally {
       setBusy(false)
     }
   }
 
   const forgotPassword = async () => {
-    setError('')
-    setNotice('')
-    if (!email.trim()) return setError('Nhập email để nhận liên kết đặt lại mật khẩu.')
+    if (!email.trim()) {
+      await dialog.alert({ title: 'Nhập email của bạn', message: 'Điền email đã đăng ký, sau đó bấm “Quên mật khẩu” lần nữa để nhận liên kết đặt lại.', variant: 'info' })
+      return
+    }
     setBusy(true)
+    setBusyLabel('Đang gửi email khôi phục…')
     try {
       await auth.requestPasswordReset(email.trim().toLowerCase())
-      setNotice('Nếu email tồn tại, liên kết đặt lại mật khẩu đã được gửi.')
+      setBusy(false)
+      await dialog.alert({ title: 'Hãy kiểm tra email', message: 'Nếu email đã được đăng ký, bạn sẽ nhận được liên kết đặt lại mật khẩu trong ít phút. Hãy kiểm tra cả thư mục Spam.', variant: 'success', confirmLabel: 'Đã hiểu' })
     } catch (nextError) {
-      setError(friendlyError(nextError))
+      setBusy(false)
+      await dialog.alert({ title: 'Chưa thể gửi email', message: friendlyError(nextError), variant: 'error', confirmLabel: 'Thử lại' })
     } finally {
       setBusy(false)
     }
@@ -98,6 +123,7 @@ export default function AuthPage() {
 
   return (
     <main className={`auth-screen ${dark ? 'theme-dark' : 'theme-light'}`}>
+      <BlockingLoader show={busy} label={busyLabel} />
       <button className="theme-button" type="button" onClick={toggleTheme} aria-label={dark ? 'Bật giao diện sáng' : 'Bật giao diện tối'}>
         {dark ? <Moon /> : <Sun />}
       </button>
@@ -116,9 +142,6 @@ export default function AuthPage() {
             <button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'active' : ''} onClick={() => changeMode('login')}>Đăng nhập</button>
           </div>
           <h1>{title}</h1>
-          {!auth.configured && <p className="auth-message error">Chưa cấu hình Supabase. Hãy sao chép `.env.example` thành `.env` và điền các biến `VITE_SUPABASE_*`.</p>}
-          {error && <p className="auth-message error" role="alert">{error}</p>}
-          {notice && <p className="auth-message success" role="status">{notice}</p>}
           <form onSubmit={submit} noValidate>
             {mode === 'register' && (
               <label className="field"><span>Tên hiển thị *</span><input autoComplete="name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} /></label>

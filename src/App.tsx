@@ -6,6 +6,7 @@ import AuthPage from './pages/AuthPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import AdminPage from './pages/AdminPage'
 import { userStorageKey } from './lib/storageKeys'
+import { AppDialogProvider } from './components/common/AppDialog'
 
 const Dashboard = LegacyDashboard as ComponentType<{
   authenticatedProfile: AppProfile
@@ -29,6 +30,13 @@ function AppRoutes() {
 
   if (auth.loading) return <div className="app-loading" role="status">Đang tải Korean Study…</div>
 
+  // Một số cấu hình Supabase cũ trả token khôi phục về trang gốc. Sau khi
+  // client đã nhận phiên ở trên, đưa người dùng vào đúng màn hình đổi mật khẩu.
+  const recoveryHash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  const recoveryQuery = new URLSearchParams(window.location.search)
+  const isRecoveryRedirect = recoveryHash.get('type') === 'recovery' || recoveryQuery.get('type') === 'recovery'
+  if (isRecoveryRedirect) return <Navigate to="/auth/reset-password" replace />
+
   return <Routes>
     <Route path="/auth" element={auth.profile ? <Navigate to={auth.profile.role === 'admin' ? '/admin' : '/'} replace /> : <AuthPage />} />
     <Route path="/auth/callback" element={<Navigate to={auth.profile?.role === 'admin' ? '/admin' : '/'} replace />} />
@@ -49,7 +57,7 @@ function AppRoutes() {
 export default function App() {
   const isStaticSubpathDeploy = import.meta.env.BASE_URL !== '/'
   if (isStaticSubpathDeploy) {
-    return <HashRouter><AuthProvider><AppRoutes /></AuthProvider></HashRouter>
+    return <HashRouter><AppDialogProvider><AuthProvider><AppRoutes /></AuthProvider></AppDialogProvider></HashRouter>
   }
-  return <BrowserRouter><AuthProvider><AppRoutes /></AuthProvider></BrowserRouter>
+  return <BrowserRouter><AppDialogProvider><AuthProvider><AppRoutes /></AuthProvider></AppDialogProvider></BrowserRouter>
 }

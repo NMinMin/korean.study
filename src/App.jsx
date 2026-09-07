@@ -761,7 +761,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 mode={reviewMode}
                 onRetry={() => { setReviewIsRecheck(true); setView('review-quiz'); }}
                 onChangeSet={reviewMode === 'random' ? () => { setReviewSeed(null); setReviewIsRecheck(true); setView('review-quiz'); } : undefined}
-                onHome={() => reviewMode === 'bylesson' ? handleActivityFinish('ontap') : goHome()}
+                onHome={(passed) => reviewMode === 'bylesson' && passed ? handleActivityFinish('ontap') : goHome()}
               />
             )}
             {view.startsWith('soon-') && (

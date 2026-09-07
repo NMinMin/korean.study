@@ -326,7 +326,7 @@
   min-height: 104px;
 }
 
-.admin-exercise-modal .admin-content-section:not(.is-vocab):not(.is-grammar) {
+.admin-exercise-modal .admin-content-section:not(.is-vocab):not(.is-grammar):not(.is-dictation):not(.is-shadowing) {
   grid-template-columns: 1fr;
 }
 
@@ -749,7 +749,9 @@
 }
 
 .admin-exercise-modal .admin-mnemonic-field,
-.admin-exercise-modal .admin-content-section.is-grammar > .admin-note-field {
+.admin-exercise-modal .admin-content-section.is-grammar > .admin-note-field,
+.admin-exercise-modal .admin-content-section.is-dictation > .admin-note-field,
+.admin-exercise-modal .admin-content-section.is-shadowing > .admin-note-field {
   padding: 0;
   border: 0;
   background: transparent;
@@ -773,13 +775,11 @@
 
 .admin-exercise-modal .admin-tts-panel {
   align-self: stretch;
-  min-height: 238px;
-  padding: 15px;
-  border-radius: 14px;
+  min-height: 260px;
 }
 
 .admin-exercise-modal .admin-content-section.is-shadowing .admin-tts-panel {
-  min-height: 270px;
+  min-height: 310px;
 }
 
 .admin-exercise-modal .admin-tts-empty {
@@ -793,6 +793,7 @@
 .admin-exercise-modal .admin-voice-preview,
 .admin-exercise-modal .admin-tts-preview {
   white-space: nowrap;
+  width: 100%;
 }
 
 .admin-exercises .admin-exercise-modal footer {
@@ -893,25 +894,61 @@
 .admin-voice-item-preview:hover { background: #e7e1ff; }
 
 .admin-exercise-modal .admin-content-section.is-dictation,
-.admin-exercise-modal .admin-content-section.is-shadowing { display: grid; grid-template-columns: minmax(0, 58fr) minmax(250px, 42fr); align-items: start; gap: 16px 18px; }
+.admin-exercise-modal .admin-content-section.is-shadowing { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(270px, .85fr); align-items: start; gap: 14px 16px; }
 .admin-exercise-modal .admin-content-section.is-dictation > .admin-section-title,
 .admin-exercise-modal .admin-content-section.is-shadowing > .admin-section-title,
 .admin-exercise-modal .admin-content-section.is-dictation > .admin-note-field,
 .admin-exercise-modal .admin-content-section.is-shadowing > .admin-note-field { grid-column: 1 / -1 !important; }
 .admin-listening-main { display: grid; gap: 13px; min-width: 0; }
-.admin-listening-main label > span { display: flex; justify-content: space-between; }
+.admin-listening-card { padding: 15px 16px; border: 1px solid #e8e3f5; border-radius: 16px; background: #fcfbff; }
+.admin-listening-card-head { display: flex; align-items: center; gap: 10px; padding-bottom: 11px; border-bottom: 1px solid #eeeaf7; }
+.admin-listening-card-head > div { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
+.admin-listening-card-head strong { color: #302a4e; font-size: 13px; font-weight: 800; }
+.admin-listening-card-head small { color: #9189a9; font-size: 11px; font-weight: 500; }
+.admin-listening-step { display: grid; place-items: center; width: 26px; height: 26px; flex: 0 0 auto; border-radius: 8px; color: #fff; background: #7c6fe4; font-size: 12px; font-weight: 800; }
+.admin-listening-main label { display: flex; flex-direction: column; gap: 6px; color: #3d3762; font-size: 13px; font-weight: 700; }
+.admin-listening-main label > input,
+.admin-listening-main label > textarea { width: 100%; padding: 10px 13px; border: 1.5px solid #ddd8f2; border-radius: 11px; background: #fff; color: #2d2848; font: 14px inherit; outline: 0; transition: border-color .15s, box-shadow .15s; }
+.admin-listening-main label > input:focus,
+.admin-listening-main label > textarea:focus { border-color: #7c6fe4; box-shadow: 0 0 0 3px rgba(124,111,228,.1); }
+.admin-listening-main label > span { display: flex; justify-content: space-between; align-items: center; }
 .admin-listening-main label > span em { color: #a29bb8; font-size: 11px; font-style: normal; font-weight: 600; }
-.admin-listening-main .admin-ko-field small { color: #8d86a7; font-size: 11px; font-weight: 600; }
-.admin-tts-panel { display: grid; gap: 12px; padding: 15px; border: 1px solid #e3def1; border-radius: 14px; background: #faf9fd; }
-.admin-tts-heading { display: flex; align-items: center; gap: 7px; padding-bottom: 10px; border-bottom: 1px solid #e8e4f2; color: #312b4d; }
-.admin-tts-preview { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; border: 0; border-radius: 10px; color: #fff; background: #7767e7; font-weight: 700; cursor: pointer; }
-.admin-tts-preview:disabled { color: #aaa5ba; background: #e8e5ef; cursor: not-allowed; }
-.admin-tts-empty { display: grid; min-height: 86px; place-items: center; align-content: center; gap: 7px; border: 1px dashed #dcd5ef; border-radius: 11px; color: #a09ab7; text-align: center; font-size: 11px; }
-.admin-tts-audio { width: 100%; height: 38px; }
-.admin-speed-field { display: grid; gap: 6px; color: #40395d; font-size: 12px; font-weight: 700; }
-.admin-speed-field > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 10px; background: #e9e6f1; }
-.admin-speed-field button { min-height: 30px; border: 0; border-radius: 7px; color: #726b8e; background: transparent; cursor: pointer; }
-.admin-speed-field button.active { color: #5f50d7; background: #fff; box-shadow: 0 2px 8px rgba(72,58,137,.1); }
+.admin-listening-main label > span em.is-near-limit { color: #d27636; font-weight: 800; }
+.admin-listening-main .admin-ko-field small { color: #8d86a7; font-size: 11px; font-weight: 500; margin-top: -2px; }
+.admin-listening-main .admin-ko-field textarea { min-height: 96px; resize: none; font-size: 16px; line-height: 1.55; }
+.admin-listening-main .admin-vi-field input { min-height: 44px; }
+.admin-listening-optional { border-top: 1px solid #eeeaf7; padding-top: 10px; }
+.admin-listening-optional summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #61597d; font-size: 12px; font-weight: 700; cursor: pointer; list-style: none; }
+.admin-listening-optional summary::-webkit-details-marker { display: none; }
+.admin-listening-optional summary::after { content: '+'; display: grid; place-items: center; width: 22px; height: 22px; margin-left: auto; border-radius: 7px; background: #f0edfa; color: #7769dc; font-size: 16px; line-height: 1; }
+.admin-listening-optional[open] summary::after { content: '\2212'; }
+.admin-listening-optional summary small { padding: 3px 7px; border-radius: 999px; background: #f2eff8; color: #9690aa; font-size: 10px; font-weight: 600; }
+.admin-listening-optional[open] summary { margin-bottom: 9px; }
+.admin-listening-optional textarea { min-height: 62px; resize: vertical; }
+.admin-listening-optional .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* TTS Panel — redesigned card */
+.admin-tts-panel { display: flex; flex-direction: column; gap: 0; padding: 0; border: 1px solid #e4defc; border-radius: 16px; background: #fbfaff; overflow: hidden; }
+.admin-tts-heading { display: flex; align-items: center; gap: 10px; padding: 13px 16px 12px; border-bottom: 1px solid #ede9f9; }
+.admin-tts-icon-badge { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: linear-gradient(135deg, #7c6fe4, #a98fef); color: #fff; flex-shrink: 0; }
+.admin-tts-heading > div { display: flex; flex-direction: column; gap: 1px; }
+.admin-tts-heading strong { color: #2d2848; font-size: 13px; font-weight: 700; }
+.admin-tts-heading small { color: #9489b8; font-size: 11px; font-weight: 500; }
+.admin-tts-body { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px 14px; }
+.admin-tts-label { display: flex; flex-direction: column; gap: 6px; color: #3d3762; font-size: 12px; font-weight: 700; }
+.admin-tts-preview { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 0 16px; border: 0; border-radius: 11px; color: #fff; background: linear-gradient(135deg, #7767e7, #9b84f0); font: 700 13px inherit; cursor: pointer; transition: opacity .15s, transform .15s, box-shadow .15s; box-shadow: 0 4px 12px rgba(119,103,231,.25); }
+.admin-tts-preview:hover:not(:disabled) { opacity: .9; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(119,103,231,.3); }
+.admin-tts-preview:disabled { background: #e8e5ef; color: #aaa5ba; box-shadow: none; cursor: not-allowed; }
+.admin-tts-audio-wrap { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid #e0dbf5; border-radius: 11px; background: #fff; }
+.admin-tts-audio-wrap audio { flex: 1; height: 34px; }
+.admin-tts-audio-clear { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid #f1d3d9; border-radius: 8px; background: #fff8f9; color: #d94f62; flex-shrink: 0; cursor: pointer; }
+.admin-tts-audio { width: 100%; height: 34px; }
+.admin-tts-empty { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; margin: 0; padding: 8px 9px; border: 1px dashed #d8d1f0; border-radius: 10px; color: #9690b0; background: #fff; text-align: center; font-size: 10px; font-weight: 600; }
+.admin-tts-empty svg { flex: 0 0 auto; color: #8b7ee0; }
+.admin-speed-field { display: grid; gap: 7px; color: #3d3762; font-size: 12px; font-weight: 700; }
+.admin-speed-field > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 12px; background: #eae6f4; }
+.admin-speed-field button { min-height: 32px; border: 0; border-radius: 8px; color: #7268a0; background: transparent; font: 600 12px inherit; cursor: pointer; transition: background .13s, color .13s, box-shadow .13s; }
+.admin-speed-field button.active { color: #5f50d7; background: #fff; box-shadow: 0 2px 8px rgba(72,58,137,.12); font-weight: 700; }
 
 @media (max-width: 900px) {
   .admin-exercise-modal .admin-content-section.is-dictation,
@@ -1324,5 +1361,237 @@
 
   .admin-formula-builder .admin-formula-row {
     grid-template-columns: 28px minmax(0, 1fr) 36px;
+  }
+}
+
+/* Modern Exercise Modal UI Enhancements */
+.admin-exercise-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 26px;
+  background: linear-gradient(180deg, #faf9fe 0%, #fff 100%);
+  border-bottom: 1px solid #ede8f7;
+}
+
+.admin-modal-header-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.admin-modal-header-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  flex-shrink: 0;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .04);
+}
+
+.admin-modal-header-icon.is-vocabulary,
+.admin-modal-header-icon.is-grammar {
+  background: #f0ecfc;
+  color: #7c6fe4;
+}
+
+.admin-modal-header-icon.is-dictation {
+  background: #eef8f1;
+  color: #3fa95c;
+}
+
+.admin-modal-header-icon.is-shadowing {
+  background: #fef5ea;
+  color: #e8912e;
+}
+
+.admin-modal-header-main h2 {
+  font-size: 18px;
+  font-weight: 800;
+  color: #272145;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.admin-modal-header-main p {
+  font-size: 12px;
+  color: #7b7396;
+  margin: 2px 0 0;
+  line-height: 1.4;
+}
+
+.admin-modal-close {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid #e7e2f5;
+  background: #fff;
+  color: #7a7295;
+  cursor: pointer;
+  transition: all .18s ease;
+}
+
+.admin-modal-close:hover {
+  background: #f4efff;
+  color: #5748be;
+  border-color: #cbbff4;
+}
+
+.admin-exercise-modal .admin-general-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.admin-skill-selector-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.admin-skill-selector-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #433b66;
+}
+
+.admin-modal-skill-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 6px;
+  background: #f4f1fa;
+  border-radius: 14px;
+  border: 1px solid #e5e0f5;
+}
+
+.admin-modal-skill-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #6e658e;
+  background: transparent;
+  cursor: pointer;
+  transition: all .18s cubic-bezier(.2, .8, .2, 1);
+  white-space: nowrap;
+}
+
+.admin-modal-skill-tab:hover {
+  background: rgba(255, 255, 255, .7);
+  color: #4b3e94;
+}
+
+.admin-modal-skill-tab.is-active {
+  background: #7c6fe4;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(124, 111, 228, .32);
+}
+
+.admin-modal-skill-tab.is-active svg {
+  stroke-width: 2.2;
+}
+
+.admin-exercise-modal .admin-content-section.is-grammar {
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.admin-exercise-modal .admin-grammar-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-exercise-modal .admin-grammar-main .admin-ko-field input {
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #382c6c;
+  background: #fff;
+  border: 1.5px solid #ded8f1;
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+
+.admin-exercise-modal .admin-grammar-main .admin-ko-field input:focus {
+  border-color: #7c6fe4;
+  box-shadow: 0 0 0 3px rgba(124, 111, 228, .12);
+}
+
+.admin-formula-builder {
+  background: #f9f8fe;
+  border: 1.5px solid #eae5f7;
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+.admin-formula-builder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.admin-formula-builder-head button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 9px;
+  background: #fff;
+  border: 1px solid #dcd5f3;
+  color: #6d5dd3;
+  font: 700 12px inherit;
+  cursor: pointer;
+  transition: all .16s ease;
+}
+
+.admin-formula-builder-head button:hover {
+  background: #f0ecfd;
+  border-color: #7c6fe4;
+}
+
+.admin-exercise-modal .admin-note-field {
+  grid-column: 1 / -1;
+}
+
+.admin-exercise-modal .admin-note-field textarea {
+  min-height: 60px;
+  max-height: 100px;
+  resize: vertical;
+}
+
+/* Keep the shared lesson/skill area aligned for every exercise type.
+   Older vocabulary rules set align-items:start on this flex container. */
+.admin-exercises .admin-exercise-modal .admin-exercise-form {
+  align-items: stretch !important;
+}
+
+.admin-exercise-modal .admin-general-section,
+.admin-exercise-modal .admin-skill-selector-block,
+.admin-exercise-modal .admin-modal-skill-tabs {
+  width: 100%;
+  min-width: 0;
+}
+
+.admin-exercise-modal .admin-modal-skill-tab {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 8px;
+}
+
+@media (max-width: 640px) {
+  .admin-modal-skill-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
