@@ -463,7 +463,6 @@ Request chỉ nhận `text` dạng string, trim, độ dài 1–15.000 ký tự.
 
 Các lỗi đã được chuẩn hóa:
 
-- `AI_GRADER_NOT_CONFIGURED`
 - `INVALID_AI_REQUEST`
 - `AI_GRADER_TIMEOUT`
 - `AI_GRADER_RATE_LIMIT`
@@ -471,7 +470,7 @@ Các lỗi đã được chuẩn hóa:
 - `AI_GRADER_UPSTREAM_ERROR`
 - `AI_GRADER_INVALID_RESPONSE`
 
-**Nguyên tắc mở rộng AI:** frontend chỉ gửi dữ liệu học tập cần thiết; API key, provider URL và model config phải ở backend.
+**Nguyên tắc mở rộng AI:** frontend chỉ gửi dữ liệu học tập cần thiết; Worker URL và model config nằm ở backend.
 
 ---
 
@@ -713,7 +712,7 @@ PUBLIC / browser
 
 SERVER ONLY
   ├── SUPABASE_SERVICE_ROLE_KEY
-  ├── GROQ_GRADER_API_KEY
+  ├── GROQ_GRADER_URL (server-only)
   ├── SMTP credentials
   ├── REMINDER_JOB_SECRET
   ├── Speech-to-Text secret/config

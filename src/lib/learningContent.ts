@@ -124,7 +124,7 @@ export type LearningExercise = {
   lessonId: string
   textbookId?: string
   lessonNo?: number
-  skillType: 'vocabulary_grammar' | 'dictation' | 'shadowing'
+  skillType: 'vocabulary_grammar' | 'dictation' | 'shadowing' | 'review'
   exerciseType: string
   promptKo?: string | null
   promptVi?: string | null
@@ -157,7 +157,7 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
   const exerciseResult = await supabase
     .from('lesson_exercises')
     .select('id, lesson_id, skill_type, exercise_type, prompt_ko, prompt_vi, answer, explanation_vi, media_url, image_url, audio_url, sort_order')
-    .in('skill_type', ['vocabulary_grammar', 'dictation', 'shadowing'])
+    .in('skill_type', ['vocabulary_grammar', 'dictation', 'shadowing', 'review'])
     .eq('status', 'published')
     .order('sort_order')
   if (exerciseResult.error) return null
@@ -349,7 +349,7 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
   const grammar: LearningGrammar[] = grammarFromExercises.sort((a, b) => a.sortOrder - b.sortOrder)
   const exercises: LearningExercise[] = (exerciseResult.data ?? [])
     .filter((row) => allLessonsMap.has(row.lesson_id)
-      && ['vocabulary_grammar', 'dictation', 'shadowing'].includes(row.skill_type))
+      && ['vocabulary_grammar', 'dictation', 'shadowing', 'review'].includes(row.skill_type))
     .map((row) => {
       const lessonInfo = allLessonsMap.get(row.lesson_id)
       return {

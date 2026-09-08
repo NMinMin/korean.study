@@ -17,10 +17,21 @@ export type ReviewWord = {
 export type VocabularyReviewDay = {
   dateKey: string
   words: ReviewWord[]
+  evaluation?: VocabularyReviewEvaluation
+}
+
+export type VocabularyReviewEvaluation = {
+  rating: 'Bad' | 'Good' | 'Perfect'
+  score: number
+  correctCount: number
+  totalCount: number
+  feedback: string
+  completedAt: string
 }
 
 const DAY_MS = 86_400_000
 const DAILY_LIMIT = 10
+const RESULT_KEY_PREFIX = 'progress:vocabulary-review-result:'
 
 function localDateKey(date = new Date()) {
   const year = date.getFullYear()
@@ -56,15 +67,34 @@ function randomRank(seed: string) {
 
 export async function loadVocabularyReviewSchedule(userId: string, numberOfDays = 14): Promise<VocabularyReviewDay[]> {
   const todayKey = localDateKey()
-  const emptyDays = Array.from({ length: numberOfDays }, (_, index) => ({ dateKey: shiftDateKey(todayKey, index), words: [] as ReviewWord[] }))
+  const emptyDays: VocabularyReviewDay[] = Array.from({ length: numberOfDays }, (_, index) => ({ dateKey: shiftDateKey(todayKey, index), words: [] }))
   if (!supabase || !userId) return emptyDays
 
-  const completedResult = await supabase
-    .from('lesson_progress')
-    .select('lesson_id, textbook_id, updated_at')
-    .eq('user_id', userId)
-    .gte('progress_percent', 100)
-    .order('updated_at')
+  const resultKeys = emptyDays.map((day) => `${RESULT_KEY_PREFIX}${day.dateKey}`)
+  const [completedResult, evaluationResult] = await Promise.all([
+    supabase
+      .from('lesson_progress')
+      .select('lesson_id, textbook_id, updated_at')
+      .eq('user_id', userId)
+      .gte('progress_percent', 100)
+      .order('updated_at'),
+    supabase
+      .from('user_progress_states')
+      .select('state_key, state_value')
+      .eq('user_id', userId)
+      .in('state_key', resultKeys),
+  ])
+  for (const row of evaluationResult.data ?? []) {
+    const dateKey = row.state_key.slice(RESULT_KEY_PREFIX.length)
+    const day = emptyDays.find((item) => item.dateKey === dateKey)
+    if (!day) continue
+    try {
+      const value = JSON.parse(row.state_value) as VocabularyReviewEvaluation
+      if (['Bad', 'Good', 'Perfect'].includes(value.rating)) day.evaluation = value
+    } catch {
+      // Ignore malformed legacy state and keep the review calendar usable.
+    }
+  }
   if (completedResult.error || !completedResult.data?.length) return emptyDays
 
   const completedLessonIds = completedResult.data.map((item) => item.lesson_id)
@@ -191,4 +221,58 @@ export async function loadVocabularyReviewSchedule(userId: string, numberOfDays 
   }
 
   return emptyDays
+}
+
+export async function saveVocabularyReviewResult(
+  userId: string,
+  dateKey: string,
+  words: ReviewWord[],
+  answers: Array<{ sourceId: string; targetWord: string; correct: boolean }>,
+  evaluation: VocabularyReviewEvaluation,
+) {
+  if (!supabase || !userId || !words.length) return false
+  const ids = words.map((word) => word.id)
+  const currentResult = await supabase
+    .from('vocabulary_progress')
+    .select('vocabulary_id, mastery, correct_count, incorrect_count, times_reviewed')
+    .eq('user_id', userId)
+    .in('vocabulary_id', ids)
+  if (currentResult.error) throw currentResult.error
+
+  const currentById = new Map((currentResult.data ?? []).map((item) => [item.vocabulary_id, item]))
+  const answerById = new Map(answers.map((answer) => [answer.sourceId, answer.correct]))
+  const now = new Date()
+  const addDays = (days: number) => new Date(now.getTime() + days * DAY_MS).toISOString()
+  const rows = words.map((word) => {
+    const current = currentById.get(word.id)
+    const correct = answerById.get(word.id) === true
+    const mastery = correct ? Math.min(5, Number(current?.mastery || 0) + 1) : 1
+    const interval = correct ? ([0, 1, 2, 4, 7, 7][mastery] || 7) : 1
+    return {
+      user_id: userId,
+      textbook_id: word.textbookId,
+      lesson_id: word.lessonId,
+      vocabulary_id: word.id,
+      mastery,
+      correct_count: Number(current?.correct_count || 0) + (correct ? 1 : 0),
+      incorrect_count: Number(current?.incorrect_count || 0) + (correct ? 0 : 1),
+      last_rating: correct ? 'good' : 'forgot',
+      next_review_at: addDays(interval),
+      times_reviewed: Number(current?.times_reviewed || 0) + 1,
+      updated_at: now.toISOString(),
+    }
+  })
+  const [progressWrite, resultWrite] = await Promise.all([
+    supabase.from('vocabulary_progress').upsert(rows, { onConflict: 'user_id,vocabulary_id' }),
+    supabase.from('user_progress_states').upsert({
+      user_id: userId,
+      state_key: `${RESULT_KEY_PREFIX}${dateKey}`,
+      state_value: JSON.stringify(evaluation),
+      updated_at: now.toISOString(),
+    }, { onConflict: 'user_id,state_key' }),
+  ])
+  if (progressWrite.error) throw progressWrite.error
+  if (resultWrite.error) throw resultWrite.error
+  window.dispatchEvent(new CustomEvent('kstudy:vocabulary-review-updated'))
+  return true
 }

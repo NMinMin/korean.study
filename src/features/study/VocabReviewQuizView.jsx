@@ -20,6 +20,8 @@ import {
   playIncorrectSound,
   playCelebrationSound,
 } from '../../services/audioService';
+import { requestAIJson } from '../../services/aiService';
+import { saveVocabularyReviewResult } from '../../lib/reviewSchedule';
 
 function shuffle(array) {
   const arr = [...array];
@@ -75,6 +77,7 @@ function buildQuizQuestions(words, catalogVocabulary = []) {
 
       questions.push({
         id: `q-${i}-${w.id || wordKo}`,
+        sourceId: String(w.id || wordKo),
         type: mode === 2 ? 'listening' : 'meaning',
         instruction: mode === 2 ? 'Nghe phát âm và chọn nghĩa đúng:' : 'Chọn nghĩa tiếng Việt của từ:',
         targetWord: wordKo,
@@ -97,6 +100,7 @@ function buildQuizQuestions(words, catalogVocabulary = []) {
 
       questions.push({
         id: `q-${i}-${w.id || wordKo}`,
+        sourceId: String(w.id || wordKo),
         type: 'word',
         instruction: 'Chọn từ tiếng Hàn mang nghĩa:',
         promptVi: meaningVi,
@@ -114,20 +118,118 @@ function buildQuizQuestions(words, catalogVocabulary = []) {
   return shuffle(questions);
 }
 
+async function buildAIQuizQuestions(words, catalogVocabulary) {
+  const fallback = buildQuizQuestions(words, catalogVocabulary);
+  const sourceMap = new Map(words.map((word) => [String(word.id || word.word), word]));
+  const sources = words.map((word) => ({
+    id: String(word.id || word.word),
+    word: word.word,
+    meaningVi: word.meaningVi,
+    partOfSpeech: word.type || '',
+  }));
+  const prompt = `Bạn là giáo viên tiếng Hàn. Hãy tạo đúng ${sources.length} câu trắc nghiệm mới để kiểm tra các từ trong danh sách.
+- Mỗi sourceId xuất hiện đúng một lần.
+- Chỉ dùng kiến thức trong danh sách, không bịa nghĩa.
+- Trộn dạng chọn nghĩa, chọn từ, điền từ và ngữ cảnh ngắn.
+- Mỗi câu có đúng 4 lựa chọn khác nhau, chỉ một đáp án đúng.
+- Trả về duy nhất JSON: {"questions":[{"sourceId":"id","type":"meaning|word|context","instruction":"hướng dẫn","question":"nội dung","options":["A","B","C","D"],"correctIndex":0}]}.
+Dữ liệu: ${JSON.stringify(sources)}`;
+  try {
+    const { value } = await requestAIJson(prompt, { temperature: 0.75 });
+    const aiBySource = new Map();
+    for (const [index, raw] of (Array.isArray(value?.questions) ? value.questions : []).entries()) {
+      const sourceId = String(raw?.sourceId || '');
+      const source = sourceMap.get(sourceId);
+      const options = Array.isArray(raw?.options) ? raw.options.map((item) => String(item || '').trim()).filter(Boolean) : [];
+      const correctIndex = Number(raw?.correctIndex);
+      if (!source || !String(raw?.question || '').trim() || options.length !== 4 || new Set(options).size !== 4 || !Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) continue;
+      aiBySource.set(sourceId, {
+        id: `ai-review-${sourceId}-${index}-${Date.now()}`,
+        isAI: true,
+        sourceId,
+        type: raw.type === 'word' ? 'word' : 'meaning',
+        instruction: String(raw.instruction || 'Chọn đáp án đúng:'),
+        question: String(raw.question).trim(),
+        targetWord: source.word,
+        promptVi: source.meaningVi,
+        pron: source.pron || '',
+        audio: source.audio || '',
+        mnemonic: source.mnemonic || '',
+        pos: source.type || '',
+        correct: options[correctIndex],
+        options,
+      });
+    }
+    return shuffle(fallback.map((question) => aiBySource.get(question.sourceId) || question));
+  } catch {
+    return fallback;
+  }
+}
+
+function fallbackEvaluation(correctCount, totalCount) {
+  const score = totalCount ? Math.round((correctCount / totalCount) * 100) : 0;
+  const rating = score === 100 ? 'Perfect' : score >= 70 ? 'Good' : 'Bad';
+  return {
+    rating,
+    score,
+    correctCount,
+    totalCount,
+    feedback: rating === 'Perfect'
+      ? 'Bạn ghi nhớ rất chắc toàn bộ nhóm từ hôm nay.'
+      : rating === 'Good'
+        ? 'Bạn nhớ khá tốt, hãy ôn lại những từ trả lời sai.'
+        : 'Bạn cần ôn lại nhóm từ này sớm để củng cố trí nhớ.',
+    completedAt: new Date().toISOString(),
+  };
+}
+
+async function buildAIEvaluation(answers) {
+  const correctCount = answers.filter((answer) => answer.correct).length;
+  const base = fallbackEvaluation(correctCount, answers.length);
+  const prompt = `Bạn là giáo viên tiếng Hàn đánh giá một lượt ôn từ vựng.
+Quy ước bắt buộc: 100% = Perfect; từ 70% đến dưới 100% = Good; dưới 70% = Bad.
+Hãy nhận xét ngắn bằng tiếng Việt dựa trên kết quả và trả về duy nhất JSON {"rating":"Bad|Good|Perfect","feedback":"một câu nhận xét"}.
+Kết quả: ${JSON.stringify(answers.map(({ targetWord, correct }) => ({ word: targetWord, correct })))}`;
+  try {
+    const { value } = await requestAIJson(prompt, { temperature: 0.3 });
+    return { ...base, feedback: String(value?.feedback || base.feedback).trim() };
+  } catch {
+    return base;
+  }
+}
+
 export default function VocabReviewQuizView({
   words = [],
   catalogVocabulary = [],
+  userId,
+  reviewDateKey,
   onBack,
   onFinish,
 }) {
-  const [questions, setQuestions] = useState(() => buildQuizQuestions(words, catalogVocabulary));
+  const [selectedWords] = useState(() => shuffle(words).slice(0, 10));
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState(null);
   const [answersHistory, setAnswersHistory] = useState([]); // [{ questionId, word, correct: bool }]
   const [isDone, setIsDone] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [evaluation, setEvaluation] = useState(null);
+  const [evaluating, setEvaluating] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   const currentQ = questions[currentIndex];
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    buildAIQuizQuestions(selectedWords, catalogVocabulary).then((result) => {
+      if (alive) setQuestions(result);
+    }).finally(() => {
+      if (alive) setLoading(false);
+    });
+    return () => { alive = false; };
+  }, [selectedWords, catalogVocabulary]);
 
   // Phát âm từ hiện tại
   const playWordAudio = (word, audioUrl) => {
@@ -186,6 +288,7 @@ export default function VocabReviewQuizView({
       ...prev,
       {
         questionId: currentQ.id,
+        sourceId: currentQ.sourceId,
         targetWord: currentQ.targetWord,
         meaning: currentQ.type === 'word' ? currentQ.promptVi : currentQ.correct,
         correct: isCorrect,
@@ -194,27 +297,42 @@ export default function VocabReviewQuizView({
   };
 
   // Chuyển sang câu tiếp theo
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentIndex + 1 < questions.length) {
       setCurrentIndex((idx) => idx + 1);
       setSelectedOption(null);
     } else {
-      setIsDone(true);
-      // Bắn event để lịch ôn từ vựng trên dashboard cập nhật lại
       try {
-        window.dispatchEvent(new CustomEvent('kstudy:vocabulary-review-updated'));
-      } catch (e) {}
+        setEvaluating(true);
+        setSaveError('');
+        const result = await buildAIEvaluation(answersHistory);
+        await saveVocabularyReviewResult(userId, reviewDateKey || new Date().toISOString().slice(0, 10), selectedWords, answersHistory, result);
+        setEvaluation(result);
+        setIsDone(true);
+      } catch {
+        setSaveError('Chưa lưu được đánh giá vào lịch. Vui lòng thử lại.');
+      } finally {
+        setEvaluating(false);
+      }
     }
   };
 
   // Làm lại bài kiểm tra
-  const handleRestart = () => {
-    setQuestions(buildQuizQuestions(words, catalogVocabulary));
+  const handleRestart = async () => {
+    setLoading(true);
+    setQuestions(await buildAIQuizQuestions(selectedWords, catalogVocabulary));
+    setLoading(false);
     setCurrentIndex(0);
     setSelectedOption(null);
     setAnswersHistory([]);
     setIsDone(false);
+    setEvaluation(null);
+    setSaveError('');
   };
+
+  if (loading) {
+    return <section className="rv-page"><div className="rv-loading"><Sparkles size={22} color="#7C6FE4" /> AI đang tạo bài kiểm tra từ {selectedWords.length} từ đến lịch ôn...</div></section>;
+  }
 
   if (!questions.length) {
     return (
@@ -257,14 +375,9 @@ export default function VocabReviewQuizView({
             {pct >= 70 ? <Trophy size={42} /> : <Sparkles size={42} />}
           </div>
           <h2 className="rv-result-grade" style={{ fontSize: 26, color: '#1F1B36', marginBottom: 8 }}>
-            {pct === 100
-              ? 'Xuất sắc! Đã thuộc toàn bộ từ!'
-              : pct >= 80
-              ? 'Rất tốt! Bạn nhớ từ rất chắc!'
-              : pct >= 50
-              ? 'Khá tốt! Cần luyện thêm một chút!'
-              : 'Hãy ôn tập lại để nhớ sâu hơn nhé!'}
+            {evaluation?.rating || (pct === 100 ? 'Perfect' : pct >= 70 ? 'Good' : 'Bad')}
           </h2>
+          {evaluation?.feedback && <p style={{ color: '#6A6385', margin: '-2px 0 14px' }}>{evaluation.feedback}</p>}
           <p className="rv-result-score" style={{ fontSize: 20, color: '#6A6385', marginBottom: 20 }}>
             Đúng <b style={{ color: '#7C6FE4' }}>{correctCount}</b> / {totalCount} từ <span>({pct}%)</span>
           </p>
@@ -381,7 +494,9 @@ export default function VocabReviewQuizView({
         </div>
 
         {/* Nội dung câu hỏi */}
-        {currentQ.type === 'meaning' && (
+        {currentQ.isAI && <h2 className="qz-prompt-ko" style={{ margin: '14px 0 10px', fontSize: 24, color: '#1B1736' }}>{currentQ.question}</h2>}
+
+        {!currentQ.isAI && currentQ.type === 'meaning' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '14px 0 10px' }}>
             <h2 className="qz-prompt-ko" lang="ko" style={{ margin: 0, fontSize: 32, color: '#1B1736' }}>
               {currentQ.targetWord}
@@ -403,7 +518,7 @@ export default function VocabReviewQuizView({
           </div>
         )}
 
-        {currentQ.type === 'word' && (
+        {!currentQ.isAI && currentQ.type === 'word' && (
           <div style={{ margin: '14px 0 10px' }}>
             <h2 style={{ margin: 0, fontSize: 26, color: '#7C6FE4', fontWeight: 800 }}>
               “{currentQ.promptVi}”
@@ -411,7 +526,7 @@ export default function VocabReviewQuizView({
           </div>
         )}
 
-        {currentQ.type === 'listening' && (
+        {!currentQ.isAI && currentQ.type === 'listening' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, margin: '20px 0' }}>
             <button
               type="button"
@@ -532,6 +647,7 @@ export default function VocabReviewQuizView({
               type="button"
               className="fc-nav-btn primary"
               onClick={handleNext}
+              disabled={evaluating}
               style={{
                 width: '100%',
                 marginTop: 16,
@@ -545,8 +661,9 @@ export default function VocabReviewQuizView({
                 gap: 8,
               }}
             >
-              {currentIndex + 1 >= questions.length ? 'Xem kết quả kiểm tra' : 'Câu tiếp theo'} <ChevronRight size={18} />
+              {evaluating ? 'AI đang đánh giá...' : currentIndex + 1 >= questions.length ? 'Xem kết quả kiểm tra' : 'Câu tiếp theo'} <ChevronRight size={18} />
             </button>
+            {saveError && <p style={{ margin: '10px 0 0', color: '#D64545', fontSize: 13, textAlign: 'center' }}>{saveError}</p>}
           </div>
         )}
       </div>

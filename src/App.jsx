@@ -130,6 +130,8 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const [reviewIsRecheck, setReviewIsRecheck] = useState(false);
   const [customLessonData, setCustomLessonData] = useState(null);
   const [reviewDeck, setReviewDeck] = useState(null);
+  const [reviewExamOptions, setReviewExamOptions] = useState({ durationMinutes: 15 });
+  const [vocabularyReviewDate, setVocabularyReviewDate] = useState(null);
   const [vocabBackView, setVocabBackView] = useState('vocab-lessons');
   const [lessonListBackView, setLessonListBackView] = useState('curriculum-hub');
   const [lessonDetailBackView, setLessonDetailBackView] = useState('tuvung-bai');
@@ -544,29 +546,30 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     ? databaseDictationLines
     : (selectedLessonIsFallback ? SHADOW_LINES : []);
   const reviewLessons = reviewMode === 'bylesson' && reviewSelectedLessons.length
-    ? catalogLessons.filter((item) => reviewSelectedLessons.includes(item.no))
-    : catalogLessons;
+    ? catalogLessons.filter((item) => reviewSelectedLessons.includes(item.id) || reviewSelectedLessons.includes(item.no) || reviewSelectedLessons.includes(String(item.no)))
+    : catalogLessons.filter((item) => item.status !== 'locked');
   const reviewLessonIds = new Set(reviewLessons.map((item) => item.id));
   const reviewVocabularyFromDatabase = learningCatalog?.vocabulary?.filter((word) => reviewLessonIds.has(word.lessonId)) || [];
   const reviewGrammarFromDatabase = learningCatalog?.grammar?.filter((item) => reviewLessonIds.has(item.lessonId)) || [];
   const reviewExercises = learningCatalog?.exercises?.filter((exercise) => reviewLessonIds.has(exercise.lessonId)) || [];
   const reviewDictationLinesFromDatabase = mapDatabaseLines(reviewExercises, 'dictation');
   const reviewShadowLinesFromDatabase = mapDatabaseLines(reviewExercises, 'shadowing');
-  const usesFallbackReviewData = !hasRemoteCatalog || (
-    reviewLessons.length === 1 && String(reviewLessons[0]?.id || '').startsWith('fallback-lesson')
-  );
   const reviewVocabulary = reviewVocabularyFromDatabase.length
     ? reviewVocabularyFromDatabase
-    : (usesFallbackReviewData ? lessonVocabulary : []);
+    : (lessonVocabulary?.length ? lessonVocabulary : (catalogVocabulary?.length ? catalogVocabulary : VOCAB_SAMPLE));
   const reviewGrammar = reviewGrammarFromDatabase.length
     ? reviewGrammarFromDatabase
-    : (usesFallbackReviewData ? lessonGrammar : []);
+    : (lessonGrammar?.length ? lessonGrammar : (catalogGrammar?.length ? catalogGrammar : GRAMMAR_SAMPLE));
   const reviewDictationLines = reviewDictationLinesFromDatabase.length
     ? reviewDictationLinesFromDatabase
-    : (usesFallbackReviewData ? lessonDictationLines : []);
+    : (lessonDictationLines?.length ? lessonDictationLines : (databaseDictationLines?.length ? databaseDictationLines : SHADOW_LINES));
   const reviewShadowLines = reviewShadowLinesFromDatabase.length
     ? reviewShadowLinesFromDatabase
-    : (usesFallbackReviewData ? lessonShadowLines : []);
+    : (lessonShadowLines?.length ? lessonShadowLines : (databaseShadowLines?.length ? databaseShadowLines : SHADOW_LINES));
+  const reviewExamExercise = reviewExercises.find((exercise) => exercise.skillType === 'review' && (exercise.answer?.standardExamSet || exercise.answer?.standardExam));
+  const reviewExamConfig = reviewExamExercise
+    ? { ...reviewExamExercise.answer, title: reviewExamExercise.promptKo, description: reviewExamExercise.promptVi || reviewExamExercise.answer?.description }
+    : null;
   const activeTextbookTitle = learningCatalog?.activeTextbook?.title || 'Giáo trình tiếng Hàn';
   const continueTextbook = learningCatalog?.activeTextbook?.isAdded ? learningCatalog.activeTextbook : null;
   const continueLesson = continueTextbook ? (learningCatalog?.continueLesson || null) : null;
@@ -680,21 +683,29 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             )}
             {view === 'mock-exam' && (
               <ReviewIntroView
-                lesson={primaryLesson}
+                lesson={lesson || primaryLesson}
                 userId={profile.id}
                 vocabulary={reviewVocabulary}
                 grammar={reviewGrammar}
                 dictationLines={reviewDictationLines}
                 shadowingLines={reviewShadowLines}
-                mode="random"
-                selectedLessons={[]}
+                examConfig={reviewExamConfig}
+                mode="mock-exam"
+                availableLessons={catalogLessons}
+                selectedLessons={reviewSelectedLessons}
+                onSelectLessons={(lessonIds) => {
+                  setReviewSelectedLessons(lessonIds);
+                  const matched = catalogLessons.find((item) => lessonIds.includes(item.id));
+                  if (matched) setLesson(matched);
+                }}
                 onBack={goHome}
-                onStart={(diff, useSeed) => {
-                  setLesson(primaryLesson);
-                  setReviewMode('random');
+                onStart={(diff, useSeed, examOpts) => {
+                  setReviewMode('mock-exam');
                   setReviewIntroBackView('mock-exam');
                   setReviewDifficulty(diff);
                   setReviewSeed(useSeed ? diff.stars * 97 + 13 : null);
+                  setReviewIsRecheck(false);
+                  if (examOpts) setReviewExamOptions(examOpts);
                   setView('review-quiz');
                 }}
               />
@@ -746,10 +757,13 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             {view === 'review-lesson-select' && (
               <ReviewLessonSelectView
                 lessons={catalogLessons}
+                vocabulary={catalogVocabulary}
+                grammar={catalogGrammar}
+                exercises={learningCatalog?.exercises || []}
                 onBack={() => setView('review-hub')}
-                onNext={(lessonNos) => {
-                  setReviewSelectedLessons(lessonNos);
-                  setLesson(catalogLessons.find((item) => lessonNos.includes(item.no)) || primaryLesson);
+                onNext={(lessonIds) => {
+                  setReviewSelectedLessons(lessonIds);
+                  setLesson(catalogLessons.find((item) => lessonIds.includes(item.id)) || primaryLesson);
                   setView('review-intro');
                 }}
               />
@@ -762,13 +776,16 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 grammar={reviewGrammar}
                 dictationLines={reviewDictationLines}
                 shadowingLines={reviewShadowLines}
+                examConfig={reviewExamConfig}
                 mode={reviewMode}
                 selectedLessons={reviewSelectedLessons}
+                availableLessons={catalogLessons}
                 onBack={() => setView(reviewIntroBackView)}
-                onStart={(diff, useSeed) => {
+                onStart={(diff, useSeed, examOpts) => {
                   setReviewDifficulty(diff);
                   setReviewSeed(useSeed ? diff.stars * 97 + 13 : null);
                   setReviewIsRecheck(false);
+                  if (examOpts) setReviewExamOptions(examOpts);
                   setView('review-quiz');
                 }}
               />
@@ -784,9 +801,10 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 difficulty={reviewDifficulty}
                 mode={reviewMode}
                 seed={reviewSeed}
+                examOptions={reviewExamOptions}
                 isRecheck={reviewIsRecheck}
                 onProgress={handlePartialActivityProgress}
-                onBack={() => setView('review-intro')}
+                onBack={() => setView(reviewIntroBackView)}
                 onChangeSet={() => setReviewSeed(null)}
                 onFinish={(answers, writing, elapsedMs, reflex) => {
                   setReviewAnswers(answers);
@@ -806,7 +824,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 difficulty={reviewDifficulty}
                 mode={reviewMode}
                 onRetry={() => { setReviewIsRecheck(true); setView('review-quiz'); }}
-                onChangeSet={reviewMode === 'random' ? () => { setReviewSeed(null); setReviewIsRecheck(true); setView('review-quiz'); } : undefined}
+                onChangeSet={() => { setReviewSeed(null); setReviewIsRecheck(true); setView('review-quiz'); }}
                 onHome={(passed) => reviewMode === 'bylesson' && passed ? handleActivityFinish('ontap') : goHome()}
               />
             )}
@@ -826,7 +844,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             {view === 'curriculum-hub' && (
               <CurriculumHubView
                 myBooks={learningCatalog?.myTextbooks || []}
-                availableBooks={learningCatalog?.availableTextbooks || []}
+                availableBooks={learningCatalog?.discoverTextbooks || []}
                 addingBookId={addingTextbookId}
                 notice={catalogNotice}
                 onBack={goHome}
@@ -861,7 +879,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                   if (actId === 'nghechep') { setDictationEntryBackView('lesson-detail'); setView('dictation-mode-select'); }
                   if (actId === 'ontap') {
                     setReviewMode('bylesson');
-                    setReviewSelectedLessons([lesson.no]);
+                    setReviewSelectedLessons([lesson.id]);
                     setReviewSeed(null);
                     setReviewIntroBackView('lesson-detail');
                     setView('review-intro');

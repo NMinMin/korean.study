@@ -398,9 +398,25 @@ export default function AdminPage() {
           {!filteredLessons.length && <div className="admin-empty">Không tìm thấy bài học phù hợp.</div>}
         </>}
         {tab === 'exercises' && <AdminExercises />}
-        {tab === 'community' && <>
-          <div className="admin-panel-title"><div><h2>Kiểm duyệt cộng đồng</h2><p>Ẩn hoặc xóa nội dung vi phạm, khóa bình luận và xử lý báo cáo.</p></div><span className="admin-report-summary"><Flag size={17} /> {community.reports.filter((report) => report.status === 'pending').length} báo cáo chờ xử lý</span></div>
-          <div className="admin-toolbar admin-toolbar-with-filters"><label><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm nội dung hoặc người đăng…" /></label><div className="admin-filter-controls"><AdminSelect value={communityStatus} options={[{ value: 'all', label: 'Tất cả bài viết' }, { value: 'reported', label: 'Có báo cáo chờ xử lý' }, { value: 'visible', label: 'Đang hiển thị' }, { value: 'hidden', label: 'Đã ẩn' }]} label="Lọc bài viết cộng đồng" onChange={setCommunityStatus} /><span>{filteredCommunityPosts.length} bài viết</span></div></div>
+        {tab === 'community' && <div className="admin-community-workspace">
+          <div className="admin-community-overview">
+            <button className="urgent" onClick={() => { setCommunityView('queue'); setCommunityStatus('all') }}><span><Flag size={20} /></span><div><strong>{pendingCommunityReports.length}</strong><small>Báo cáo chờ xử lý</small></div></button>
+            <button onClick={() => { setCommunityView('posts'); setCommunityStatus('all') }}><span><MessageSquare size={20} /></span><div><strong>{community.posts.length}</strong><small>Tổng bài viết</small></div></button>
+            <button onClick={() => { setCommunityView('vocabulary'); setCommunityStatus('all') }}><span><BookOpen size={20} /></span><div><strong>{community.customLessons.length}</strong><small>Bộ từ vựng</small></div></button>
+            <article><span><EyeOff size={20} /></span><div><strong>{community.posts.filter((post) => post.status === 'hidden').length + community.customLessons.filter((lesson) => lesson.status === 'hidden').length}</strong><small>Nội dung đã ẩn</small></div></article>
+          </div>
+
+          <div className="admin-community-nav" role="tablist" aria-label="Loại nội dung cộng đồng">
+            <button className={communityView === 'queue' ? 'active' : ''} onClick={() => { setCommunityView('queue'); setCommunityStatus('all') }}><Flag size={17} /> Cần xử lý {pendingCommunityReports.length > 0 && <b>{pendingCommunityReports.length}</b>}</button>
+            <button className={communityView === 'posts' ? 'active' : ''} onClick={() => { setCommunityView('posts'); setCommunityStatus('all') }}><MessageSquare size={17} /> Bài viết</button>
+            <button className={communityView === 'vocabulary' ? 'active' : ''} onClick={() => { setCommunityView('vocabulary'); setCommunityStatus('all') }}><BookOpen size={17} /> Bộ từ vựng</button>
+          </div>
+
+          <div className="admin-community-commandbar">
+            <label><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={communityView === 'vocabulary' ? 'Tìm tên bộ từ, mã hoặc người tạo…' : 'Tìm nội dung hoặc người đăng…'} /></label>
+            {communityView !== 'queue' && <AdminSelect value={communityStatus} options={[{ value: 'all', label: 'Tất cả trạng thái' }, { value: 'reported', label: 'Có báo cáo chờ xử lý' }, { value: 'visible', label: 'Đang hiển thị' }, { value: 'hidden', label: 'Đã ẩn' }]} label="Lọc trạng thái nội dung" onChange={setCommunityStatus} />}
+            <span>{communityView === 'queue' ? pendingCommunityPosts.length + pendingCommunityVocabulary.length : communityView === 'posts' ? filteredCommunityPosts.length : filteredCommunityVocabulary.length} mục</span>
+          </div>
           <div className="admin-community-date-filters">
             <span className="admin-date-filter-label"><CalendarDays size={17} /> Thời gian đăng</span>
             <AdminSelect value={communityDay} options={[{ value: 'all', label: 'Tất cả ngày' }, ...Array.from({ length: 31 }, (_, index) => ({ value: String(index + 1), label: `Ngày ${index + 1}` }))]} label="Lọc theo ngày đăng" onChange={setCommunityDay} />
@@ -408,26 +424,35 @@ export default function AdminPage() {
             <AdminSelect value={communityYear} options={[{ value: 'all', label: 'Tất cả năm' }, ...communityYears.map((year) => ({ value: String(year), label: `Năm ${year}` }))]} label="Lọc theo năm đăng" onChange={setCommunityYear} />
             {(communityDay !== 'all' || communityMonth !== 'all' || communityYear !== 'all') && <button type="button" className="admin-clear-date-filter" onClick={() => { setCommunityDay('all'); setCommunityMonth('all'); setCommunityYear('all') }}><RotateCcw size={15} /> Xóa lọc</button>}
           </div>
-          <div className="admin-community-list">{filteredCommunityPosts.map((post) => {
-            const pendingReports = post.reports.filter((report) => report.status === 'pending')
-            return <article className={`admin-community-post ${post.status === 'hidden' ? 'is-hidden' : ''}`} key={post.id}>
-              <div className="admin-community-head"><div className="admin-community-author"><span>{(post.profiles?.display_name || '?').slice(0, 1).toUpperCase()}</span><div><b>{post.profiles?.display_name || 'Người học'}</b><small>{new Date(post.created_at).toLocaleString('vi-VN')}</small></div></div><div className="admin-community-badges">{post.status === 'hidden' && <span className="hidden"><EyeOff size={13} /> Đã ẩn</span>}{post.comments_locked && <span className="locked"><Lock size={13} /> Khóa bình luận</span>}{pendingReports.length > 0 && <span className="reported"><Flag size={13} /> {pendingReports.length} báo cáo</span>}</div></div>
-              <p className="admin-community-content">{post.content}</p>
-              {pendingReports.length > 0 && <div className="admin-report-list">{pendingReports.map((report) => <div className="admin-report-item" key={report.id}><div><b>{report.profiles?.display_name || 'Người dùng'} báo cáo</b><p>{report.reason}</p><small>{new Date(report.created_at).toLocaleString('vi-VN')}</small></div><div><button onClick={() => void resolveReport(report, 'dismissed')}>Bỏ qua</button><button className="resolve" onClick={() => void resolveReport(report, 'resolved')}><Check size={15} /> Đã xử lý</button></div></div>)}</div>}
-              <div className="admin-community-actions"><button onClick={() => void moderatePost(post, { hidden: post.status !== 'hidden' })}>{post.status === 'hidden' ? <Eye size={16} /> : <EyeOff size={16} />}{post.status === 'hidden' ? 'Hiện lại' : 'Ẩn bài'}</button><button onClick={() => void moderatePost(post, { commentsLocked: !post.comments_locked })}>{post.comments_locked ? <Unlock size={16} /> : <Lock size={16} />}{post.comments_locked ? 'Mở bình luận' : 'Khóa bình luận'}</button><button className="danger" onClick={() => void deleteCommunityPost(post)}><Trash2 size={16} /> Xóa bài</button></div>
-            </article>
-          })}</div>
-          {!filteredCommunityPosts.length && <div className="admin-empty">Không có bài viết phù hợp với bộ lọc.</div>}
-          <div className="admin-panel-title admin-vocabulary-moderation-title"><div><h2>Bộ từ vựng cộng đồng</h2><p>Các bộ được đăng trực tiếp; quản trị viên có thể ẩn khi có báo cáo.</p></div></div>
-          <div className="admin-community-list">{community.customLessons.map((lesson) => {
-            const pendingReports = community.reports.filter((report) => report.custom_lesson_id === lesson.id && report.status === 'pending')
-            return <article className={`admin-community-post ${lesson.status === 'hidden' ? 'is-hidden' : ''}`} key={lesson.id}>
-              <div className="admin-community-head"><div className="admin-community-author"><span>{(lesson.profiles?.display_name || '?').slice(0, 1).toUpperCase()}</span><div><b>{lesson.title}</b><small>{lesson.profiles?.display_name || 'Người học'} · {lesson.words?.length || 0} từ · mã {lesson.code}</small></div></div><div className="admin-community-badges"><span>{lesson.visibility === 'private' ? 'Riêng tư' : 'Công khai'}</span>{lesson.status === 'hidden' && <span className="hidden"><EyeOff size={13} /> Đã ẩn</span>}{pendingReports.length > 0 && <span className="reported"><Flag size={13} /> {pendingReports.length} báo cáo</span>}</div></div>
-              {pendingReports.length > 0 && <div className="admin-report-list">{pendingReports.map((report) => <div className="admin-report-item" key={report.id}><div><b>{report.profiles?.display_name || 'Người dùng'} báo cáo</b><p>{report.reason}</p><small>{new Date(report.created_at).toLocaleString('vi-VN')}</small></div><div><button onClick={() => void resolveReport(report, 'dismissed')}>Bỏ qua</button><button className="resolve" onClick={() => void resolveReport(report, 'resolved')}><Check size={15} /> Đã xử lý</button></div></div>)}</div>}
-              <div className="admin-community-actions"><button onClick={() => void moderateVocabularySet(lesson)}>{lesson.status === 'hidden' ? <Eye size={16} /> : <EyeOff size={16} />}{lesson.status === 'hidden' ? 'Hiện lại' : 'Ẩn bộ từ vựng'}</button></div>
-            </article>
-          })}</div>
-        </>}
+
+          {(communityView === 'queue' || communityView === 'posts') && <section className="admin-community-section">
+            <div className="admin-community-section-title"><div><MessageSquare size={18} /><span><h3>{communityView === 'queue' ? 'Bài viết bị báo cáo' : 'Danh sách bài viết'}</h3><p>{communityView === 'queue' ? 'Ưu tiên xem lý do báo cáo trước khi xử lý nội dung.' : 'Kiểm soát hiển thị, bình luận và nội dung bài viết.'}</p></span></div><b>{displayedCommunityPosts.length}</b></div>
+            <div className="admin-community-list">{displayedCommunityPosts.map((post) => {
+              const pendingReports = post.reports.filter((report) => report.status === 'pending')
+              return <article className={`admin-community-post${post.status === 'hidden' ? ' is-hidden' : ''}${pendingReports.length ? ' has-reports' : ''}`} key={post.id}>
+                <div className="admin-community-head"><div className="admin-community-author"><span>{(post.profiles?.display_name || '?').slice(0, 1).toUpperCase()}</span><div><b>{post.profiles?.display_name || 'Người học'}</b><small>{new Date(post.created_at).toLocaleString('vi-VN')}</small></div></div><div className="admin-community-badges">{post.status === 'hidden' ? <span className="hidden"><EyeOff size={13} /> Đã ẩn</span> : <span className="visible"><Eye size={13} /> Đang hiển thị</span>}{post.comments_locked && <span className="locked"><Lock size={13} /> Khóa bình luận</span>}{pendingReports.length > 0 && <span className="reported"><Flag size={13} /> {pendingReports.length} báo cáo</span>}</div></div>
+                <p className="admin-community-content">{post.content}</p>
+                {pendingReports.length > 0 && <div className="admin-report-list"><header><Flag size={15} /><b>Lý do báo cáo</b></header>{pendingReports.map((report) => <div className="admin-report-item" key={report.id}><div><b>{report.profiles?.display_name || 'Người dùng'} báo cáo</b><p>{report.reason}</p><small>{new Date(report.created_at).toLocaleString('vi-VN')}</small></div><div><button onClick={() => void resolveReport(report, 'dismissed')}>Bỏ qua</button><button className="resolve" onClick={() => void resolveReport(report, 'resolved')}><Check size={15} /> Đã xử lý</button></div></div>)}</div>}
+                <div className="admin-community-actions"><button onClick={() => void moderatePost(post, { hidden: post.status !== 'hidden' })}>{post.status === 'hidden' ? <Eye size={16} /> : <EyeOff size={16} />}{post.status === 'hidden' ? 'Hiện lại' : 'Ẩn bài'}</button><button onClick={() => void moderatePost(post, { commentsLocked: !post.comments_locked })}>{post.comments_locked ? <Unlock size={16} /> : <Lock size={16} />}{post.comments_locked ? 'Mở bình luận' : 'Khóa bình luận'}</button><button className="danger" onClick={() => void deleteCommunityPost(post)}><Trash2 size={16} /> Xóa bài</button></div>
+              </article>
+            })}</div>
+            {!displayedCommunityPosts.length && <div className="admin-community-empty"><Check size={22} /><b>{communityView === 'queue' ? 'Không có bài viết cần xử lý' : 'Không tìm thấy bài viết'}</b><span>Hãy thử thay đổi từ khóa hoặc bộ lọc hiện tại.</span></div>}
+          </section>}
+
+          {(communityView === 'queue' || communityView === 'vocabulary') && <section className="admin-community-section">
+            <div className="admin-community-section-title"><div><BookOpen size={18} /><span><h3>{communityView === 'queue' ? 'Bộ từ vựng bị báo cáo' : 'Danh sách bộ từ vựng'}</h3><p>Kiểm tra người tạo, số lượng từ và trạng thái chia sẻ.</p></span></div><b>{displayedCommunityVocabulary.length}</b></div>
+            <div className="admin-community-list">{displayedCommunityVocabulary.map((lesson) => {
+              const pendingReports = community.reports.filter((report) => report.custom_lesson_id === lesson.id && report.status === 'pending')
+              return <article className={`admin-community-post admin-vocabulary-card${lesson.status === 'hidden' ? ' is-hidden' : ''}${pendingReports.length ? ' has-reports' : ''}`} key={lesson.id}>
+                <div className="admin-community-head"><div className="admin-community-author"><span>{(lesson.title || '?').slice(0, 1).toUpperCase()}</span><div><b>{lesson.title}</b><small>Tạo bởi {lesson.profiles?.display_name || 'Người học'} · {new Date(lesson.created_at).toLocaleDateString('vi-VN')}</small></div></div><div className="admin-community-badges"><span>{lesson.visibility === 'private' ? 'Riêng tư' : 'Công khai'}</span>{lesson.status === 'hidden' ? <span className="hidden"><EyeOff size={13} /> Đã ẩn</span> : <span className="visible"><Eye size={13} /> Đang hiển thị</span>}{pendingReports.length > 0 && <span className="reported"><Flag size={13} /> {pendingReports.length} báo cáo</span>}</div></div>
+                <div className="admin-vocabulary-meta"><span><strong>{lesson.words?.length || 0}</strong> từ vựng</span><span>Mã chia sẻ <strong>{lesson.code}</strong></span></div>
+                {pendingReports.length > 0 && <div className="admin-report-list"><header><Flag size={15} /><b>Lý do báo cáo</b></header>{pendingReports.map((report) => <div className="admin-report-item" key={report.id}><div><b>{report.profiles?.display_name || 'Người dùng'} báo cáo</b><p>{report.reason}</p><small>{new Date(report.created_at).toLocaleString('vi-VN')}</small></div><div><button onClick={() => void resolveReport(report, 'dismissed')}>Bỏ qua</button><button className="resolve" onClick={() => void resolveReport(report, 'resolved')}><Check size={15} /> Đã xử lý</button></div></div>)}</div>}
+                <div className="admin-community-actions"><button onClick={() => void moderateVocabularySet(lesson)}>{lesson.status === 'hidden' ? <Eye size={16} /> : <EyeOff size={16} />}{lesson.status === 'hidden' ? 'Hiện lại' : 'Ẩn bộ từ vựng'}</button></div>
+              </article>
+            })}</div>
+            {!displayedCommunityVocabulary.length && <div className="admin-community-empty"><Check size={22} /><b>{communityView === 'queue' ? 'Không có bộ từ vựng cần xử lý' : 'Không tìm thấy bộ từ vựng'}</b><span>Hãy thử thay đổi từ khóa hoặc bộ lọc hiện tại.</span></div>}
+          </section>}
+        </div>}
         {tab === 'users' && <>
           <div className="admin-panel-title"><div><h2>Người dùng</h2><p>Quản lý vai trò và khóa tài khoản vi phạm.</p></div></div>
           <div className="admin-toolbar admin-toolbar-with-filters">

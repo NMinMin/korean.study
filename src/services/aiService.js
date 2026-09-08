@@ -14,7 +14,7 @@ export function parseAIJson(value) {
   }
 }
 
-export async function requestAIJson(prompt) {
+export async function requestAIJson(prompt, options = {}) {
   if (!supabase) throw new Error('Supabase chưa được cấu hình.');
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error('Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.');
@@ -27,7 +27,7 @@ export async function requestAIJson(prompt) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ text: prompt }),
+      body: JSON.stringify({ text: prompt, temperature: options.temperature }),
       signal: controller.signal,
     });
     const data = await res.json().catch(() => ({}));

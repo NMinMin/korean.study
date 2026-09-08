@@ -4,9 +4,9 @@ import { requireAdmin } from '../plugins/admin.js'
 
 type Status = 'draft' | 'published' | 'locked' | 'no_content'
 type ReportStatus = 'pending' | 'resolved' | 'dismissed'
-type SkillType = 'vocabulary_grammar' | 'dictation' | 'shadowing'
+type SkillType = 'vocabulary_grammar' | 'dictation' | 'shadowing' | 'review'
 
-const exerciseSkillTypes = ['vocabulary_grammar', 'dictation', 'shadowing'] as const
+const exerciseSkillTypes = ['vocabulary_grammar', 'dictation', 'shadowing', 'review'] as const
 
 function isExerciseSkillType(value: unknown): value is SkillType {
   return typeof value === 'string' && exerciseSkillTypes.includes(value as SkillType)
@@ -219,7 +219,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Body: { lessonId: string; skillType: SkillType; exerciseType?: string; promptKo: string; promptVi?: string; answer?: unknown; explanationVi?: string; mediaUrl?: string; imageUrl?: string; audioUrl?: string; sortOrder?: number; status?: Status } }>('/admin/exercises', async (request, reply) => {
     const body = request.body
     if (!body.lessonId || !body.skillType || !body.promptKo?.trim()) return reply.code(400).send({ code: 'EXERCISE_FIELDS_REQUIRED', message: 'Bài học, kỹ năng và nội dung tiếng Hàn là bắt buộc.', requestId: request.id })
-    if (!isExerciseSkillType(body.skillType)) return reply.code(400).send({ code: 'EXERCISE_SKILL_INVALID', message: 'Chỉ lưu học liệu Từ vựng & Ngữ pháp, Nghe chép chính tả hoặc Shadowing. Ôn tập được AI tạo tự động.', requestId: request.id })
+    if (!isExerciseSkillType(body.skillType)) return reply.code(400).send({ code: 'EXERCISE_SKILL_INVALID', message: 'Kỹ năng học liệu không hợp lệ.', requestId: request.id })
     const isListeningSkill = body.skillType === 'dictation' || body.skillType === 'shadowing'
     const { data, error } = await supabaseAdmin.from('lesson_exercises').insert({ lesson_id: body.lessonId, skill_type: body.skillType, exercise_type: body.exerciseType?.trim() || 'question', prompt_ko: body.promptKo.trim(), prompt_vi: body.promptVi?.trim() || null, answer: body.answer ?? {}, explanation_vi: body.explanationVi?.trim() || null, media_url: body.mediaUrl?.trim() || null, image_url: isListeningSkill ? null : body.imageUrl?.trim() || null, audio_url: body.audioUrl?.trim() || null, sort_order: body.sortOrder ?? 0, status: body.status ?? 'published' }).select().single()
     if (error) return reply.code(400).send({ code: 'EXERCISE_CREATE_FAILED', message: error.message, requestId: request.id })
@@ -278,28 +278,54 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return { data }
   })
 
-async function deleteStorageAsset(url?: string | null): Promise<void> {
-  if (!url || typeof url !== 'string') return
-  const match = url.match(/^(https?:\/\/api-cloud-u4v8\.onrender\.com)\/files\/(.+)$/i)
-  const [, origin, filePath] = match ?? []
-  if (!origin || !filePath) return
-  const deleteUrl = `${origin.replace(/^http:/i, 'https:')}/delete/${filePath}`
+function storageDeleteUrl(value?: string | null): string | null {
+  if (!value || typeof value !== 'string') return null
   try {
-    await fetch(deleteUrl, { method: 'DELETE' })
-  } catch (err) {
-    console.warn('Lỗi khi xóa file storage:', deleteUrl, err)
+    const url = new URL(value)
+    if (url.hostname.toLowerCase() !== 'api-cloud-u4v8.onrender.com' || !url.pathname.startsWith('/files/')) return null
+    url.protocol = 'https:'
+    url.pathname = url.pathname.replace(/^\/files\//i, '/delete/')
+    url.search = ''
+    url.hash = ''
+    return url.toString()
+  } catch {
+    return null
+  }
+}
+
+function collectStorageUrls(value: unknown, result = new Set<string>(), depth = 0): Set<string> {
+  if (depth > 8 || value == null) return result
+  if (typeof value === 'string') {
+    if (storageDeleteUrl(value)) result.add(value)
+    return result
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectStorageUrls(item, result, depth + 1))
+    return result
+  }
+  if (typeof value === 'object') {
+    Object.values(value as Record<string, unknown>).forEach((item) => collectStorageUrls(item, result, depth + 1))
+  }
+  return result
+}
+
+async function deleteStorageAsset(url?: string | null): Promise<void> {
+  const deleteUrl = storageDeleteUrl(url)
+  if (!deleteUrl) return
+  const response = await fetch(deleteUrl, { method: 'DELETE' })
+  if (!response.ok && response.status !== 404) {
+    const detail = await response.text().catch(() => '')
+    throw new Error(`Storage delete failed (${response.status}): ${detail.slice(0, 300)}`)
   }
 }
 
   app.delete<{ Params: { id: string } }>('/admin/exercises/:id', async (request, reply) => {
     const { data: ex } = await supabaseAdmin.from('lesson_exercises').select('audio_url, image_url, media_url, answer').eq('id', request.params.id).maybeSingle()
     if (ex) {
-      const urls: (string | null | undefined)[] = [ex.audio_url, ex.image_url, ex.media_url]
-      if (ex.answer && typeof ex.answer === 'object') {
-        const ans = ex.answer as Record<string, any>
-        urls.push(ans.audioUrl, ans.imageUrl, ans.mediaUrl)
-      }
-      await Promise.allSettled(urls.map((u) => deleteStorageAsset(u)))
+      const urls = collectStorageUrls([ex.audio_url, ex.image_url, ex.media_url, ex.answer])
+      const results = await Promise.allSettled([...urls].map((url) => deleteStorageAsset(url)))
+      const failures = results.filter((result) => result.status === 'rejected')
+      if (failures.length) request.log.warn({ failures, exerciseId: request.params.id }, 'Some exercise storage files could not be deleted')
     }
     const { error } = await supabaseAdmin.from('lesson_exercises').delete().eq('id', request.params.id)
     if (error) return reply.code(400).send({ code: 'EXERCISE_DELETE_FAILED', message: error.message, requestId: request.id })

@@ -3,7 +3,7 @@ import {
   ChevronLeft, ChevronRight, Volume2, Star, BookOpen, Headphones, Mic, Sparkles,
   BookMarked, Lightbulb, CheckCircle2, RotateCcw, Plus, XCircle, ArrowLeft, ArrowRight,
   Play, RotateCw, Check, Link2, Image as ImageIcon, NotebookPen,
-  AlertTriangle, Bot, Flame, MessageCircle, MessageSquare, PencilLine, Settings, Target, Type
+  AlertTriangle, Bot, Flame, MessageCircle, MessageSquare, PencilLine, Settings, Target, Type, Lock
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { speakKo, playVocabularyAudio, playIncorrectSound, playCelebrationSound } from '../../services/audioService';
@@ -48,6 +48,12 @@ const vocabularyStateDelta = (local = {}, remote = {}, merged = {}) => Object.fr
 
 export function LessonDetailView({ lesson, userId, textbookTitle, onBack, onStartActivity, onProgressChange }) {
   const [pcts, setPcts] = useState({ tuvung: 0, shadowing: 0, nghechep: 0, ontap: 0 });
+  const [lockedOntapPrompt, setLockedOntapPrompt] = useState(false);
+
+  const isTuvungDone = (pcts.tuvung ?? 0) >= 30;
+  const isNghechepDone = (pcts.nghechep ?? 0) >= 30;
+  const isShadowingDone = (pcts.shadowing ?? 0) >= 30;
+  const isOntapUnlocked = (isTuvungDone && isNghechepDone && isShadowingDone) || (pcts.ontap ?? 0) > 0;
 
   useEffect(() => {
     let alive = true;
@@ -56,10 +62,15 @@ export function LessonDetailView({ lesson, userId, textbookTitle, onBack, onStar
       setPcts(p);
     });
     return () => { alive = false; };
-    // Hydration is read-only. Calling onProgressChange here updated the parent
-    // catalog, created a new lesson object, and mounted this effect again in a
-    // request loop. Progress aggregation is performed when a skill is changed.
   }, [lesson?.id, lesson?.textbookId, userId]);
+
+  const handleActivityClick = (actId) => {
+    if (actId === 'ontap' && !isOntapUnlocked) {
+      setLockedOntapPrompt(true);
+      return;
+    }
+    onStartActivity(actId);
+  };
 
   return (
     <section className="card page">
@@ -89,29 +100,84 @@ export function LessonDetailView({ lesson, userId, textbookTitle, onBack, onStar
       <div className="activity-grid">
         {ACTIVITIES.map((a) => {
           const pct = pcts[a.id] ?? 0;
+          const isLockedActivity = a.id === 'ontap' && !isOntapUnlocked;
           return (
-            <div key={a.id} className="activity-card" style={{ background: a.bg }}>
+            <div key={a.id} className={`activity-card ${isLockedActivity ? 'activity-locked' : ''}`} style={{ background: a.bg }}>
               <div className="activity-top">
                 <ProgressIcon type={a.icon} color={a.color} bg="#fff" />
                 <div className="activity-head">
-                  <span className="activity-label" style={{ color: a.color }}>{a.label}</span>
+                  <span className="activity-label" style={{ color: a.color }}>
+                    {a.label}
+                    {isLockedActivity && <small className="rv-lock-mini"><Lock size={11} /> Cần học 3 kỹ năng</small>}
+                  </span>
                   <span className="activity-pct">{pct}<i>%</i></span>
                 </div>
               </div>
-              <p className="activity-desc">{a.desc}</p>
+              <p className="activity-desc">{isLockedActivity ? "Cần hoàn thành 3 kỹ năng trên trước khi ôn tập tổng hợp." : a.desc}</p>
               <Bar pct={pct} color={a.color} h={8} track="rgba(255,255,255,.9)" />
               <button
-                className="activity-btn"
-                style={{ background: a.color }}
-                onClick={() => onStartActivity(a.id)}
+                className={`activity-btn ${isLockedActivity ? 'locked' : ''}`}
+                style={{ background: isLockedActivity ? '#A29BBF' : a.color }}
+                onClick={() => handleActivityClick(a.id)}
               >
-                <Play size={14} fill="#fff" />
-                {pct === 100 ? "Học lại" : pct > 0 ? "Tiếp tục" : a.cta}
+                {isLockedActivity ? <Lock size={14} /> : <Play size={14} fill="#fff" />}
+                {isLockedActivity ? "Chưa mở khóa" : pct === 100 ? "Học lại" : pct > 0 ? "Tiếp tục" : a.cta}
               </button>
             </div>
           );
         })}
       </div>
+
+      {lockedOntapPrompt && (
+        <div className="rv-modal-overlay" onClick={() => setLockedOntapPrompt(false)}>
+          <div className="rv-exit-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="rv-exit-modal-icon" style={{ background: '#FFF4E5', color: '#F0912E' }}>
+              <Lock size={26} />
+            </div>
+            <h3>Mở khóa hoạt động Ôn tập</h3>
+            <p>
+              Để bài ôn tập tổng hợp đạt kết quả tốt nhất, bạn nên hoàn thành 3 kỹ năng nền tảng của Bài {lesson.no} trước:
+            </p>
+            <div className="rv-prereq-list">
+              <div className={`rv-prereq-item ${isTuvungDone ? 'done' : ''}`}>
+                {isTuvungDone ? <CheckCircle2 size={16} color="#3FA95C" /> : <XCircle size={16} color="#D64545" />}
+                <span>Từ vựng & Ngữ pháp ({pcts.tuvung ?? 0}%)</span>
+              </div>
+              <div className={`rv-prereq-item ${isNghechepDone ? 'done' : ''}`}>
+                {isNghechepDone ? <CheckCircle2 size={16} color="#3FA95C" /> : <XCircle size={16} color="#D64545" />}
+                <span>Nghe chép chính tả ({pcts.nghechep ?? 0}%)</span>
+              </div>
+              <div className={`rv-prereq-item ${isShadowingDone ? 'done' : ''}`}>
+                {isShadowingDone ? <CheckCircle2 size={16} color="#3FA95C" /> : <XCircle size={16} color="#D64545" />}
+                <span>Shadowing ({pcts.shadowing ?? 0}%)</span>
+              </div>
+            </div>
+            <div className="rv-exit-modal-actions">
+              <button
+                className="rv-exit-btn-cancel"
+                onClick={() => {
+                  setLockedOntapPrompt(false);
+                  if (!isTuvungDone) onStartActivity('tuvung');
+                  else if (!isNghechepDone) onStartActivity('nghechep');
+                  else onStartActivity('shadowing');
+                }}
+              >
+                Học kỹ năng còn thiếu
+              </button>
+              <button
+                className="rv-exit-btn-confirm"
+                style={{ background: '#7C6FE4' }}
+                onClick={() => {
+                  setLockedOntapPrompt(false);
+                  onStartActivity('ontap');
+                }}
+              >
+                Vẫn muốn thử sức ôn tập
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <button className="ai-bonus-card" onClick={() => onStartActivity("aiquiz")}>
         <span className="ai-bonus-ico"><Bot size={25} /><Sparkles className="ai-bonus-spark" size={13} /></span>

@@ -350,8 +350,10 @@ export function ReviewSchedule({ userId, onReview }) {
         const [year, month, day] = item.dateKey.split('-').map(Number);
         const date = new Date(year, month - 1, day);
         return {
+          dateKey: item.dateKey,
           date,
           words: item.words,
+          evaluation: item.evaluation,
           label: index === 0 ? 'Hôm nay' : index === 1 ? 'Ngày mai' : date.toLocaleDateString('vi-VN', { weekday: 'short' }),
         };
       });
@@ -375,25 +377,26 @@ export function ReviewSchedule({ userId, onReview }) {
       </div>
       <div className="days">
         {schedule.map((d, index) => (
-          <div key={d.date.toISOString()} className={`day ${index === 0 ? 'today' : ''} ${d.date.getDay() === 6 ? 'saturday' : ''} ${d.date.getDay() === 0 ? 'sunday' : ''} ${selected === index ? 'selected' : ''} ${d.words.length ? 'has-review' : 'rest-day'}`} role="button" tabIndex={0} onClick={() => setSelected(index)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(index); } }}>
+          <div key={d.date.toISOString()} className={`day ${index === 0 ? 'today' : ''} ${d.date.getDay() === 6 ? 'saturday' : ''} ${d.date.getDay() === 0 ? 'sunday' : ''} ${selected === index ? 'selected' : ''} ${d.words.length ? 'has-review' : d.evaluation ? 'reviewed-day' : 'rest-day'}`} role="button" tabIndex={0} onClick={() => setSelected(index)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(index); } }}>
             {d.words.length > 0 && <PurpleMugunghwaIcon className="day-review-flower" />}
             <span className="day-name">{d.label}</span>
             <span className="day-date">{d.date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</span>
-            <span className="day-words">{d.words.length ? `${d.words.length} từ` : 'Nghỉ ngơi'}</span>
+            <span className="day-words">{d.evaluation ? `${d.evaluation.score}%` : d.words.length ? `${d.words.length} từ` : 'Nghỉ ngơi'}</span>
+            {d.evaluation && <span className={`review-rating ${d.evaluation.rating.toLowerCase()}`}>{d.evaluation.rating}</span>}
             {index === 0 && d.words.length ? (
               <button
                 className="on-ngay"
-                onClick={(event) => { event.stopPropagation(); if (d.words.length) onReview(d.words, d.label); }}
+                onClick={(event) => { event.stopPropagation(); if (d.words.length) onReview(d.words, d.dateKey); }}
               >
                 Ôn ngay
               </button>
-            ) : <span className={`day-ico ${d.words.length ? '' : 'rest'}`}>{d.words.length ? <BookMarked size={16} /> : <Coffee size={16} />}</span>}
+            ) : <span className={`day-ico ${d.words.length || d.evaluation ? '' : 'rest'}`}>{d.words.length ? <BookMarked size={16} /> : d.evaluation ? <Check size={16} /> : <Coffee size={16} />}</span>}
           </div>
         ))}
       </div>
       {picked && (
         <div className="review-selected-day">
-          <div><b>{picked.label} · {picked.date.toLocaleDateString('vi-VN')}</b><span>{picked.words.length ? `${picked.words.length} từ đang chờ bạn ôn lại` : 'Ngày nghỉ — không có từ nào cần ôn'}</span></div>
+          <div><b>{picked.label} · {picked.date.toLocaleDateString('vi-VN')}</b><span>{picked.evaluation ? `${picked.evaluation.rating} · ${picked.evaluation.correctCount}/${picked.evaluation.totalCount} từ đúng — ${picked.evaluation.feedback}` : picked.words.length ? `${picked.words.length} từ đang chờ bạn ôn lại` : 'Ngày nghỉ — không có từ nào cần ôn'}</span></div>
           {selected === 0 && picked.words.length > 0 && <span className="review-current-note">Bấm “Ôn ngay” ở ô Hôm nay để bắt đầu</span>}
         </div>
       )}

@@ -3,11 +3,11 @@ import { z } from 'zod'
 import { config } from '../config.js'
 import { requireAuth } from '../plugins/auth.js'
 
-const GROQ_CHAT_COMPLETIONS_URL = 'https://api.groq.com/openai/v1/chat/completions'
 const AI_TIMEOUT_MS = 25_000
 
 const requestSchema = z.object({
-  text: z.string().trim().min(1).max(15_000),
+  text: z.string().trim().min(1).max(30_000),
+  temperature: z.number().min(0).max(1).optional(),
 })
 
 type GroqChatResponse = {
@@ -30,15 +30,6 @@ function groqErrorCode(data: GroqChatResponse | null) {
 
 export const aiRoutes: FastifyPluginAsync = async (app) => {
   app.post('/ai/json', { preHandler: requireAuth }, async (request, reply) => {
-    const apiKey = config.GROQ_GRADER_API_KEY
-    if (!apiKey) {
-      return reply.code(503).send({
-        code: 'AI_GRADER_NOT_CONFIGURED',
-        message: 'Groq AI Grader chưa được cấu hình trên backend.',
-        requestId: request.id,
-      })
-    }
-
     const parsed = requestSchema.safeParse(request.body)
     if (!parsed.success) {
       return reply.code(400).send({
@@ -50,10 +41,9 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
 
     let response: Response
     try {
-      response = await fetch(GROQ_CHAT_COMPLETIONS_URL, {
+      response = await fetch(config.GROQ_GRADER_URL, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -66,7 +56,7 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
             { role: 'user', content: parsed.data.text },
           ],
           response_format: { type: 'json_object' },
-          temperature: 0.2,
+          temperature: parsed.data.temperature ?? 0.2,
           max_completion_tokens: 2_048,
         }),
         signal: AbortSignal.timeout(AI_TIMEOUT_MS),
@@ -97,7 +87,7 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
       if (response.status === 401 || response.status === 403) {
         return reply.code(502).send({
           code: 'AI_GRADER_CREDENTIALS_REJECTED',
-          message: 'Groq không chấp nhận API key của AI Grader.',
+          message: 'Dịch vụ Groq Worker từ chối yêu cầu AI.',
           upstreamStatus: response.status,
           upstreamCode: groqErrorCode(data),
           requestId: request.id,

@@ -5,18 +5,29 @@ import {
   BookOpen,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
   Grid3X3,
   GripVertical,
   Headphones,
   Image,
+  LayoutGrid,
   List,
   LoaderCircle,
+  MessageCircle,
   Mic,
+  Minus,
   Music,
   NotebookPen,
   Pencil,
   Plus,
+  RotateCcw,
   Search,
+  Sliders,
+  Sparkles,
+  Star,
+  Target,
   Trash2,
   Volume2,
   X,
@@ -26,13 +37,24 @@ import { AdminSelect } from './AdminPage'
 import { BlockingLoader } from '../components/common/AppDialog'
 
 type Status = 'draft' | 'published' | 'locked' | 'no_content'
-type Skill = 'vocabulary_grammar' | 'dictation' | 'shadowing'
+type Skill = 'vocabulary_grammar' | 'dictation' | 'shadowing' | 'review'
 type VocabularyGrammarKind = 'vocabulary' | 'grammar'
 type TtsVoice =
   | 'ko-KR-SunHiNeural'
   | 'ko-KR-InJoonNeural'
   | 'ko-KR-HyunSuNeural'
 type DialogueLine = { speaker: 'A' | 'B'; ko: string; vi: string }
+type StandardExamLevel = {
+  stars: number
+  label: string
+  durationMinutes: number
+  vocabulary: number
+  grammar: number
+  dialogue: number
+  listening: number
+  writing: number
+  shadowing: number
+}
 type Textbook = { id: string; title_ko: string }
 type Lesson = { id: string; textbook_id: string; lesson_number: number; title_ko: string; textbooks?: { title_ko?: string } }
 type Exercise = {
@@ -72,12 +94,43 @@ type Draft = {
   audioUrl: string
   ttsVoice: TtsVoice
   ttsSpeed: 0.75 | 1 | 1.25
+  examDuration: number
+  examVocabCount: number
+  examGrammarCount: number
+  examListeningCount: number
+  examShadowingCount: number
+  examWritingCount: number
+  examObjective: string
+  examScope: string
+  examGrading: string
+  examLevels: StandardExamLevel[]
 }
+
+const standardExamPresets = [
+  { stars: 1, label: 'Rất dễ', duration: 8, vocab: 8, grammar: 0, listening: 3, shadowing: 0, writing: 0 },
+  { stars: 2, label: 'Dễ', duration: 10, vocab: 10, grammar: 2, listening: 4, shadowing: 0, writing: 0 },
+  { stars: 3, label: 'Trung bình', duration: 15, vocab: 12, grammar: 2, listening: 4, shadowing: 1, writing: 2 },
+  { stars: 4, label: 'Khó', duration: 20, vocab: 14, grammar: 3, listening: 5, shadowing: 2, writing: 2 },
+  { stars: 5, label: 'Rất khó', duration: 30, vocab: 28, grammar: 6, listening: 6, shadowing: 3, writing: 3 },
+] as const
+
+const createStandardExamLevels = (): StandardExamLevel[] => standardExamPresets.map((preset) => ({
+  stars: preset.stars,
+  label: preset.label,
+  durationMinutes: preset.duration,
+  vocabulary: preset.vocab,
+  grammar: preset.grammar,
+  dialogue: Math.max(0, preset.stars - 1),
+  listening: preset.listening,
+  writing: preset.writing,
+  shadowing: preset.shadowing,
+}))
 
 const skills = [
   { value: 'vocabulary_grammar', label: 'Từ vựng & Ngữ pháp', icon: NotebookPen },
   { value: 'dictation', label: 'Nghe chép chính tả', icon: Headphones },
   { value: 'shadowing', label: 'Shadowing', icon: Mic },
+  { value: 'review', label: 'Đề thi chuẩn', icon: Sparkles },
 ] as const
 
 const filterSkills = [
@@ -85,6 +138,7 @@ const filterSkills = [
   { value: 'grammar', label: 'Ngữ pháp', icon: NotebookPen },
   { value: 'dictation', label: 'Nghe chép chính tả', icon: Headphones },
   { value: 'shadowing', label: 'Shadowing', icon: Mic },
+  { value: 'review', label: 'Đề thi chuẩn', icon: Sparkles },
 ] as const
 
 const emptyDraft: Draft = {
@@ -107,6 +161,16 @@ const emptyDraft: Draft = {
   audioUrl: '',
   ttsVoice: 'ko-KR-SunHiNeural',
   ttsSpeed: 1,
+  examDuration: 15,
+  examVocabCount: 12,
+  examGrammarCount: 2,
+  examListeningCount: 4,
+  examShadowingCount: 1,
+  examWritingCount: 2,
+  examObjective: '',
+  examScope: '',
+  examGrading: 'Chấm theo độ chính xác, đúng ngữ cảnh và khả năng vận dụng. Shadowing đạt khi phát âm từ 80%.',
+  examLevels: createStandardExamLevels(),
 }
 
 const ttsVoices: { value: TtsVoice; label: string; gender: 'Nữ' | 'Nam'; description: string; previewUrl?: string }[] = [
@@ -142,6 +206,9 @@ function exerciseAnswerSummary(item: Exercise) {
     if (item.exercise_type === 'grammar') return String(answer.note ?? answer.contextVi ?? '—')
     return String(answer.mnemonic ?? answer.meaning ?? item.prompt_vi ?? '—')
   }
+  if (item.skill_type === 'review') {
+    return answer.description ? String(answer.description) : String(item.explanation_vi || item.prompt_vi || 'Đề thi chuẩn')
+  }
   return answerAsText(item.answer) || '—'
 }
 
@@ -153,6 +220,9 @@ function inferVocabularyGrammarKind(item?: Exercise): VocabularyGrammarKind {
 }
 
 function getExerciseSkillMeta(item: Exercise) {
+  if (item.skill_type === 'review') {
+    return { value: 'review', label: 'Đề thi chuẩn', icon: Sparkles }
+  }
   if (item.skill_type === 'vocabulary_grammar') {
     const kind = inferVocabularyGrammarKind(item)
     if (kind === 'grammar') {
@@ -428,6 +498,44 @@ export default function AdminExercises() {
   const [moveLessonId, setMoveLessonId] = useState('')
   const [moving, setMoving] = useState(false)
   const [collapsedExerciseGroups, setCollapsedExerciseGroups] = useState<Set<string>>(new Set())
+  const [activeExamLevelTab, setActiveExamLevelTab] = useState<number>(0)
+  const [examLevelViewMode, setExamLevelViewMode] = useState<'detail' | 'matrix'>('detail')
+
+  const updateLevel = (field: keyof StandardExamLevel, value: string | number, levelIndex: number) => {
+    setDraft((current) => ({
+      ...current,
+      examLevels: current.examLevels.map((item, itemIndex) => itemIndex === levelIndex ? { ...item, [field]: value } : item),
+    }))
+  }
+
+  const adjustLevelCount = (field: keyof StandardExamLevel, delta: number, levelIndex: number) => {
+    setDraft((current) => ({
+      ...current,
+      examLevels: current.examLevels.map((item, itemIndex) => {
+        if (itemIndex !== levelIndex) return item
+        const currentVal = Number(item[field]) || 0
+        return { ...item, [field]: Math.max(0, Math.min(100, currentVal + delta)) }
+      }),
+    }))
+  }
+
+  const resetLevelPreset = (levelIndex: number) => {
+    const defaultLevels = createStandardExamLevels()
+    const targetPreset = defaultLevels[levelIndex]
+    if (!targetPreset) return
+    setDraft((current) => ({
+      ...current,
+      examLevels: current.examLevels.map((item, itemIndex) => itemIndex === levelIndex ? { ...targetPreset, label: item.label } : item),
+    }))
+  }
+
+  const appendPromptText = (field: 'examObjective' | 'examScope' | 'examGrading', text: string) => {
+    setDraft((cur) => {
+      const prev = cur[field].trim()
+      const separator = prev ? (prev.endsWith('.') || prev.endsWith(';') ? ' ' : '. ') : ''
+      return { ...cur, [field]: `${prev}${separator}${text}` }
+    })
+  }
 
   const moveFormulaLine = (fromIndex: number, toIndex: number) => {
     if (fromIndex === toIndex) return
@@ -465,11 +573,12 @@ export default function AdminExercises() {
   const isGrammarExercise = isVocabularyGrammar && draft.vocabularyGrammarKind === 'grammar'
   const isDictation = draft.skillType === 'dictation'
   const isShadowing = draft.skillType === 'shadowing'
+  const isReview = draft.skillType === 'review'
 
   useEffect(() => {
-    if (isGrammarExercise) setDraft((current) => current.imageUrl || current.audioUrl ? { ...current, imageUrl: '', audioUrl: '' } : current)
+    if (isGrammarExercise || isReview) setDraft((current) => current.imageUrl || current.audioUrl ? { ...current, imageUrl: '', audioUrl: '' } : current)
     if (draft.skillType === 'dictation' || draft.skillType === 'shadowing') setDraft((current) => current.imageUrl ? { ...current, imageUrl: '' } : current)
-  }, [draft.skillType, draft.vocabularyGrammarKind, isGrammarExercise, isVocabularyExercise])
+  }, [draft.skillType, draft.vocabularyGrammarKind, isGrammarExercise, isReview, isVocabularyExercise])
 
   const load = async () => {
     try {
@@ -577,11 +686,13 @@ export default function AdminExercises() {
   }
 
   const open = (item?: Exercise) => {
+    setActiveExamLevelTab(0)
+    setExamLevelViewMode('detail')
     setPendingImage(null)
     setEditing(item || null)
     if (!item) {
       const defaultKind = skill === 'grammar' ? 'grammar' : 'vocabulary'
-      const defaultSkillType = skill === 'dictation' || skill === 'shadowing' ? skill : 'vocabulary_grammar'
+      const defaultSkillType = skill === 'dictation' || skill === 'shadowing' || skill === 'review' ? skill : 'vocabulary_grammar'
       setDraft({
         ...emptyDraft,
         skillType: defaultSkillType,
@@ -591,6 +702,22 @@ export default function AdminExercises() {
       return
     }
     const answer = asRecord(item.answer)
+    const examCounts = asRecord(answer.counts)
+    const storedExamLevels = Array.isArray(answer.levels) ? answer.levels : []
+    const examLevels = createStandardExamLevels().map((fallbackLevel) => {
+      const stored = asRecord(storedExamLevels.find((level) => Number(asRecord(level).stars) === fallbackLevel.stars))
+      return {
+        ...fallbackLevel,
+        label: String(stored.label || fallbackLevel.label),
+        durationMinutes: Number(stored.durationMinutes) || fallbackLevel.durationMinutes,
+        vocabulary: Number(stored.vocabulary ?? fallbackLevel.vocabulary),
+        grammar: Number(stored.grammar ?? fallbackLevel.grammar),
+        dialogue: Number(stored.dialogue ?? fallbackLevel.dialogue),
+        listening: Number(stored.listening ?? fallbackLevel.listening),
+        writing: Number(stored.writing ?? fallbackLevel.writing),
+        shadowing: Number(stored.shadowing ?? fallbackLevel.shadowing),
+      }
+    })
     const example = asRecord(answer.example)
     const kind = inferVocabularyGrammarKind(item)
     setDraft({
@@ -599,7 +726,7 @@ export default function AdminExercises() {
       vocabularyGrammarKind: kind,
       promptKo: item.prompt_ko,
       promptVi: item.prompt_vi || '',
-      answer: answerAsText(item.answer),
+      answer: item.skill_type === 'review' ? String(answer.generationInstructions || '') : answerAsText(item.answer),
       explanationVi: item.explanation_vi || '',
       partOfSpeech: String(answer.partOfSpeech || answer.part_of_speech || ''),
       pronunciation: String(answer.pronunciation || answer.pron || ''),
@@ -619,6 +746,16 @@ export default function AdminExercises() {
       audioUrl: item.audio_url || String(answer.audioUrl || ''),
       ttsVoice: normalizeTtsVoice(answer.ttsVoice),
       ttsSpeed: Number(answer.ttsSpeed) === 0.75 || Number(answer.ttsSpeed) === 1.25 ? Number(answer.ttsSpeed) as 0.75 | 1.25 : 1,
+      examDuration: Number(answer.durationMinutes) || 15,
+      examVocabCount: Number(examCounts.vocabulary) || 12,
+      examGrammarCount: Number(examCounts.grammar) || 2,
+      examListeningCount: Number(examCounts.dictation) || 4,
+      examShadowingCount: Number(examCounts.shadowing) || 1,
+      examWritingCount: Number(examCounts.writing) || 2,
+      examObjective: String(answer.objective || ''),
+      examScope: String(answer.assessmentScope || ''),
+      examGrading: String(answer.aiGradingInstructions || 'Chấm theo độ chính xác, đúng ngữ cảnh và khả năng vận dụng. Shadowing đạt khi phát âm từ 80%.'),
+      examLevels,
     })
   }
 
@@ -667,6 +804,19 @@ export default function AdminExercises() {
         note: draft.note.trim(),
         contextVi: draft.contextVi.trim(),
         formulaLines: draft.formulaLines.map((line) => line.trim()).filter(Boolean),
+      }
+    }
+    if (isReview) {
+      return {
+        standardExam: true,
+        standardExamSet: true,
+        version: 3,
+        description: draft.promptVi.trim() || draft.explanationVi.trim(),
+        objective: draft.examObjective.trim(),
+        assessmentScope: draft.examScope.trim(),
+        aiGradingInstructions: draft.examGrading.trim(),
+        generationMode: 'ai_from_lesson_data',
+        levels: draft.examLevels.map((level) => ({ ...level })),
       }
     }
     return {
@@ -930,20 +1080,21 @@ export default function AdminExercises() {
         const modalSkills = [
           { value: 'vocabulary', label: 'Từ vựng', icon: BookOpen, description: 'Nhập từ vựng tiếng Hàn, nghĩa tiếng Việt, phát âm và mẹo ghi nhớ.' },
           { value: 'grammar', label: 'Ngữ pháp', icon: NotebookPen, description: 'Nhập mẫu cấu trúc ngữ pháp, bối cảnh sử dụng và các công thức chia.' },
-          { value: 'dictation', label: 'Nghe chép chính tả', icon: Headphones, description: 'Nhập câu tiếng Hàn kèm bản dịch và thiết lập audio mẫu phát âm.' },
+          { value: 'dictation', label: 'Nghe chép', icon: Headphones, description: 'Nhập câu tiếng Hàn kèm bản dịch và thiết lập audio mẫu phát âm.' },
           { value: 'shadowing', label: 'Shadowing', icon: Mic, description: 'Nhập câu luyện nói theo ngữ điệu kèm ghi chú phát âm.' },
+          { value: 'review', label: 'Thi thử', icon: Sparkles, description: 'Cấu hình một bộ đề thi chuẩn gồm đủ 5 mức sao.' },
         ] as const
         const currentSkillKey = draft.skillType === 'vocabulary_grammar' ? draft.vocabularyGrammarKind : draft.skillType
         const currentSkillMeta = modalSkills.find((s) => s.value === currentSkillKey) || modalSkills[0]
         const CurrentSkillIcon = currentSkillMeta.icon
 
         return (
-          <section className={`admin-modal admin-exercise-modal${isVocabularyGrammar ? ' is-vocabulary-grammar' : ''}${isDictation ? ' is-dictation' : ''}${isShadowing ? ' is-shadowing' : ''}`}>
+          <section className={`admin-modal admin-exercise-modal${isVocabularyGrammar ? ' is-vocabulary-grammar' : ''}${isDictation ? ' is-dictation' : ''}${isShadowing ? ' is-shadowing' : ''}${isReview ? ' is-review' : ''}`}>
             <header className="admin-exercise-modal-header">
               <div className="admin-modal-header-main">
                 <span className={`admin-modal-header-icon is-${currentSkillKey}`}><CurrentSkillIcon size={22} /></span>
                 <div>
-                  <h2>{editing ? 'Chỉnh sửa bài tập' : 'Thêm bài tập mới'} · {currentSkillMeta.label}</h2>
+                  <h2>{editing ? (isReview ? 'Chỉnh sửa bộ đề thi thử' : 'Chỉnh sửa bài tập') : (isReview ? 'Tạo bộ đề thi thử mới' : 'Thêm bài tập mới')} · {currentSkillMeta.label}</h2>
                   <p>{currentSkillMeta.description}</p>
                 </div>
               </div>
@@ -975,6 +1126,8 @@ export default function AdminExercises() {
                             setDraft((cur) => ({ ...cur, skillType: 'dictation' }))
                           } else if (value === 'shadowing') {
                             setDraft((cur) => ({ ...cur, skillType: 'shadowing' }))
+                          } else if (value === 'review') {
+                            setDraft((cur) => ({ ...cur, skillType: 'review' }))
                           }
                         }}
                       >
@@ -986,8 +1139,425 @@ export default function AdminExercises() {
                 </div>
               </section>
 
-          <section className={`admin-form-section admin-content-section${isVocabularyExercise ? ' is-vocab' : ''}${isGrammarExercise ? ' is-grammar' : ''}${isDictation ? ' is-dictation' : ''}${isShadowing ? ' is-shadowing' : ''}`}>
-            <div className="admin-section-title"><span>{isVocabularyExercise ? 'Nội dung từ vựng' : isGrammarExercise ? 'Nội dung ngữ pháp' : isDictation ? 'Nội dung nghe' : 'Câu luyện nói'}</span></div>
+          <section className={`admin-form-section admin-content-section${isVocabularyExercise ? ' is-vocab' : ''}${isGrammarExercise ? ' is-grammar' : ''}${isDictation ? ' is-dictation' : ''}${isShadowing ? ' is-shadowing' : ''}${isReview ? ' is-review' : ''}`}>
+            <div className="admin-section-title"><span>{isVocabularyExercise ? 'Nội dung từ vựng' : isGrammarExercise ? 'Nội dung ngữ pháp' : isDictation ? 'Nội dung nghe' : isReview ? 'Thông tin đề thi chuẩn' : 'Câu luyện nói'}</span></div>
+            {isReview && <>
+              <div className="admin-standard-exam" style={{ gridColumn: '1 / -1' }}>
+                {/* Intro Banner */}
+                <div className="admin-standard-exam-intro">
+                  <div className="admin-standard-intro-icon">
+                    <Sparkles size={24} />
+                  </div>
+                  <div className="admin-standard-intro-text">
+                    <div className="admin-standard-intro-title">
+                      <b>Cấu hình Bộ đề thi thử chuẩn</b>
+                      <span className="admin-standard-badge">5 mức sao chuẩn</span>
+                    </div>
+                    <p>Thông tin đề, mục tiêu, phạm vi và nguyên tắc AI chấm được dùng chung cho cả 5 mức. Từng mức sao cho phép tùy biến thời gian và phân bổ số lượng câu hỏi theo từng kỹ năng.</p>
+                  </div>
+                </div>
+
+                {/* Section 1: General Info & AI Prompts */}
+                <div className="admin-standard-section-card">
+                  <div className="admin-standard-card-header">
+                    <Target size={18} className="admin-standard-card-icon" />
+                    <div>
+                      <h3>Thông tin bộ đề &amp; Hướng dẫn AI tạo đề</h3>
+                      <p>Thiết lập tiêu đề, phạm vi bài học và tiêu chí đánh giá cho hệ thống AI.</p>
+                    </div>
+                  </div>
+
+                  <div className="admin-standard-form-grid">
+                    <label className="admin-field-full">
+                      <span className="admin-field-label">Tên đề thi chuẩn <strong className="required">*</strong></span>
+                      <input
+                        value={draft.promptKo}
+                        onChange={(event) => setDraft({ ...draft, promptKo: event.target.value })}
+                        placeholder="Ví dụ: Đề thi thử tổng hợp Sejong sơ cấp 1 (Bài 1 - 6)"
+                        className="admin-input-prominent"
+                      />
+                    </label>
+
+                    <label className="admin-field-full">
+                      <span className="admin-field-label">Mô tả chung / Hướng dẫn thí sinh</span>
+                      <input
+                        value={draft.promptVi}
+                        onChange={(event) => setDraft({ ...draft, promptVi: event.target.value })}
+                        placeholder="Ví dụ: Bài thi đánh giá năng lực từ vựng, ngữ pháp và phản xạ giao tiếp cơ bản."
+                      />
+                    </label>
+
+                    <div className="admin-field-col">
+                      <label>
+                        <span className="admin-field-label">Mục tiêu đánh giá <strong className="required">*</strong></span>
+                        <textarea
+                          rows={3}
+                          value={draft.examObjective}
+                          onChange={(event) => setDraft({ ...draft, examObjective: event.target.value })}
+                          placeholder="Ví dụ: Đánh giá khả năng ghi nhớ từ vựng, ngữ pháp và phản xạ giao tiếp thực tế."
+                        />
+                      </label>
+                      <div className="admin-quick-chips">
+                        <span className="admin-quick-chips-title">Gợi ý nhanh:</span>
+                        <button type="button" onClick={() => appendPromptText('examObjective', 'Đánh giá khả năng ghi nhớ và vận dụng từ vựng, ngữ pháp đã học')}>+ Từ vựng &amp; Ngữ pháp</button>
+                        <button type="button" onClick={() => appendPromptText('examObjective', 'Kiểm tra phản xạ nghe hiểu và phát âm chuẩn')}>+ Nghe &amp; Phát âm</button>
+                        <button type="button" onClick={() => appendPromptText('examObjective', 'Đánh giá năng lực giao tiếp tổng hợp')}>+ Giao tiếp tổng hợp</button>
+                      </div>
+                    </div>
+
+                    <div className="admin-field-col">
+                      <label>
+                        <span className="admin-field-label">Phạm vi đánh giá <strong className="required">*</strong></span>
+                        <textarea
+                          rows={3}
+                          value={draft.examScope}
+                          onChange={(event) => setDraft({ ...draft, examScope: event.target.value })}
+                          placeholder="Ví dụ: Giáo trình Sejong 1, từ Bài 1 đến Bài 5. Tập trung vào chủ đề Giới thiệu bản thân và Mua sắm."
+                        />
+                      </label>
+                      <div className="admin-quick-chips">
+                        <span className="admin-quick-chips-title">Gợi ý nhanh:</span>
+                        <button type="button" onClick={() => appendPromptText('examScope', 'Toàn bộ từ vựng và ngữ pháp trong các bài học đã qua')}>+ Toàn bộ bài đã học</button>
+                        <button type="button" onClick={() => appendPromptText('examScope', 'Tập trung các đoạn hội thoại thực tế')}>+ Hội thoại thực tế</button>
+                        <button type="button" onClick={() => appendPromptText('examScope', 'Bám sát nội dung bài học được chọn')}>+ Bám sát bài học</button>
+                      </div>
+                    </div>
+
+                    <div className="admin-field-full">
+                      <label>
+                        <span className="admin-field-label">Tiêu chí &amp; Mức độ AI chấm điểm <strong className="required">*</strong></span>
+                        <textarea
+                          rows={3}
+                          value={draft.examGrading}
+                          onChange={(event) => setDraft({ ...draft, examGrading: event.target.value })}
+                          placeholder="Ví dụ: Chấm theo độ chính xác, đúng ngữ cảnh và khả năng vận dụng. Shadowing đạt khi phát âm từ 80%."
+                        />
+                      </label>
+                      <div className="admin-quick-chips">
+                        <span className="admin-quick-chips-title">Thêm tiêu chí chấm:</span>
+                        <button type="button" onClick={() => appendPromptText('examGrading', 'Chấp nhận các cách diễn đạt tương đương')}>+ Chấp nhận từ đồng nghĩa</button>
+                        <button type="button" onClick={() => appendPromptText('examGrading', 'Shadowing đạt chuẩn khi phát âm đạt từ 80% trở lên')}>+ Shadowing ≥ 80%</button>
+                        <button type="button" onClick={() => appendPromptText('examGrading', 'Chấm nghiêm ngặt trợ từ và đuôi câu kính ngữ')}>+ Chuẩn trợ từ &amp; kính ngữ</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: 5 Stars Level Configuration */}
+                <div className="admin-standard-section-card">
+                  <div className="admin-standard-card-header has-actions">
+                    <div className="admin-standard-card-header-left">
+                      <Sliders size={18} className="admin-standard-card-icon" />
+                      <div>
+                        <h3>Cấu hình 5 mức sao độ khó</h3>
+                        <p>Số lượng câu hỏi từng kỹ năng và thời gian thi tương ứng với từng mức độ.</p>
+                      </div>
+                    </div>
+                    <div className="admin-standard-view-switch" role="tablist" aria-label="Kiểu hiển thị mức độ">
+                      <button
+                        type="button"
+                        className={`admin-view-btn ${examLevelViewMode === 'detail' ? 'is-active' : ''}`}
+                        onClick={() => setExamLevelViewMode('detail')}
+                      >
+                        <Sliders size={15} />
+                        <span>Từng mức chi tiết</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`admin-view-btn ${examLevelViewMode === 'matrix' ? 'is-active' : ''}`}
+                        onClick={() => setExamLevelViewMode('matrix')}
+                      >
+                        <LayoutGrid size={15} />
+                        <span>Bảng so sánh 5 mức</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Level Tabs */}
+                  <div className="admin-standard-level-tabs" role="tablist" aria-label="Chọn mức sao">
+                    {draft.examLevels.map((level, levelIndex) => {
+                      const totalQuestions = level.vocabulary + level.grammar + level.dialogue + level.listening + level.writing + level.shadowing
+                      const isActive = activeExamLevelTab === levelIndex
+                      return (
+                        <button
+                          key={level.stars}
+                          type="button"
+                          role="tab"
+                          aria-selected={isActive}
+                          className={`admin-standard-level-tab is-level-${level.stars} ${isActive ? 'is-active' : ''}`}
+                          onClick={() => {
+                            setActiveExamLevelTab(levelIndex)
+                            if (examLevelViewMode !== 'detail') setExamLevelViewMode('detail')
+                          }}
+                        >
+                          <div className="admin-tab-stars">
+                            {Array.from({ length: level.stars }).map((_, sIdx) => (
+                              <Star key={sIdx} size={12} fill="#f59e0b" color="#f59e0b" />
+                            ))}
+                          </div>
+                          <span className="admin-tab-label">{level.label}</span>
+                          <span className="admin-tab-metrics">{level.durationMinutes}p · {totalQuestions} câu</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Mode 1: Detailed View for Active Level */}
+                  {examLevelViewMode === 'detail' && (() => {
+                    const currentLevel = draft.examLevels[activeExamLevelTab] || draft.examLevels[0]
+                    const total = currentLevel.vocabulary + currentLevel.grammar + currentLevel.dialogue + currentLevel.listening + currentLevel.writing + currentLevel.shadowing
+                    const avgPace = total > 0 ? (currentLevel.durationMinutes / total).toFixed(1) : '0'
+
+                    return (
+                      <div className="admin-standard-level-detail">
+                        {/* Level Header Strip */}
+                        <div className="admin-level-detail-header">
+                          <div className="admin-level-identity">
+                            <div className="admin-level-stars-badge">
+                              {Array.from({ length: currentLevel.stars }).map((_, sIdx) => (
+                                <Star key={sIdx} size={14} fill="#f59e0b" color="#f59e0b" />
+                              ))}
+                            </div>
+                            <span className="admin-level-name-display">{currentLevel.label}</span>
+                          </div>
+
+                          <div className="admin-level-duration-box">
+                            <Clock size={16} className="admin-duration-icon" />
+                            <span className="admin-duration-label">Thời gian:</span>
+                            <div className="admin-duration-stepper">
+                              <button
+                                type="button"
+                                className="admin-stepper-btn"
+                                onClick={() => updateLevel('durationMinutes', Math.max(1, currentLevel.durationMinutes - 5), activeExamLevelTab)}
+                                aria-label="Giảm 5 phút"
+                              >
+                                <Minus size={14} />
+                              </button>
+                              <input
+                                type="number"
+                                min={1}
+                                max={180}
+                                value={currentLevel.durationMinutes}
+                                onChange={(event) => updateLevel('durationMinutes', Math.max(1, Number(event.target.value) || 1), activeExamLevelTab)}
+                                className="admin-duration-input"
+                              />
+                              <button
+                                type="button"
+                                className="admin-stepper-btn"
+                                onClick={() => updateLevel('durationMinutes', Math.min(180, currentLevel.durationMinutes + 5), activeExamLevelTab)}
+                                aria-label="Tăng 5 phút"
+                              >
+                                <Plus size={14} />
+                              </button>
+                            </div>
+                            <span className="admin-duration-unit">phút</span>
+
+                            <div className="admin-duration-quick-presets">
+                              {[8, 10, 15, 20, 30, 45].map((mins) => (
+                                <button
+                                  key={mins}
+                                  type="button"
+                                  className={`admin-preset-pill ${currentLevel.durationMinutes === mins ? 'is-active' : ''}`}
+                                  onClick={() => updateLevel('durationMinutes', mins, activeExamLevelTab)}
+                                >
+                                  {mins}p
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="admin-level-stats-badge">
+                            <div className="admin-stat-total">
+                              <strong>{total}</strong>
+                              <span>câu hỏi</span>
+                            </div>
+                            <div className="admin-stat-pace">
+                              <span>~{avgPace} phút/câu</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 6 Skill Counters */}
+                        <div className="admin-level-skills-grid">
+                          {([
+                            { field: 'vocabulary', label: 'Từ vựng', icon: BookOpen, color: '#7c6fe4', bg: '#f5f3ff', desc: 'Chọn từ, nối nghĩa, điền từ' },
+                            { field: 'grammar', label: 'Ngữ pháp', icon: NotebookPen, color: '#4f46e5', bg: '#eef2ff', desc: 'Chia đuôi, liên kết câu' },
+                            { field: 'dialogue', label: 'Hội thoại', icon: MessageCircle, color: '#0284c7', bg: '#f0f9ff', desc: 'Hoàn thành lượt thoại A/B' },
+                            { field: 'listening', label: 'Nghe hiểu', icon: Headphones, color: '#16a34a', bg: '#f0fdf4', desc: 'Nghe chọn đáp án, chép câu' },
+                            { field: 'writing', label: 'Câu ứng dụng', icon: Sparkles, color: '#d97706', bg: '#fffbeb', desc: 'Viết câu hoàn chỉnh theo gợi ý' },
+                            { field: 'shadowing', label: 'Shadowing phản xạ', icon: Mic, color: '#e11d48', bg: '#fff1f2', desc: 'Luyện nói và chấm AI theo âm' },
+                          ] as const).map(({ field, label, icon: SkillIcon, color, bg, desc }) => {
+                            const count = Number(currentLevel[field]) || 0
+                            const percentage = total > 0 ? Math.round((count / total) * 100) : 0
+
+                            return (
+                              <div className="admin-skill-counter-card" key={field} style={{ '--skill-accent': color, '--skill-bg': bg } as CSSProperties}>
+                                <div className="admin-skill-card-top">
+                                  <div className="admin-skill-badge">
+                                    <SkillIcon size={16} />
+                                    <span>{label}</span>
+                                  </div>
+                                  <span className="admin-skill-percentage">{percentage}%</span>
+                                </div>
+                                <p className="admin-skill-desc">{desc}</p>
+
+                                <div className="admin-skill-stepper">
+                                  <button
+                                    type="button"
+                                    className="admin-skill-step-btn"
+                                    disabled={count <= 0}
+                                    onClick={() => adjustLevelCount(field, -1, activeExamLevelTab)}
+                                    aria-label={`Giảm số câu ${label}`}
+                                  >
+                                    <Minus size={15} />
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    value={count}
+                                    onChange={(event) => updateLevel(field, Math.max(0, Number(event.target.value) || 0), activeExamLevelTab)}
+                                    className="admin-skill-count-input"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="admin-skill-step-btn"
+                                    onClick={() => adjustLevelCount(field, 1, activeExamLevelTab)}
+                                    aria-label={`Tăng số câu ${label}`}
+                                  >
+                                    <Plus size={15} />
+                                  </button>
+                                </div>
+
+                                <div className="admin-skill-bar-wrap">
+                                  <div className="admin-skill-bar" style={{ width: `${percentage}%`, backgroundColor: color }} />
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+
+                        {/* Level Card Footer */}
+                        <div className="admin-level-detail-footer">
+                          <button
+                            type="button"
+                            className="admin-reset-preset-btn"
+                            onClick={() => resetLevelPreset(activeExamLevelTab)}
+                          >
+                            <RotateCcw size={14} />
+                            <span>Đặt lại mức chuẩn này</span>
+                          </button>
+
+                          <div className="admin-level-nav-buttons">
+                            <button
+                              type="button"
+                              className="admin-level-nav-btn"
+                              disabled={activeExamLevelTab === 0}
+                              onClick={() => setActiveExamLevelTab((prev) => Math.max(0, prev - 1))}
+                            >
+                              <ChevronLeft size={16} />
+                              <span>Mức trước</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="admin-level-nav-btn"
+                              disabled={activeExamLevelTab === draft.examLevels.length - 1}
+                              onClick={() => setActiveExamLevelTab((prev) => Math.min(draft.examLevels.length - 1, prev + 1))}
+                            >
+                              <span>Mức tiếp theo</span>
+                              <ChevronRight size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  {/* Mode 2: Matrix Comparison Table */}
+                  {examLevelViewMode === 'matrix' && (
+                    <div className="admin-standard-matrix-wrap">
+                      <table className="admin-standard-matrix-table">
+                        <thead>
+                          <tr>
+                            <th className="admin-matrix-label-th">Kỹ năng / Tiêu chí</th>
+                            {draft.examLevels.map((lvl) => (
+                              <th key={lvl.stars} className={`admin-matrix-level-th is-level-${lvl.stars}`}>
+                                <div className="admin-matrix-th-stars">
+                                  {Array.from({ length: lvl.stars }).map((_, sIdx) => (
+                                    <Star key={sIdx} size={11} fill="#f59e0b" color="#f59e0b" />
+                                  ))}
+                                </div>
+                                <div className="admin-matrix-th-title">{lvl.label}</div>
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="admin-matrix-row-duration">
+                            <td>
+                              <span className="admin-matrix-row-title"><Clock size={14} /> Thời gian (phút)</span>
+                            </td>
+                            {draft.examLevels.map((lvl, idx) => (
+                              <td key={lvl.stars}>
+                                <div className="admin-matrix-input-cell">
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={180}
+                                    value={lvl.durationMinutes}
+                                    onChange={(event) => updateLevel('durationMinutes', Math.max(1, Number(event.target.value) || 1), idx)}
+                                  />
+                                  <span className="admin-matrix-unit">p</span>
+                                </div>
+                              </td>
+                            ))}
+                          </tr>
+                          {([
+                            ['vocabulary', 'Từ vựng', BookOpen],
+                            ['grammar', 'Ngữ pháp', NotebookPen],
+                            ['dialogue', 'Hội thoại', MessageCircle],
+                            ['listening', 'Nghe hiểu', Headphones],
+                            ['writing', 'Câu ứng dụng', Sparkles],
+                            ['shadowing', 'Shadowing phản xạ', Mic],
+                          ] as const).map(([field, label, SkillIcon]) => (
+                            <tr key={field}>
+                              <td>
+                                <span className="admin-matrix-row-title"><SkillIcon size={14} /> {label}</span>
+                              </td>
+                              {draft.examLevels.map((lvl, idx) => (
+                                <td key={lvl.stars}>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    value={Number(lvl[field]) || 0}
+                                    onChange={(event) => updateLevel(field, Math.max(0, Number(event.target.value) || 0), idx)}
+                                    className="admin-matrix-number-input"
+                                  />
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                          <tr className="admin-matrix-row-total">
+                            <td>
+                              <span className="admin-matrix-row-title"><strong>TỔNG SỐ CÂU</strong></span>
+                            </td>
+                            {draft.examLevels.map((lvl) => {
+                              const total = lvl.vocabulary + lvl.grammar + lvl.dialogue + lvl.listening + lvl.writing + lvl.shadowing
+                              return (
+                                <td key={lvl.stars}>
+                                  <span className="admin-matrix-total-badge">{total} câu</span>
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>}
             {isVocabularyExercise && <>
               <div className="admin-vocab-main">
                 <label className="admin-ko-field">Nội dung tiếng Hàn *<textarea rows={3} value={draft.promptKo} onChange={(event) => setDraft({ ...draft, promptKo: event.target.value, audioUrl: '' })} /></label>

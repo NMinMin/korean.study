@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { NotebookPen, ChevronLeft, BookOpen, Plus, Star, Type, Volume2, Search, Filter } from 'lucide-react';
+import { NotebookPen, ChevronLeft, BookOpen, Plus, Star, Type, Volume2, Search, Filter, BookMarked } from 'lucide-react';
 import { GRAMMAR_SAMPLE, VOCAB_SAMPLE, FALLBACK_LESSONS } from '../../data/fallbackData';
 import { playVocabularyAudio } from '../../services/audioService';
 import { loadRemoteVocabularyStateForWords, saveRemoteVocabularyStateForWords } from '../../lib/vocabularyProgress';
@@ -10,7 +10,7 @@ const normalizeSearchText = (value = '') => String(value)
   .replace(/[\u0300-\u036f]/g, '')
   .trim();
 
-export function GrammarHubView({ onBack, onAddBook, books = [], vocabulary = [], grammar = [], userId }) {
+export function GrammarHubView({ onBack, onAddBook, onOpenNotebook, books = [], vocabulary = [], grammar = [], userId }) {
   const [tab, setTab] = useState('vocab');
   const [vocabState, setVocabState] = useState({});
   const [query, setQuery] = useState('');
@@ -107,7 +107,7 @@ export function GrammarHubView({ onBack, onAddBook, books = [], vocabulary = [],
         </div>
       ) : (
         <>
-          <div className="content-library-controls">
+          <div className="content-library-controls content-library-controls-with-notebook">
             <label className="content-library-search">
               <Search size={17} />
               <input
@@ -126,6 +126,7 @@ export function GrammarHubView({ onBack, onAddBook, books = [], vocabulary = [],
                 ))}
               </select>
             </label>
+            <button type="button" className="cg-post-btn content-library-notebook-btn" onClick={onOpenNotebook}><BookMarked size={16} /> Sổ tay từ vựng</button>
           </div>
           <div className="fc2-content-tabs content-library-tabs" role="tablist" aria-label="Chọn loại nội dung">
             <button className={`fc2-content-tab ${tab === 'vocab' ? 'on' : ''}`} onClick={() => setTab('vocab')} role="tab" aria-selected={tab === 'vocab'}>

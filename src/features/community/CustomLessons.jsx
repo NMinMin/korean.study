@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   CheckCircle2, Copy, Link2, BookMarked, BookOpen, Sparkles, XCircle, Plus,
-  Image as ImageIcon, ChevronLeft, ChevronRight, Lightbulb, Globe2, LockKeyhole, Flag, EyeOff
+  Image as ImageIcon, ChevronLeft, ChevronRight, Lightbulb, Globe2, LockKeyhole, Flag, EyeOff, Trash2
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { uploadCloudinaryAsset } from '../../services/cloudinaryUpload';
@@ -40,9 +40,10 @@ Với MỖI từ theo đúng thứ tự trên, hãy soạn:
 1. "example": một câu tiếng Hàn tự nhiên, đơn giản, có dùng đúng từ đó, đánh dấu chính xác từ mục tiêu bằng ** ** (ví dụ: "저는 아침에 **커피**를 마셔요.").
 2. "exampleVi": bản dịch tiếng Việt của câu ví dụ trên.
 3. "mnemonic": một mẹo ghi nhớ ngắn (1 câu) bằng tiếng Việt để người Việt dễ nhớ từ này — có thể chiết tự Hán Việt nếu phù hợp, liên tưởng âm thanh, hoặc hình ảnh.
+4. "wrongExamples": Mảng gồm đúng 3 câu tiếng Hàn dùng SAI từ mục tiêu đó hoặc sai ngữ pháp/ngữ cảnh (làm đáp án nhiễu cho bài trắc nghiệm "Chọn câu dùng đúng"), mỗi câu là một câu hoàn chỉnh nhưng kết hợp sai ngữ cảnh của từ này.
 
 Trả lời CHỈ bằng JSON, không thêm markdown hay chữ nào khác, theo đúng cấu trúc:
-{"items": [{"example": "...", "exampleVi": "...", "mnemonic": "..."}]}
+{"items": [{"example": "...", "exampleVi": "...", "mnemonic": "...", "wrongExamples": ["...", "...", "..."]}]}
 
 Mảng "items" phải có đúng ${words.length} phần tử, theo đúng thứ tự danh sách từ ở trên.`;
 
@@ -56,6 +57,11 @@ function fallbackLessonContent(words) {
     example: `저는 오늘 **${word.ko}** 단어를 공부해요.`,
     exampleVi: `Hôm nay tôi học từ “${word.ko}” (${word.vi}).`,
     mnemonic: `Liên tưởng “${word.ko}” với hình ảnh hoặc tình huống quen thuộc mang nghĩa “${word.vi}”.`,
+    wrongExamples: [
+      `저는 ${word.ko}을/를 시원하게 마셨어요.`,
+      `어제 ${word.ko}을/를 입고 학교에 갔어요.`,
+      `${word.ko}이/가 너무 빨라서 따라갈 수 없어요.`
+    ]
   }));
 }
 
@@ -221,7 +227,13 @@ export function CustomLessonHub({ profile, onStudy }) {
     let enrichedWords = validWords.map((w) => ({ ko: w.ko.trim(), vi: w.vi.trim(), img: w.img?.trim() || undefined }));
     try {
       const items = await generateLessonContent(enrichedWords);
-      enrichedWords = enrichedWords.map((w, i) => ({ ...w, example: items[i]?.example, exampleVi: items[i]?.exampleVi, mnemonic: items[i]?.mnemonic }));
+      enrichedWords = enrichedWords.map((w, i) => ({
+        ...w,
+        example: items[i]?.example,
+        exampleVi: items[i]?.exampleVi,
+        mnemonic: items[i]?.mnemonic,
+        wrongExamples: Array.isArray(items[i]?.wrongExamples) ? items[i].wrongExamples : []
+      }));
     } catch (e) {
       const items = fallbackLessonContent(enrichedWords);
       enrichedWords = enrichedWords.map((w, i) => ({ ...w, ...items[i], enrichmentSource: 'fallback' }));
@@ -231,6 +243,23 @@ export function CustomLessonHub({ profile, onStudy }) {
     setGeneratedDraft({ title: title.trim(), words: enrichedWords, quizTypes: [...quizTypes], visibility });
     setGenStep('');
     setSaving(false);
+  };
+
+  const deleteOwnSet = async (lesson) => {
+    if (!supabase || !profile?.id || lesson.creatorId !== profile.id) return;
+    const confirmed = window.confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn bộ từ vựng "${lesson.title}" không?\nThao tác này sẽ xóa toàn bộ nội dung và không thể hoàn tác.`);
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase.from('custom_lessons').delete().eq('id', lesson.id);
+      if (error) throw error;
+
+      setLessons((items) => (items || []).filter((item) => item.id !== lesson.id));
+      setSavedLessons((items) => (items || []).filter((item) => item.id !== lesson.id));
+      setSavedCodes((items) => items.filter((code) => code !== lesson.code));
+    } catch (err) {
+      alert('Không thể xóa bộ từ vựng lúc này. Vui lòng thử lại sau.');
+    }
   };
 
   const hideOwnSet = async (lesson) => {
@@ -355,8 +384,30 @@ export function CustomLessonHub({ profile, onStudy }) {
                       <span>bởi {l.author} · {l.words.length} từ · {l.visibility === 'private' ? 'Riêng tư' : 'Công khai'} · mã {l.code}</span>
                     </div>
                     <div className="cl-item-actions">
-                      <button className="cl-notebook-remove" onClick={() => removeFromNotebook(l.code)} aria-label="Bỏ khỏi sổ tay" title="Bỏ khỏi sổ tay"><XCircle size={16} /></button>
-                      {l.creatorId === profile?.id && l.status !== 'hidden' && <button className="cl-notebook-remove" onClick={() => hideOwnSet(l)} title="Ẩn bộ từ vựng"><EyeOff size={16} /></button>}
+                      {l.creatorId === profile?.id ? (
+                        <button
+                          className="cl-notebook-remove"
+                          onClick={() => deleteOwnSet(l)}
+                          aria-label="Xóa bộ từ vựng"
+                          title="Xóa vĩnh viễn bộ từ vựng này"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      ) : (
+                        <button
+                          className="cl-notebook-remove"
+                          onClick={() => removeFromNotebook(l.code)}
+                          aria-label="Bỏ khỏi sổ tay"
+                          title="Bỏ khỏi sổ tay"
+                        >
+                          <XCircle size={16} />
+                        </button>
+                      )}
+                      {l.creatorId === profile?.id && l.status !== 'hidden' && (
+                        <button className="cl-notebook-remove" onClick={() => hideOwnSet(l)} title="Ẩn bộ từ vựng">
+                          <EyeOff size={16} />
+                        </button>
+                      )}
                       <button className="cl-study-btn" onClick={() => onStudy(l)}>Học ngay</button>
                     </div>
                   </div>
@@ -388,7 +439,20 @@ export function CustomLessonHub({ profile, onStudy }) {
                         <BookMarked size={16} />
                       </button>
                     )}
-                    {l.creatorId !== profile?.id && <button className="cl-notebook-remove" onClick={() => reportSet(l)} title="Báo cáo"><Flag size={16} /></button>}
+                    {l.creatorId === profile?.id ? (
+                      <button
+                        className="cl-notebook-remove"
+                        onClick={() => deleteOwnSet(l)}
+                        aria-label="Xóa bộ từ vựng"
+                        title="Xóa vĩnh viễn bộ từ vựng này"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    ) : (
+                      <button className="cl-notebook-remove" onClick={() => reportSet(l)} title="Báo cáo">
+                        <Flag size={16} />
+                      </button>
+                    )}
                     <button className="cl-study-btn" onClick={() => onStudy(l)}>Học ngay</button>
                   </div>
                 </div>
@@ -523,6 +587,28 @@ export function CustomLessonHub({ profile, onStudy }) {
 }
 
 export function CustomLessonStudyView({ lessonData, onBack, onStartQuiz }) {
+  const [canDelete, setCanDelete] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user?.id && data.user.id === lessonData.creatorId) {
+        setCanDelete(true);
+      }
+    }).catch(() => {});
+  }, [lessonData.creatorId]);
+
+  const handleDeleteFromStudy = async () => {
+    if (!supabase) return;
+    const confirmed = window.confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn bộ từ vựng "${lessonData.title}" không?\nThao tác này sẽ xóa toàn bộ nội dung và không thể hoàn tác.`);
+    if (!confirmed) return;
+    try {
+      const { error } = await supabase.from('custom_lessons').delete().eq('id', lessonData.id);
+      if (error) throw error;
+      onBack();
+    } catch (e) {
+      alert('Không thể xóa bộ từ vựng lúc này. Vui lòng thử lại sau.');
+    }
+  };
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const total = lessonData.words.length;
@@ -539,6 +625,17 @@ export function CustomLessonStudyView({ lessonData, onBack, onStartQuiz }) {
       <div className="rv-quiz-top">
         <button className="fc2-back" onClick={onBack} aria-label="Về Cộng đồng"><ChevronLeft size={20} /></button>
         <span className="rv-quiz-title">{lessonData.title}</span>
+        {canDelete && (
+          <button
+            className="cl-notebook-remove"
+            onClick={handleDeleteFromStudy}
+            aria-label="Xóa bộ từ vựng"
+            title="Xóa vĩnh viễn bộ từ vựng này"
+            style={{ marginLeft: 8 }}
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
         <span className="rv-quiz-count">{idx + 1} / {total}</span>
       </div>
       <div className="fc2-progress-bar"><div style={{ width: `${((idx + 1) / total) * 100}%` }} /></div>
@@ -584,37 +681,241 @@ export function CustomLessonStudyView({ lessonData, onBack, onStartQuiz }) {
   );
 }
 
+const FALLBACK_KO_DISTRACTORS = [
+  '사과', '학교', '친구', '물', '커피', '책', '가방', '식당', '선생님',
+  '공부', '영화', '시간', '오늘', '내일', '병원', '날씨', '가족', '음악',
+  '바다', '사진', '우유', '빵', '의자', '모자', '시계', '공원', '운동'
+];
+
+function getKoDistractors(correctKo, allWords) {
+  const fromSet = shuffleArr(
+    allWords.map((w) => w.ko?.trim()).filter((k) => k && k !== correctKo)
+  );
+  const result = [...new Set(fromSet)];
+  if (result.length < 3) {
+    const fromPool = shuffleArr(FALLBACK_KO_DISTRACTORS.filter((k) => k !== correctKo && !result.includes(k)));
+    for (const item of fromPool) {
+      result.push(item);
+      if (result.length >= 3) break;
+    }
+  }
+  return result.slice(0, 3);
+}
+
+function getUsageDistractors(w, allWords) {
+  const rawList = Array.isArray(w.wrongExamples) ? w.wrongExamples.filter((s) => typeof s === 'string' && s.trim()) : [];
+  const cleanCorrect = (w.example || '').replace(/\*\*/g, '').trim();
+  const validWrong = rawList.filter((s) => s.trim() !== cleanCorrect);
+  const result = [...new Set(validWrong)];
+
+  if (result.length < 3) {
+    const templates = [
+      `저는 ${w.ko}을/를 시원하게 마셨어요.`,
+      `어제 ${w.ko}을/를 입고 잠을 잤어요.`,
+      `${w.ko}이/가 너무 빨라서 따라갈 수 없어요.`,
+      `내일 ${w.ko}에게 편지를 보낼 거예요.`
+    ];
+    for (const t of shuffleArr(templates)) {
+      if (t !== cleanCorrect && !result.includes(t)) {
+        result.push(t);
+        if (result.length >= 3) break;
+      }
+    }
+  }
+  return result.slice(0, 3);
+}
+
 export function buildCustomQuizQuestions(lessonData) {
-  const words = lessonData.words || [];
+  const words = (lessonData.words || []).filter((w) => w.ko?.trim() && w.vi?.trim());
   const types = lessonData.quizTypes || [];
   const pool = [];
 
-  const viOptionsFor = (correct) => {
-    const distractors = shuffleArr(words.filter((x) => x.vi !== correct).map((x) => x.vi)).slice(0, 3);
-    return shuffleArr([correct, ...distractors]);
+  // 1. Điền từ vào câu: AI tạo câu có khuyết từ, cho 4 đáp án chọn
+  if (types.includes('fillblank')) {
+    words.forEach((w, i) => {
+      const ex = w.example || `저는 오늘 **${w.ko}** 단어를 공부해요.`;
+      const cleanTarget = w.ko.trim();
+      let blanked = ex;
+      if (blanked.includes('**')) {
+        blanked = blanked.replace(/\*\*(.+?)\*\*/, '( _____ )');
+      } else {
+        blanked = blanked.replace(new RegExp(cleanTarget, 'g'), '( _____ )');
+      }
+      const distractors = getKoDistractors(cleanTarget, words);
+      const options = shuffleArr([cleanTarget, ...distractors]);
+      pool.push({
+        type: 'fillblank',
+        prompt: blanked,
+        promptVi: w.exampleVi,
+        targetKo: cleanTarget,
+        targetVi: w.vi,
+        correct: cleanTarget,
+        options,
+        mnemonic: w.mnemonic,
+        key: `fb:${i}:${cleanTarget}`
+      });
+    });
+  }
+
+  // 2. Chọn câu dùng đúng: 4 đáp án chọn câu dùng từ & ngữ pháp chuẩn xác
+  if (types.includes('usage')) {
+    words.forEach((w, i) => {
+      const correctSentence = (w.example || `저는 오늘 ${w.ko} 단어를 공부해요.`).replace(/\*\*/g, '').trim();
+      const distractors = getUsageDistractors(w, words);
+      const options = shuffleArr([correctSentence, ...distractors]);
+      pool.push({
+        type: 'usage',
+        prompt: w.ko,
+        promptVi: w.vi,
+        correct: correctSentence,
+        options,
+        explanation: w.exampleVi ? `Câu đúng: "${correctSentence}" (${w.exampleVi})` : undefined,
+        key: `us:${i}:${w.ko}`
+      });
+    });
+  }
+
+  const shuffledQuestions = shuffleArr(pool);
+
+  // 3. Chọn từ - nghĩa: Nối các card tiếng Hàn với tiếng Việt
+  if (types.includes('matching') && words.length >= 2) {
+    const batchSize = words.length <= 6 ? words.length : 5;
+    for (let b = 0; b < words.length; b += batchSize) {
+      const slice = words.slice(b, b + batchSize);
+      if (slice.length >= 2) {
+        shuffledQuestions.push({
+          type: 'matching_cards',
+          pairs: slice.map((w) => ({ ko: w.ko.trim(), vi: w.vi.trim() })),
+          batchIndex: Math.floor(b / batchSize) + 1,
+          totalBatches: Math.ceil(words.length / batchSize),
+          key: `mc:${b}`
+        });
+      }
+    }
+  }
+
+  return shuffledQuestions;
+}
+
+export function MatchingCardGame({ pairs, onComplete }) {
+  const [shuffledKo] = useState(() => shuffleArr(pairs.map((p) => p.ko)));
+  const [shuffledVi] = useState(() => shuffleArr(pairs.map((p) => p.vi)));
+  const [selectedKo, setSelectedKo] = useState(null);
+  const [selectedVi, setSelectedVi] = useState(null);
+  const [matched, setMatched] = useState(() => new Set());
+  const [wrongPair, setWrongPair] = useState(null);
+  const [isFinished, setIsFinished] = useState(false);
+
+  const checkMatch = (koVal, viVal) => {
+    const pair = pairs.find((p) => p.ko === koVal);
+    if (pair && pair.vi === viVal) {
+      playCorrectSound();
+      const nextMatched = new Set(matched);
+      nextMatched.add(koVal);
+      setMatched(nextMatched);
+      setSelectedKo(null);
+      setSelectedVi(null);
+      setWrongPair(null);
+      if (nextMatched.size === pairs.length) {
+        setIsFinished(true);
+        if (onComplete) onComplete();
+      }
+    } else {
+      playIncorrectSound();
+      setWrongPair({ ko: koVal, vi: viVal });
+      setTimeout(() => {
+        setWrongPair(null);
+        setSelectedKo(null);
+        setSelectedVi(null);
+      }, 550);
+    }
   };
 
-  // Mỗi thể thức được chọn bao phủ toàn bộ danh sách từ, sau đó xáo trộn câu.
-  types.forEach((type) => words.forEach((w, i) => {
-    if (type === 'fillblank') {
-      if (!w.example || !w.example.includes('**')) return;
-      const blanked = w.example.replace(/\*\*(.+?)\*\*/, 'ـــــ');
-      const distractors = shuffleArr(words.filter((x) => x.ko !== w.ko).map((x) => x.ko)).slice(0, 3);
-      if (distractors.length < 1) return;
-      pool.push({ type: 'fillblank', prompt: blanked, promptVi: w.exampleVi, correct: w.ko, options: shuffleArr([w.ko, ...distractors]), key: `fb:${i}` });
-    } else if (type === 'matching') {
-      const options = viOptionsFor(w.vi);
-      if (options.length < 2) return;
-      pool.push({ type: 'matching', prompt: w.ko, correct: w.vi, options, key: `mt:${i}` });
-    } else if (type === 'usage') {
-      if (!w.example) return;
-      const distractors = shuffleArr(words.filter((x) => x.ko !== w.ko && x.example).map((x) => x.example)).slice(0, 3);
-      const options = shuffleArr([w.example, ...distractors]);
-      if (options.length < 2) return;
-      pool.push({ type: 'usage', prompt: w.ko, correct: w.example, options, key: `us:${i}` });
+  const handleKoClick = (ko) => {
+    if (matched.has(ko) || wrongPair) return;
+    if (selectedVi) {
+      checkMatch(ko, selectedVi);
+    } else {
+      setSelectedKo((prev) => (prev === ko ? null : ko));
     }
-  }));
-  return shuffleArr(pool);
+  };
+
+  const handleViClick = (vi) => {
+    const isMatched = pairs.some((p) => p.vi === vi && matched.has(p.ko));
+    if (isMatched || wrongPair) return;
+    if (selectedKo) {
+      checkMatch(selectedKo, vi);
+    } else {
+      setSelectedVi((prev) => (prev === vi ? null : vi));
+    }
+  };
+
+  return (
+    <div className="cl-matching-stage">
+      <div className="cl-matching-status">
+        <span><Sparkles size={15} style={{ verticalAlign: 'middle', marginRight: 5 }} /> Nối thẻ từ vựng</span>
+        <span>Đã ghép đúng: <b>{matched.size} / {pairs.length}</b></span>
+      </div>
+
+      <div className="cl-matching-columns">
+        <div className="cl-matching-col">
+          <div className="cl-matching-col-header">Thẻ tiếng Hàn</div>
+          {shuffledKo.map((ko) => {
+            const isMatched = matched.has(ko);
+            const isSelected = selectedKo === ko;
+            const isWrong = wrongPair && wrongPair.ko === ko;
+            let cls = 'cl-match-btn ko';
+            if (isMatched) cls += ' matched';
+            else if (isWrong) cls += ' wrong';
+            else if (isSelected) cls += ' selected';
+            return (
+              <button
+                key={ko}
+                type="button"
+                className={cls}
+                onClick={() => handleKoClick(ko)}
+                disabled={isMatched}
+              >
+                {ko}
+                {isMatched && <CheckCircle2 size={16} style={{ marginLeft: 6, color: '#3FA95C' }} />}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="cl-matching-col">
+          <div className="cl-matching-col-header">Thẻ nghĩa tiếng Việt</div>
+          {shuffledVi.map((vi) => {
+            const isMatched = pairs.some((p) => p.vi === vi && matched.has(p.ko));
+            const isSelected = selectedVi === vi;
+            const isWrong = wrongPair && wrongPair.vi === vi;
+            let cls = 'cl-match-btn';
+            if (isMatched) cls += ' matched';
+            else if (isWrong) cls += ' wrong';
+            else if (isSelected) cls += ' selected';
+            return (
+              <button
+                key={vi}
+                type="button"
+                className={cls}
+                onClick={() => handleViClick(vi)}
+                disabled={isMatched}
+              >
+                {vi}
+                {isMatched && <CheckCircle2 size={16} style={{ marginLeft: 6, color: '#3FA95C' }} />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {isFinished && (
+        <div className="cl-matching-done-box">
+          <p><CheckCircle2 size={20} color="#3FA95C" /> Tuyệt vời! Bạn đã hoàn thành nối đúng tất cả các thẻ!</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function CustomLessonTestView({ lessonData, onBack }) {
@@ -622,8 +923,14 @@ export function CustomLessonTestView({ lessonData, onBack }) {
   const [idx, setIdx] = useState(0);
   const [picked, setPicked] = useState(null);
   const [score, setScore] = useState(0);
+  const [cardStageDone, setCardStageDone] = useState(false);
   const [done, setDone] = useState(false);
   const q = questions[idx];
+
+  useEffect(() => {
+    setPicked(null);
+    setCardStageDone(false);
+  }, [idx]);
 
   if (questions.length === 0) {
     return (
@@ -640,12 +947,25 @@ export function CustomLessonTestView({ lessonData, onBack }) {
   const choose = (opt) => {
     if (picked) return;
     setPicked(opt);
-    if (opt === q.correct) { setScore((s) => s + 1); playCorrectSound(); }
-    else playIncorrectSound();
+    if (opt === q.correct) {
+      setScore((s) => s + 1);
+      playCorrectSound();
+    } else {
+      playIncorrectSound();
+    }
   };
+
+  const handleCardComplete = () => {
+    setCardStageDone(true);
+    setScore((s) => s + 1);
+  };
+
   const next = () => {
-    if (idx + 1 < questions.length) { setIdx((i) => i + 1); setPicked(null); }
-    else setDone(true);
+    if (idx + 1 < questions.length) {
+      setIdx((i) => i + 1);
+    } else {
+      setDone(true);
+    }
   };
 
   if (done) {
@@ -653,13 +973,15 @@ export function CustomLessonTestView({ lessonData, onBack }) {
     return (
       <section className="rv-page">
         <div className="rv-result-card">
-          <Sparkles size={30} color="#7C6FE4" />
+          <Sparkles size={32} color="#7C6FE4" />
           <h2 className="rv-result-grade">Hoàn thành bài kiểm tra!</h2>
-          <p className="rv-result-score">{score} / {questions.length} <span>câu đúng ({pct}%)</span></p>
+          <p className="rv-result-score">{score} / {questions.length} <span>phần đúng ({pct}%)</span></p>
         </div>
         <div className="fc-nav">
           <button className="fc-nav-btn" onClick={onBack}>Về bộ từ vựng</button>
-          <button className="fc-nav-btn primary" onClick={() => { setIdx(0); setPicked(null); setScore(0); setDone(false); }}>Làm lại</button>
+          <button className="fc-nav-btn primary" onClick={() => { setIdx(0); setPicked(null); setCardStageDone(false); setScore(0); setDone(false); }}>
+            Làm lại bài kiểm tra
+          </button>
         </div>
       </section>
     );
@@ -669,7 +991,7 @@ export function CustomLessonTestView({ lessonData, onBack }) {
     <section className="rv-page">
       <div className="rv-quiz-top">
         <button className="fc2-back" onClick={onBack} aria-label="Quay lại"><ChevronLeft size={20} /></button>
-        <span className="rv-quiz-title">{lessonData.title} — Kiểm tra</span>
+        <span className="rv-quiz-title">{lessonData.title} — Ôn tập kiểm tra</span>
         <span className="rv-quiz-count">{idx + 1} / {questions.length}</span>
       </div>
       <div className="fc2-progress-bar"><div style={{ width: `${((idx + 1) / questions.length) * 100}%` }} /></div>
@@ -677,38 +999,93 @@ export function CustomLessonTestView({ lessonData, onBack }) {
       <div className="qz-question-card">
         {q.type === 'fillblank' && (
           <>
-            <p className="qz-instruction">Điền từ vào câu:</p>
-            <p className="qz-prompt-ko" lang="ko">{q.prompt}</p>
-            {q.promptVi && <p className="cl-study-example-vi">{q.promptVi}</p>}
+            <p className="qz-instruction">Điền từ còn thiếu vào chỗ trống trong câu:</p>
+            <div className="qz-blank-sentence" lang="ko">
+              {q.prompt.split('( _____ )').map((part, pIdx, arr) => (
+                <React.Fragment key={pIdx}>
+                  {part}
+                  {pIdx < arr.length - 1 && <span className="qz-blank-spot">{picked || '( _____ )'}</span>}
+                </React.Fragment>
+              ))}
+            </div>
+            {q.promptVi && <p className="cl-study-example-vi" style={{ marginTop: 6 }}>Nghĩa câu: {q.promptVi}</p>}
+
+            <div className="qz-options">
+              {q.options.map((opt, oIdx) => {
+                const letter = ['A', 'B', 'C', 'D'][oIdx] || `${oIdx + 1}`;
+                const isCorrect = opt === q.correct;
+                const isPicked = opt === picked;
+                const cls = !picked ? '' : isCorrect ? 'correct' : isPicked ? 'wrong' : '';
+                return (
+                  <button
+                    key={opt}
+                    className={`qz-option ${cls}`}
+                    lang="ko"
+                    onClick={() => choose(opt)}
+                    disabled={!!picked}
+                  >
+                    <span className="qz-option-badge">{letter}</span>
+                    <span style={{ fontSize: 16, fontWeight: 700 }}>{opt}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {picked && (
+              <div className={`qz-feedback-box ${picked === q.correct ? 'correct' : 'wrong'}`}>
+                <span className="qz-feedback-tag">{picked === q.correct ? 'Chính xác!' : `Đáp án đúng: ${q.correct} (${q.targetVi || ''})`}</span>
+                {q.mnemonic && (
+                  <p className="qz-feedback-text">
+                    <Lightbulb size={13} style={{ verticalAlign: 'middle', marginRight: 4, color: '#F5A623' }} />
+                    Mẹo nhớ: {q.mnemonic}
+                  </p>
+                )}
+              </div>
+            )}
           </>
         )}
-        {q.type === 'matching' && (
-          <>
-            <p className="qz-instruction">Từ này nghĩa là gì?</p>
-            <p className="qz-prompt-ko" lang="ko">{q.prompt}</p>
-          </>
-        )}
+
         {q.type === 'usage' && (
           <>
-            <p className="qz-instruction">Câu nào dùng đúng từ này?</p>
-            <p className="qz-prompt-ko" lang="ko">{q.prompt}</p>
+            <p className="qz-instruction">
+              Chọn câu dùng từ <b>"{q.prompt}"</b> {q.promptVi ? `(${q.promptVi})` : ''} đúng ngữ pháp và ngữ cảnh:
+            </p>
+
+            <div className="qz-options">
+              {q.options.map((opt, oIdx) => {
+                const letter = ['A', 'B', 'C', 'D'][oIdx] || `${oIdx + 1}`;
+                const isCorrect = opt === q.correct;
+                const isPicked = opt === picked;
+                const cls = !picked ? '' : isCorrect ? 'correct' : isPicked ? 'wrong' : '';
+                return (
+                  <button
+                    key={opt}
+                    className={`qz-option ${cls}`}
+                    lang="ko"
+                    onClick={() => choose(opt)}
+                    disabled={!!picked}
+                  >
+                    <span className="qz-option-badge">{letter}</span>
+                    <span style={{ lineHeight: 1.5 }}>{renderKo(opt)}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {picked && (
+              <div className={`qz-feedback-box ${picked === q.correct ? 'correct' : 'wrong'}`}>
+                <span className="qz-feedback-tag">{picked === q.correct ? 'Chính xác!' : 'Chưa đúng, hãy xem câu chuẩn xác:'}</span>
+                {q.explanation && <p className="qz-feedback-text">{q.explanation}</p>}
+              </div>
+            )}
           </>
         )}
 
-        <div className="qz-options">
-          {q.options.map((opt) => {
-            const isCorrect = opt === q.correct;
-            const isPicked = opt === picked;
-            const cls = !picked ? '' : isCorrect ? 'correct' : isPicked ? 'wrong' : '';
-            return (
-              <button key={opt} className={`qz-option ${cls}`} lang={q.type === 'matching' ? undefined : 'ko'} onClick={() => choose(opt)} disabled={!!picked}>
-                {q.type === 'usage' ? renderKo(opt) : opt}
-              </button>
-            );
-          })}
-        </div>
+        {q.type === 'matching_cards' && (
+          <MatchingCardGame key={q.key} pairs={q.pairs} onComplete={handleCardComplete} />
+        )}
 
-        {picked && (
+        {(picked || (q.type === 'matching_cards' && cardStageDone)) && (
           <button className="fc-nav-btn primary qz-next-btn" onClick={next}>
             {idx + 1 >= questions.length ? 'Xem kết quả' : 'Câu tiếp theo'} <ChevronRight size={18} />
           </button>

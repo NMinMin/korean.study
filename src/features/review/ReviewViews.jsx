@@ -602,8 +602,8 @@ export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabul
       <div className="rv-tip"><Lightbulb size={14} color="#E8A93D" /> Từ vựng chọn theo trọng số 70% hay sai / 20% chưa gặp / 10% đã thuộc. Nghe hiểu, hội thoại và ngữ pháp lấy đủ theo đúng phạm vi mức sao để không bỏ sót.</div>
 
       <div className="rv-types-card">
-        <div className="rv-types-title"><Sparkles size={14} color="#7C6FE4" /> Ngân hàng câu hỏi</div>
-        <p className="rv-types-count" style={{ marginTop: 0 }}>Hiện có <b>{poolSize}</b> câu hỏi khả dụng, sinh trực tiếp từ nội dung thật của Bài 1.</p>
+        <div className="rv-types-title"><Sparkles size={14} color="#7C6FE4" /> Ngân hàng câu hỏi khả dụng</div>
+        <p className="rv-types-count" style={{ marginTop: 0 }}>Hiện có <b>{poolSize}</b> câu hỏi khả dụng, sinh trực tiếp từ nội dung học liệu của {mode === "bylesson" ? (selectedLessons?.length ? `${selectedLessons.length} bài đã chọn` : (lesson?.title_ko ? `Bài ${lesson.no || ''} · ${lesson.title_ko}` : "bài học")) : "các bài học đã chọn"}.</p>
       </div>
     </section>
   );
