@@ -11,7 +11,7 @@ const exerciseSkillTypes = ['vocabulary_grammar', 'dictation', 'shadowing', 'rev
 function isExerciseSkillType(value: unknown): value is SkillType {
   return typeof value === 'string' && exerciseSkillTypes.includes(value as SkillType)
 }
-const DASHBOARD_CACHE_VERSION = 5
+const DASHBOARD_CACHE_VERSION = 6
 const APP_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 
 function appDateKey(date = new Date()) {
@@ -47,7 +47,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const [{ data: stats, error: statsError }, { data: progress, error: progressError }, { data: vocabProgress, error: vocabError }, textbookResult, lessonCount, userCount, pendingReportCount] = await Promise.all([
       supabaseAdmin.from('daily_study_stats').select('user_id, study_date, minutes').gte('study_date', previousStartKey).lte('study_date', todayKey),
       supabaseAdmin.from('lesson_progress').select('user_id, textbook_id, progress_percent'),
-      supabaseAdmin.from('vocabulary_progress').select('vocabulary_id, textbook_id, incorrect_count, correct_count').gt('incorrect_count', 0),
+      supabaseAdmin.from('vocabulary_progress').select('vocabulary_id, textbook_id, incorrect_count, correct_count, exercise:lesson_exercises!vocabulary_progress_vocabulary_id_fkey(prompt_ko, prompt_vi)').gt('incorrect_count', 0),
       supabaseAdmin.from('textbooks').select('id, title_ko', { count: 'exact' }),
       supabaseAdmin.from('lessons').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }),
@@ -58,18 +58,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       request.log.error({ statsError, progressError, vocabError, countError }, 'Admin dashboard base query failed')
       return reply.code(500).send({ code: 'DASHBOARD_READ_FAILED', message: 'Không thể tải thống kê dashboard.', requestId: request.id })
     }
-    const vocabularyIds = [...new Set((vocabProgress ?? []).map((item) => item.vocabulary_id).filter(Boolean))]
-    let exerciseRows: { id: string; prompt_ko: string; prompt_vi: string | null }[] = []
-    if (vocabularyIds.length) {
-      const { data, error } = await supabaseAdmin.from('lesson_exercises').select('id, prompt_ko, prompt_vi').in('id', vocabularyIds)
-      if (error) {
-        request.log.error({ error }, 'Admin dashboard canonical vocabulary query failed')
-        return reply.code(500).send({ code: 'DASHBOARD_READ_FAILED', message: 'Không thể tải thống kê dashboard.', requestId: request.id })
-      }
-      exerciseRows = data ?? []
-    }
     const textbookTitles = new Map((textbookResult.data ?? []).map((item) => [item.id, item.title_ko]))
-    const exercisesById = new Map(exerciseRows.map((item) => [item.id, item]))
     const recent = (stats ?? []).filter((item) => item.study_date >= startKey)
     const previous = (stats ?? []).filter((item) => item.study_date < startKey)
     const activeUsers = new Set(recent.map((item) => item.user_id))
@@ -88,7 +77,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     }
     const hardMap = new Map<string, { word: string; meaning: string; course: string; incorrect: number; total: number }>()
     for (const item of vocabProgress ?? []) {
-      const vocab = exercisesById.get(item.vocabulary_id)
+      const vocab = item.exercise as unknown as { prompt_ko?: string; prompt_vi?: string } | null
       const current = hardMap.get(item.vocabulary_id) ?? { word: vocab?.prompt_ko || '—', meaning: vocab?.prompt_vi || '—', course: textbookTitles.get(item.textbook_id) || '—', incorrect: 0, total: 0 }
       current.incorrect += Number(item.incorrect_count || 0); current.total += Number(item.incorrect_count || 0) + Number(item.correct_count || 0); hardMap.set(item.vocabulary_id, current)
     }
