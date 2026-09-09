@@ -70,7 +70,7 @@ import LessonsView, { ActivityLessonSelectView } from './features/curriculum/Les
 import { GrammarHubView, GrammarBookView } from './features/curriculum/GrammarViews';
 import TopicsView from './features/curriculum/TopicsView';
 import AIQuizView from './features/practice/AIQuizView';
-import { CustomLessonStudyView, CustomLessonTestView } from './features/community/CustomLessons';
+import { CustomLessonHub, CustomLessonStudyView, CustomLessonTestView } from './features/community/CustomLessons';
 
 // Study & Review Views
 import {
@@ -101,9 +101,10 @@ import AuthView, { profileStorageKey } from './features/auth/AuthView';
 const ROOT_PAGE_META = {
   'curriculum-hub': ['Giáo trình', 'Quản lý giáo trình của tôi và tiếp tục lộ trình đang học.'],
   'nguphap-hub': ['Từ vựng & Ngữ pháp', 'Tra cứu từ vựng và ngữ pháp theo từng giáo trình.'],
+  'vocab-sets': ['Bộ từ vựng', 'Quản lý và luyện tập với các bộ từ vựng do bạn tự tạo.'],
   'mock-exam': ['Thi thử', 'Luyện tập trong giao diện tập trung.'],
   xephang: ['Xếp hạng', 'Theo dõi thành tích của bạn theo từng giáo trình.'],
-  congdong: ['Cộng đồng', 'Chia sẻ cùng người học và khám phá các bộ từ vựng.'],
+  congdong: ['Cộng đồng', 'Chia sẻ bài viết và trao đổi cùng những người học khác.'],
   caidat: ['Cài đặt', 'Điều chỉnh kế hoạch học tập và tài khoản.'],
 };
 
@@ -129,6 +130,9 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const [reviewSeed, setReviewSeed] = useState(null);
   const [reviewIsRecheck, setReviewIsRecheck] = useState(false);
   const [customLessonData, setCustomLessonData] = useState(null);
+  const [customLessonBackView, setCustomLessonBackView] = useState('vocab-sets');
+  const [communityInitialTab, setCommunityInitialTab] = useState('feed');
+  const [showStarredVocabulary, setShowStarredVocabulary] = useState(false);
   const [reviewDeck, setReviewDeck] = useState(null);
   const [reviewExamOptions, setReviewExamOptions] = useState({ durationMinutes: 15 });
   const [vocabularyReviewDate, setVocabularyReviewDate] = useState(null);
@@ -625,10 +629,19 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                       ? openLesson(continueLesson, 'home')
                       : (setCatalogNotice(null), setView('curriculum-hub'), setActive('giaotrinh'))}
                   />
-                  <WordOfDayWidget vocabulary={catalogVocabulary} onOpen={() => { setView('nguphap-hub'); setActive('nguphap'); }} />
+                  <WordOfDayWidget vocabulary={catalogVocabulary} onOpen={() => { setShowStarredVocabulary(false); setView('nguphap-hub'); setActive('nguphap'); }} />
                   <RecentActivityCard profile={profile} lesson={primaryLesson} vocabulary={catalogVocabulary} />
                   <DailyGoalRing userId={profile.id} onChangeGoal={() => { setActive('caidat'); setView('caidat'); }} />
-                  <QuickAccessMenu onDictation={goDictation} onShadowing={goShadowing} onReview={goReview} />
+                  <QuickAccessMenu
+                    onDictation={goDictation}
+                    onShadowing={goShadowing}
+                    onReview={goReview}
+                    onNotebook={() => {
+                      setShowStarredVocabulary(true);
+                      setView('nguphap-hub');
+                      setActive('nguphap');
+                    }}
+                  />
                   <RankPreviewCard profile={profile} onOpen={openLeaderboard} />
                 </div>
                 <PersonalProgressSection profile={profile} lesson={primaryLesson} vocabulary={catalogVocabulary} />
@@ -657,7 +670,8 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 profile={profile}
                 onBack={goHome}
                 hideHeader
-                onStudyCustomLesson={(l) => { setCustomLessonData(l); setView('study-custom-lesson'); }}
+                initialTab={communityInitialTab}
+                onStudyCustomLesson={(item) => { setCustomLessonData(item); setCustomLessonBackView('congdong'); setCommunityInitialTab('discover'); setView('study-custom-lesson'); }}
               />
             )}
             {view === 'tuvung-chude' && <TopicsView onBack={goHome} />}
@@ -667,9 +681,21 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 vocabulary={catalogVocabulary}
                 grammar={catalogGrammar}
                 userId={profile.id}
+                initialStarredOnly={showStarredVocabulary}
+                onStarredOnlyChange={setShowStarredVocabulary}
                 onBack={goHome}
+                onOpenVocabularySets={() => setView('vocab-sets')}
                 onAddBook={() => { setCatalogNotice(null); setView('curriculum-hub'); setActive('giaotrinh'); }}
               />
+            )}
+            {view === 'vocab-sets' && (
+              <section className="cg-page wide-page">
+                <CustomLessonHub
+                  profile={profile}
+                  onBack={() => setView('nguphap-hub')}
+                  onStudy={(item) => { setCustomLessonData(item); setCustomLessonBackView('vocab-sets'); setView('study-custom-lesson'); }}
+                />
+              </section>
             )}
             {view === 'cuahang' && (
               <PlantShopView
@@ -739,7 +765,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             {view === 'study-custom-lesson' && customLessonData && (
               <CustomLessonStudyView
                 lessonData={customLessonData}
-                onBack={() => { setView('congdong'); setActive('congdong'); }}
+                onBack={() => { setView(customLessonBackView); setActive(customLessonBackView === 'congdong' ? 'congdong' : 'nguphap'); }}
                 onStartQuiz={(l) => { setCustomLessonData(l); setView('test-custom-lesson'); }}
               />
             )}
@@ -888,19 +914,19 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 }}
               />
             )}
-            {view === 'vocab-notebook' && lesson && (
+            {view === 'vocab-notebook' && (
               <VocabNotebookView
-                lesson={lesson}
+                lesson={lesson || primaryLesson}
                 userId={profile.id}
                 vocabulary={catalogVocabulary}
-                onBack={goHome}
+                onBack={() => setView(vocabBackView || 'nguphap-hub')}
                 onReview={(words) => { setReviewDeck(words); setView('flashcards-notebook'); }}
               />
             )}
-            {view === 'flashcards-notebook' && lesson && reviewDeck && (
+            {view === 'flashcards-notebook' && reviewDeck && (
               <FlashcardView
-                key={`flashcards-notebook-${lesson.id}-${reviewDeck.map((word) => word.id || word.word).join('|')}`}
-                lesson={lesson}
+                key={`flashcards-notebook-${(lesson || primaryLesson)?.id || 'global'}-${reviewDeck.map((word) => word.id || word.word).join('|')}`}
+                lesson={lesson || primaryLesson}
                 userId={profile.id}
                 vocabulary={catalogVocabulary}
                 deckWords={reviewDeck}

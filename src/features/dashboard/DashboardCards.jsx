@@ -133,10 +133,11 @@ export function DailyGoalRing({ userId, onChangeGoal }) {
   );
 }
 
-export function QuickAccessMenu({ onDictation, onShadowing, onReview }) {
+export function QuickAccessMenu({ onDictation, onShadowing, onReview, onNotebook }) {
   const items = [
+    { label: 'Sổ tay từ vựng', icon: BookMarked, color: '#7C6FE4', bg: '#F0EEFC', onClick: onNotebook },
     { label: 'Nghe chép chính tả', icon: Headphones, color: '#3FA95C', bg: '#EBF7EE', onClick: onDictation },
-    { label: 'Shadowing', icon: Mic, color: '#7C6FE4', bg: '#F0EEFC', onClick: onShadowing },
+    { label: 'Shadowing', icon: Mic, color: '#E8912E', bg: '#FDF3E7', onClick: onShadowing },
     { label: 'Thi thử', icon: Target, color: '#F0912E', bg: '#FDF3E7', onClick: onReview },
   ];
   return (

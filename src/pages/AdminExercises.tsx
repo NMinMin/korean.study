@@ -480,6 +480,8 @@ export default function AdminExercises() {
   const [skill, setSkill] = useState('all')
   const [search, setSearch] = useState('')
   const [view, setView] = useState<'table' | 'grid'>('table')
+  const [page, setPage] = useState(1)
+  const pageSize = 20
   const [editing, setEditing] = useState<Exercise | null | undefined>(undefined)
   const [draft, setDraft] = useState<Draft>(emptyDraft)
   const [error, setError] = useState('')
@@ -610,14 +612,17 @@ export default function AdminExercises() {
     )
     && `${item.prompt_ko} ${item.prompt_vi || ''} ${item.lessons?.title_ko || ''}`.toLowerCase().includes(search.trim().toLowerCase()),
   )
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const pagedFiltered = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
   const gridGroups = filterSkills
     .map((group) => ({
       ...group,
-      items: filtered.filter((item) => getExerciseSkillMeta(item).value === group.value),
+      items: pagedFiltered.filter((item) => getExerciseSkillMeta(item).value === group.value),
     }))
     .filter((group) => group.items.length > 0)
   const moveLessons = lessons.filter((item) => item.textbook_id === moveBookId)
-  const allFilteredSelected = filtered.length > 0 && filtered.every((item) => selectedIds.has(item.id))
+  const allFilteredSelected = pagedFiltered.length > 0 && pagedFiltered.every((item) => selectedIds.has(item.id))
 
   const toggleSelected = (id: string) => {
     setSelectedIds((current) => {
@@ -631,8 +636,8 @@ export default function AdminExercises() {
   const toggleAllFiltered = () => {
     setSelectedIds((current) => {
       const next = new Set(current)
-      if (allFilteredSelected) filtered.forEach((item) => next.delete(item.id))
-      else filtered.forEach((item) => next.add(item.id))
+    if (allFilteredSelected) pagedFiltered.forEach((item) => next.delete(item.id))
+    else pagedFiltered.forEach((item) => next.add(item.id))
       return next
     })
   }
@@ -1010,7 +1015,7 @@ export default function AdminExercises() {
       </div>
     </div>}
     <div className={`admin-exercise-results view-${view}`}>
-      <div className="admin-exercise-table-wrap"><table className="admin-exercise-table"><thead><tr><th className="admin-exercise-select-cell"><input type="checkbox" checked={allFilteredSelected} onChange={toggleAllFiltered} aria-label="Chọn tất cả bài tập đang hiển thị" /></th><th>Nội dung</th><th>Giáo trình · Bài học</th><th>Kỹ năng</th><th>Dữ liệu lưu</th><th>Tệp đính kèm</th><th>Thao tác</th></tr></thead><tbody>{(skill === 'all' ? gridGroups : [{ value: skill, label: '', icon: BookOpen, items: filtered }]).map((group) => {
+      <div className="admin-exercise-table-wrap"><table className="admin-exercise-table"><thead><tr><th className="admin-exercise-select-cell"><input type="checkbox" checked={allFilteredSelected} onChange={toggleAllFiltered} aria-label="Chọn tất cả bài tập đang hiển thị" /></th><th>Nội dung</th><th>Giáo trình · Bài học</th><th>Kỹ năng</th><th>Dữ liệu lưu</th><th>Tệp đính kèm</th><th>Thao tác</th></tr></thead><tbody>{(skill === 'all' ? gridGroups : [{ value: skill, label: '', icon: BookOpen, items: pagedFiltered }]).map((group) => {
         const GroupIcon = group.icon
         return <Fragment key={group.value}>
           {skill === 'all' && <tr className="admin-exercise-table-group"><td colSpan={7}><span><label className="admin-exercise-group-check"><input type="checkbox" checked={group.items.every((item) => selectedIds.has(item.id))} onChange={() => toggleExerciseGroup(group.items)} aria-label={`Chọn tất cả bài tập ${group.label}`} /></label><button type="button" className="admin-exercise-group-toggle" onClick={() => toggleCollapsedExerciseGroup(group.value)} aria-expanded={!collapsedExerciseGroups.has(group.value)}><GroupIcon size={17} />{group.label}<ChevronDown className={collapsedExerciseGroups.has(group.value) ? 'is-collapsed' : ''} size={16} /></button></span><em>{group.items.length} bài tập</em></td></tr>}
@@ -1021,7 +1026,7 @@ export default function AdminExercises() {
           })}
         </Fragment>
       })}</tbody></table></div>
-      <div className={`admin-exercise-grid${skill === 'all' ? ' is-grouped' : ''}`}>{(skill === 'all' ? gridGroups : [{ value: skill, label: '', icon: BookOpen, items: filtered }]).map((group) => {
+      <div className={`admin-exercise-grid${skill === 'all' ? ' is-grouped' : ''}`}>{(skill === 'all' ? gridGroups : [{ value: skill, label: '', icon: BookOpen, items: pagedFiltered }]).map((group) => {
         const GroupIcon = group.icon
         return <section className="admin-exercise-group" key={group.value}>
           {skill === 'all' && <header className="admin-exercise-group-title"><span><label className="admin-exercise-group-check"><input type="checkbox" checked={group.items.every((item) => selectedIds.has(item.id))} onChange={() => toggleExerciseGroup(group.items)} aria-label={`Chọn tất cả bài tập ${group.label}`} /></label><button type="button" className="admin-exercise-group-toggle" onClick={() => toggleCollapsedExerciseGroup(group.value)} aria-expanded={!collapsedExerciseGroups.has(group.value)}><GroupIcon size={18} />{group.label}<ChevronDown className={collapsedExerciseGroups.has(group.value) ? 'is-collapsed' : ''} size={17} /></button></span><em>{group.items.length} bài tập</em></header>}
@@ -1033,6 +1038,11 @@ export default function AdminExercises() {
         </section>
       })}</div>
     </div>
+    {totalPages > 1 && <nav className="admin-pagination" aria-label="Phân trang bài tập">
+      <button type="button" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Trang trước</button>
+      <span>Trang <b>{currentPage}</b> / {totalPages} · {filtered.length} bài tập</span>
+      <button type="button" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)}>Trang sau</button>
+    </nav>}
     {!filtered.length && <div className="admin-empty">Chưa có bài tập phù hợp với bộ lọc.</div>}
     {moveDialogOpen && <div className="admin-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !moving) setMoveDialogOpen(false) }}>
       <section className="admin-modal admin-bulk-move-dialog" role="dialog" aria-modal="true" aria-labelledby="bulk-move-title">

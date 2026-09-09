@@ -3,7 +3,7 @@ import {
   ChevronLeft, ChevronRight, Volume2, Star, BookOpen, Headphones, Mic, Sparkles,
   BookMarked, Lightbulb, CheckCircle2, RotateCcw, Plus, XCircle, ArrowLeft, ArrowRight,
   Play, RotateCw, Check, Link2, Image as ImageIcon, NotebookPen,
-  AlertTriangle, Bot, Flame, MessageCircle, MessageSquare, PencilLine, Settings, Target, Type, Lock
+  AlertTriangle, Bot, Flame, MessageCircle, MessageSquare, PencilLine, Settings, Target, Type, Lock, Search
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { speakKo, playVocabularyAudio, playIncorrectSound, playCelebrationSound } from '../../services/audioService';
@@ -650,70 +650,209 @@ export function VocabListView({ lesson, userId, onBack, onStudy, onReviewStart, 
 /* ------------------------------------------------------------------ */
 export function VocabNotebookView({ lesson, userId, onBack, onReview, vocabulary = VOCAB_SAMPLE }) {
   const [progress, setProgress] = useState({});
+  const [remoteStarred, setRemoteStarred] = useState([]);
   const [loaded, setLoaded] = useState(false);
-  const storageKey = vocabProgressKey(lesson, userId);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const load = async () => {
     let local = {};
-    try { const res = await readScopedProgress(storageKey, legacyVocabProgressKey(lesson), userId); if (res?.value) local = JSON.parse(res.value); } catch (e) { }
-    const remote = await loadRemoteVocabularyState(lesson, userId);
-    const merged = remote ? mergeVocabStates(local, remote) : local;
-    setProgress(merged);
-    if (remote) {
-      await saveScopedProgress(storageKey, JSON.stringify(merged));
-      const delta = vocabularyStateDelta(local, remote, merged);
-      if (Object.keys(delta).length) void saveRemoteVocabularyState(lesson, userId, delta);
+    const primaryKey = lesson ? vocabProgressKey(lesson, userId) : vocabNotebookKey(userId);
+    const legacyKey = lesson ? legacyVocabProgressKey(lesson) : legacyVocabNotebookKey;
+    try {
+      const res = await readScopedProgress(primaryKey, legacyKey, userId);
+      if (res?.value) local = JSON.parse(res.value);
+    } catch (e) { }
+
+    if (lesson) {
+      try {
+        const nbRes = await readScopedProgress(vocabNotebookKey(userId), legacyVocabNotebookKey, userId);
+        if (nbRes?.value) local = { ...JSON.parse(nbRes.value), ...local };
+      } catch (e) { }
     }
+
+    let remoteList = [];
+    if (supabase && userId) {
+      try {
+        const { data: bms, error } = await supabase
+          .from('vocabulary_bookmarks')
+          .select(`
+            vocabulary_id,
+            vocabulary:vocabulary_id (
+              id,
+              word_ko,
+              meaning_vi,
+              pronunciation,
+              part_of_speech,
+              example_sentence_ko,
+              example_sentence_vi,
+              audio_url,
+              lesson_id,
+              textbook_id
+            )
+          `)
+          .eq('user_id', userId);
+
+        if (!error && Array.isArray(bms)) {
+          remoteList = bms.map((b) => {
+            const v = b.vocabulary;
+            if (!v) return null;
+            return {
+              id: v.id,
+              word: v.word_ko,
+              meaningVi: v.meaning_vi,
+              pronunciation: v.pronunciation,
+              partOfSpeech: v.part_of_speech,
+              exampleKo: v.example_sentence_ko,
+              exampleVi: v.example_sentence_vi,
+              audioUrl: v.audio_url,
+              lessonId: v.lesson_id,
+              textbookId: v.textbook_id,
+            };
+          }).filter(Boolean);
+        }
+      } catch (e) {
+        console.error('Lỗi khi tải từ vựng trong sổ tay:', e);
+      }
+    }
+
+    let merged = local;
+    if (lesson) {
+      try {
+        const remote = await loadRemoteVocabularyState(lesson, userId);
+        if (remote) merged = mergeVocabStates(local, remote);
+      } catch (e) { }
+    }
+
+    setRemoteStarred(remoteList);
+    setProgress(merged);
     setLoaded(true);
   };
-  useEffect(() => { void load(); }, [storageKey, lesson.no, userId]);
 
-  const starredWords = vocabulary.filter((w) => progress[w.word]?.starred);
+  useEffect(() => {
+    void load();
+  }, [lesson?.id, lesson?.no, userId]);
 
-  const toggleStar = (word) => {
-    const cur = progress[word];
-    const updated = { ...progress, [word]: { ...cur, starred: !cur?.starred } };
+  const starredWords = useMemo(() => {
+    const map = new Map();
+    // 1. From remote bookmarks fetched from Supabase
+    remoteStarred.forEach((w) => {
+      if (w?.word) map.set(w.word, w);
+    });
+    // 2. From vocabulary catalog passed in
+    vocabulary.forEach((w) => {
+      if (w?.word && (progress[w.word]?.starred || map.has(w.word))) {
+        map.set(w.word, { ...w, ...map.get(w.word) });
+      }
+    });
+
+    let list = Array.from(map.values());
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter((w) =>
+        (w.word && w.word.toLowerCase().includes(q)) ||
+        (w.meaningVi && w.meaningVi.toLowerCase().includes(q)) ||
+        (w.pronunciation && w.pronunciation.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [remoteStarred, vocabulary, progress, searchQuery]);
+
+  const toggleStar = async (item) => {
+    const wordStr = typeof item === 'string' ? item : item.word;
+    const wordItem = typeof item === 'object' ? item : starredWords.find((w) => w.word === wordStr);
+
+    setRemoteStarred((prev) => prev.filter((w) => w.word !== wordStr));
+
+    const updated = { ...progress, [wordStr]: { ...progress[wordStr], starred: false } };
     setProgress(updated);
-    void saveScopedProgress(storageKey, JSON.stringify(updated));
-    void saveRemoteVocabularyState(lesson, userId, updated);
+
+    const primaryKey = lesson ? vocabProgressKey(lesson, userId) : vocabNotebookKey(userId);
+    void saveScopedProgress(primaryKey, JSON.stringify(updated));
+    void saveScopedProgress(vocabNotebookKey(userId), JSON.stringify(updated));
+
+    if (supabase && userId && wordItem?.id) {
+      try {
+        await supabase.from('vocabulary_bookmarks').delete().eq('user_id', userId).eq('vocabulary_id', wordItem.id);
+      } catch (e) { }
+    }
+
+    if (wordItem?.id && wordItem?.lessonId && wordItem?.textbookId) {
+      void saveRemoteVocabularyStateForWords(
+        [{ id: wordItem.id, word: wordStr, lessonId: wordItem.lessonId, textbookId: wordItem.textbookId }],
+        userId,
+        { [wordStr]: { starred: false } },
+      );
+    } else if (lesson) {
+      void saveRemoteVocabularyState(lesson, userId, updated);
+    }
   };
 
   return (
     <section className="cg-page wide-page">
       <div className="fc2-topbar">
         <div className="fc2-top-left">
-          <button className="fc2-back" onClick={onBack} aria-label="Về trang chủ"><ChevronLeft size={20} /></button>
-          <span className="fc2-title"><Star size={18} color="#F0C24E" fill="#F0C24E" /> Sổ tay từ vựng cá nhân</span>
+          <button className="fc2-back" onClick={onBack} aria-label="Quay lại"><ChevronLeft size={20} /></button>
+          <span className="fc2-title"><BookMarked size={18} color="#F0C24E" /> Sổ tay từ vựng cá nhân</span>
         </div>
       </div>
       <p className="cg-sub" style={{ marginTop: 0 }}>
-        Những từ bạn đã đánh dấu ★ khi học Flashcard hoặc trong Danh sách từ vựng — ôn lại riêng những từ khó này bất cứ lúc nào.
+        Tổng hợp tất cả từ vựng bạn đã đánh dấu ★ khi học từ vựng, flashcard hay tra cứu — ôn luyện bất cứ lúc nào.
       </p>
+
       {!loaded ? (
-        <div className="cg-empty">Đang tải...</div>
-      ) : starredWords.length === 0 ? (
-        <div className="cg-empty">Chưa có từ nào được đánh dấu. Bấm biểu tượng ★ khi học để lưu từ khó vào đây.</div>
+        <div className="cg-empty">Đang tải sổ tay...</div>
+      ) : starredWords.length === 0 && !searchQuery ? (
+        <div className="cg-empty">
+          <SwBunnyEmpty />
+          <p style={{ marginTop: 12, fontWeight: 600, color: '#4B3F72' }}>Chưa có từ nào trong sổ tay</p>
+          <span style={{ fontSize: 13, color: '#8A81A8' }}>Bấm vào biểu tượng ngôi sao ★ khi học từ vựng hoặc lật Flashcard để lưu từ vào sổ tay ôn tập.</span>
+        </div>
       ) : (
         <>
-          <button className="primary-btn" style={{ alignSelf: "flex-start" }} onClick={() => onReview(starredWords)}>
-            <Play size={16} fill="#fff" /> Ôn tập {starredWords.length} từ khó
-          </button>
-          <div className="vl-list">
-            {starredWords.map((w) => (
-              <div key={w.word} className="vl-row">
-                <div className="vl-main">
-                  <span className="vl-ko" lang="ko">{w.word}</span>
-                  <span className="vl-vi">{w.meaningVi}</span>
-                </div>
-                <button className="vl-audio" onClick={() => playVocabularyAudio(w)} aria-label={`Nghe phát âm ${w.word}`}>
-                  <Volume2 size={15} color="#7C6FE4" />
-                </button>
-                <button className="vl-star on" onClick={() => toggleStar(w.word)} aria-label="Bỏ đánh dấu từ khó">
-                  <Star size={16} fill="#F0C24E" color="#F0C24E" />
-                </button>
-              </div>
-            ))}
+          <div className="vocab-notebook-controls" style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+            <button className="primary-btn" onClick={() => onReview(starredWords)} disabled={starredWords.length === 0}>
+              <Play size={16} fill="#fff" /> Ôn tập {starredWords.length} từ khó
+            </button>
+            <div style={{ position: 'relative', flex: 1, minWidth: 200, maxWidth: 360 }}>
+              <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#8A81A8' }} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Tìm trong sổ tay..."
+                style={{
+                  width: '100%',
+                  padding: '9px 12px 9px 36px',
+                  borderRadius: 10,
+                  border: '1.5px solid #E8E5F3',
+                  fontSize: 14,
+                  outline: 'none',
+                  background: '#FAF9FE'
+                }}
+              />
+            </div>
           </div>
+          {starredWords.length === 0 ? (
+            <div className="cg-empty">Không tìm thấy từ phù hợp với từ khóa &ldquo;{searchQuery}&rdquo;.</div>
+          ) : (
+            <div className="vl-list">
+              {starredWords.map((w) => (
+                <div key={w.id || w.word} className="vl-row">
+                  <div className="vl-main">
+                    <span className="vl-ko" lang="ko">{w.word}</span>
+                    <span className="vl-vi">{w.meaningVi}</span>
+                    {w.pronunciation && <span style={{ fontSize: 12, color: '#8A81A8', marginLeft: 8 }}>[{w.pronunciation}]</span>}
+                  </div>
+                  <button className="vl-audio" onClick={() => playVocabularyAudio(w)} aria-label={`Nghe phát âm ${w.word}`}>
+                    <Volume2 size={15} color="#7C6FE4" />
+                  </button>
+                  <button className="vl-star on" onClick={() => toggleStar(w)} aria-label="Bỏ đánh dấu từ khó" title="Bỏ khỏi sổ tay">
+                    <Star size={16} fill="#F0C24E" color="#F0C24E" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </>
       )}
     </section>

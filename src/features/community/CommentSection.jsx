@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ThumbsUp, Send, Lock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { timeAgo } from '../../utils/timeAgo';
+import { useAppDialog } from '../../components/common/AppDialog';
 
 export function CommentItem({ comment, replies = [], currentUserId, onReply, onDelete, onLike, likedComments = {} }) {
   const isAuthor = comment.userId === currentUserId;
@@ -86,6 +87,7 @@ export function CommentItem({ comment, replies = [], currentUserId, onReply, onD
 }
 
 export default function CommentSection({ post, currentUserId, currentUserDisplayName, commentsLocked }) {
+  const dialog = useAppDialog();
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
@@ -157,11 +159,27 @@ export default function CommentSection({ post, currentUserId, currentUserDisplay
 
   const handleDeleteComment = async (comment) => {
     if (!supabase || !currentUserId || comment.userId !== currentUserId) return;
+    const confirmed = await dialog.confirm({
+      title: comment.parentId ? 'Xóa phản hồi?' : 'Xóa bình luận?',
+      message: comment.parentId
+        ? 'Phản hồi này sẽ bị xóa vĩnh viễn và không thể hoàn tác.'
+        : 'Bình luận cùng các phản hồi bên dưới sẽ bị xóa vĩnh viễn và không thể hoàn tác.',
+      variant: 'warning',
+      confirmLabel: comment.parentId ? 'Xóa phản hồi' : 'Xóa bình luận',
+      cancelLabel: 'Giữ lại',
+    });
+    if (!confirmed) return;
     try {
       const { error } = await supabase.from('comments').delete().eq('id', comment.id);
       if (error) throw error;
       setComments((list) => list.filter((c) => c.id !== comment.id && c.parentId !== comment.id));
-    } catch (e) { }
+    } catch (e) {
+      await dialog.alert({
+        title: 'Chưa thể xóa bình luận',
+        message: 'Không thể xóa nội dung này lúc này. Vui lòng thử lại sau.',
+        variant: 'error',
+      });
+    }
   };
 
   const handleToggleLikeComment = async (comment) => {

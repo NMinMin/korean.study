@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { adminApi } from '../lib/adminApi'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { BookOpen, BookText, Users, LayoutDashboard, LogOut, X, ShieldCheck, GraduationCap, Plus, Search, Eye, EyeOff, Lock, Unlock, Flag, MessageSquare, Pencil, Trash2, ChevronDown, ChevronUp, Save, Check, Clock3, Star, Download, TrendingUp, ClipboardList, CalendarDays, RotateCcw, Bell } from 'lucide-react'
+import { BookOpen, BookText, Users, LayoutDashboard, LogOut, X, ShieldCheck, GraduationCap, Plus, Search, Eye, EyeOff, Lock, Unlock, Flag, MessageSquare, Pencil, Trash2, ChevronDown, ChevronUp, Save, Check, Clock3, Star, Download, TrendingUp, ClipboardList, CalendarDays, RotateCcw, Bell, Copy, Zap, CheckCircle2, Mail, Calendar, Shield } from 'lucide-react'
 import { playEffect } from '../services/audioService'
 import notificationSoundUrl from '../../Sound Effect/Notification.mp3'
 import AdminExercises from './AdminExercises'
@@ -12,7 +12,7 @@ import './admin.css'
 type Status = 'draft' | 'published' | 'locked' | 'no_content'
 type Textbook = { id: string; slug: string; title_ko: string; title_vi: string | null; description?: string | null; sort_order?: number; status: Status }
 type Lesson = { id: string; textbook_id: string; lesson_number: number; title_ko: string; title_vi: string | null; status: Status; textbooks?: { title_ko?: string } }
-type AdminUser = { id: string; email?: string; display_name?: string; role: 'user' | 'admin'; level?: number; xp?: number; emailConfirmedAt?: string; lastSignInAt?: string; is_locked?: boolean; locked_at?: string }
+type AdminUser = { id: string; email?: string; display_name?: string; avatar_url?: string; role: 'user' | 'admin'; level?: number; xp?: number; created_at?: string; emailConfirmedAt?: string; lastSignInAt?: string; is_locked?: boolean; locked_at?: string }
 type DashboardData = { days: number; activeUsers: number; averageCompletedLessons: number; averageMinutes: number; retentionRate: number; pendingReports: number; totalTextbooks: number; totalLessons: number; totalUsers: number; chart: { date: string; minutes: number }[]; courses: { title: string; percent: number }[]; hardVocabulary: { word: string; meaning: string; course: string; errorRate: number }[] }
 type CommunityReport = { id: string; post_id: string | null; custom_lesson_id?: string | null; reason: string; status: 'pending' | 'resolved' | 'dismissed'; created_at: string; profiles?: { display_name?: string } }
 type CommunityPost = { id: string; user_id: string; content: string; status: 'visible' | 'hidden'; comments_locked: boolean; moderation_reason?: string | null; created_at: string; profiles?: { display_name?: string; avatar_url?: string }; reports: CommunityReport[] }
@@ -53,6 +53,16 @@ export function AdminSelect({ value, options, onChange, label, searchable = fals
   </div>
 }
 
+function AdminPagination({ page, totalItems, pageSize, onChange }: { page: number; totalItems: number; pageSize: number; onChange: (page: number) => void }) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize))
+  if (totalPages <= 1) return null
+  return <nav className="admin-pagination" aria-label="Phân trang">
+    <button type="button" disabled={page <= 1} onClick={() => onChange(page - 1)}>Trang trước</button>
+    <span>Trang <b>{page}</b> / {totalPages} · {totalItems} mục</span>
+    <button type="button" disabled={page >= totalPages} onClick={() => onChange(page + 1)}>Trang sau</button>
+  </nav>
+}
+
 export default function AdminPage() {
   const dialog = useAppDialog()
   const { profile, signOut } = useAuth()
@@ -78,10 +88,20 @@ export default function AdminPage() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [community, setCommunity] = useState<CommunityData>({ posts: [], reports: [], customLessons: [] })
   const [communityStatus, setCommunityStatus] = useState('all')
-  const [communityView, setCommunityView] = useState<'queue' | 'posts' | 'vocabulary'>('queue')
+  const [communityView, setCommunityView] = useState<'queue' | 'posts' | 'vocabulary' | 'hidden'>('queue')
   const [communityDay, setCommunityDay] = useState('all')
   const [communityMonth, setCommunityMonth] = useState('all')
   const [communityYear, setCommunityYear] = useState('all')
+  const [pages, setPages] = useState({ textbooks: 1, lessons: 1, communityPosts: 1, communityVocabulary: 1, users: 1 })
+  const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'user' | 'admin'>('all')
+  const [userStatusFilter, setUserStatusFilter] = useState<'all' | 'active' | 'locked'>('all')
+  const [userSort, setUserSort] = useState<'newest' | 'last_sign_in' | 'xp' | 'name'>('newest')
+  const [selectedUserDetail, setSelectedUserDetail] = useState<AdminUser | null>(null)
+  const [copiedId, setCopiedId] = useState(false)
+  const [previewVocabularySet, setPreviewVocabularySet] = useState<CommunityVocabularySet | null>(null)
+  const [copiedCode, setCopiedCode] = useState<string | null>(null)
+  const pageSize = 10
+  const changePage = (key: keyof typeof pages, page: number) => setPages((current) => ({ ...current, [key]: Math.max(1, page) }))
 
   const refreshDashboard = useCallback(async () => {
     const data = await adminApi<DashboardData>(`/dashboard?days=${range}&refresh=true`)
@@ -150,6 +170,7 @@ export default function AdminPage() {
     try {
       await adminApi(`/users/${id}/role`, { method: 'PATCH', body: JSON.stringify({ role }) })
       setUsers((items) => items.map((item) => item.id === id ? { ...item, role } : item))
+      setSelectedUserDetail((cur) => cur && cur.id === id ? { ...cur, role } : cur)
       await refreshDashboard()
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể cập nhật vai trò.') }
     finally { setActionBusy('') }
@@ -170,6 +191,7 @@ export default function AdminPage() {
     try {
       await adminApi(`/users/${user.id}/lock`, { method: 'PATCH', body: JSON.stringify({ locked }) })
       setUsers((items) => items.map((item) => item.id === user.id ? { ...item, is_locked: locked, locked_at: locked ? new Date().toISOString() : undefined } : item))
+      setSelectedUserDetail((cur) => cur && cur.id === user.id ? { ...cur, is_locked: locked, locked_at: locked ? new Date().toISOString() : undefined } : cur)
       await refreshDashboard()
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể cập nhật trạng thái tài khoản.') }
     finally { setActionBusy('') }
@@ -262,6 +284,88 @@ export default function AdminPage() {
     finally { setActionBusy('') }
   }
 
+  const deleteCommunityVocabulary = async (lesson: CommunityVocabularySet) => {
+    const accepted = await dialog.confirm({
+      title: 'Xóa bộ từ vựng?',
+      message: `Bộ từ vựng “${lesson.title}” và các báo cáo liên quan sẽ bị xóa vĩnh viễn khỏi hệ thống.`,
+      variant: 'error',
+      confirmLabel: 'Xóa bộ từ',
+    })
+    if (!accepted) return
+    setActionBusy('Đang xóa bộ từ vựng…')
+    try {
+      await adminApi(`/community/custom-lessons/${lesson.id}`, { method: 'DELETE' })
+      setCommunity((current) => ({
+        ...current,
+        customLessons: current.customLessons.filter((item) => item.id !== lesson.id),
+        reports: current.reports.filter((report) => report.custom_lesson_id !== lesson.id),
+      }))
+      if (previewVocabularySet?.id === lesson.id) setPreviewVocabularySet(null)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể xóa bộ từ vựng.') }
+    finally { setActionBusy('') }
+  }
+
+  const handleCopyUserId = (id: string) => {
+    navigator.clipboard.writeText(id).then(() => {
+      setCopiedId(true)
+      setTimeout(() => setCopiedId(false), 2000)
+    }).catch(() => undefined)
+  }
+
+  const handleCopyCode = (code: string) => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopiedCode(code)
+      setTimeout(() => setCopiedCode(null), 2000)
+    }).catch(() => undefined)
+  }
+
+  const formatAdminDateTime = (dateStr?: string) => {
+    if (!dateStr) return 'Chưa có'
+    const date = new Date(dateStr)
+    if (Number.isNaN(date.getTime())) return '—'
+    return date.toLocaleString('vi-VN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    })
+  }
+
+  const formatRelativeTime = (dateStr?: string) => {
+    if (!dateStr) return 'Chưa có'
+    const date = new Date(dateStr)
+    if (Number.isNaN(date.getTime())) return '—'
+    const diffMs = Date.now() - date.getTime()
+    const diffMin = Math.floor(diffMs / 60000)
+    const diffHour = Math.floor(diffMin / 60)
+    const diffDay = Math.floor(diffHour / 24)
+
+    if (diffMin < 1) return 'Vừa xong'
+    if (diffMin < 60) return `${diffMin} phút trước`
+    if (diffHour < 24) return `${diffHour} giờ trước`
+    if (diffDay === 1) return 'Hôm qua'
+    if (diffDay < 7) return `${diffDay} ngày trước`
+    return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
+
+  const AVATAR_GRADIENTS = [
+    'linear-gradient(135deg, #6366f1, #8b5cf6)',
+    'linear-gradient(135deg, #3b82f6, #06b6d4)',
+    'linear-gradient(135deg, #10b981, #059669)',
+    'linear-gradient(135deg, #f59e0b, #d97706)',
+    'linear-gradient(135deg, #ec4899, #8b5cf6)',
+    'linear-gradient(135deg, #8b5cf6, #d946ef)',
+  ]
+
+  const getAvatarBackground = (nameOrId: string) => {
+    let hash = 0
+    for (let i = 0; i < nameOrId.length; i++) {
+      hash = nameOrId.charCodeAt(i) + ((hash << 5) - hash)
+    }
+    return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length]
+  }
+
   const query = search.trim().toLocaleLowerCase('vi')
   const filteredTextbooks = textbooks.filter((item) =>
     (textbookStatusFilter === 'all' || item.status === textbookStatusFilter)
@@ -270,8 +374,33 @@ export default function AdminPage() {
     (lessonStatusFilter === 'all' || item.status === lessonStatusFilter)
     && (lessonTextbookFilter === 'all' || item.textbook_id === lessonTextbookFilter)
     && [item.title_ko, item.title_vi, item.textbooks?.title_ko, String(item.lesson_number)].some((value) => value?.toLocaleLowerCase('vi').includes(query)))
-  const filteredUsers = users.filter((user) =>
-    [user.display_name, user.email, user.id].some((value) => value?.toLocaleLowerCase('vi').includes(query)))
+  const filteredUsers = users.filter((user) => {
+    const matchesQuery = !query || [user.display_name, user.email, user.id].some((value) => value?.toLocaleLowerCase('vi').includes(query))
+    const matchesRole = userRoleFilter === 'all' || user.role === userRoleFilter
+    const matchesStatus = userStatusFilter === 'all'
+      || (userStatusFilter === 'active' && !user.is_locked)
+      || (userStatusFilter === 'locked' && user.is_locked)
+    return matchesQuery && matchesRole && matchesStatus
+  }).sort((a, b) => {
+    if (userSort === 'last_sign_in') {
+      const timeA = a.lastSignInAt ? new Date(a.lastSignInAt).getTime() : 0
+      const timeB = b.lastSignInAt ? new Date(b.lastSignInAt).getTime() : 0
+      return timeB - timeA
+    }
+    if (userSort === 'xp') {
+      return (b.xp || 0) - (a.xp || 0)
+    }
+    if (userSort === 'name') {
+      return (a.display_name || a.email || '').localeCompare(b.display_name || b.email || '', 'vi')
+    }
+    const timeA = a.created_at ? new Date(a.created_at).getTime() : 0
+    const timeB = b.created_at ? new Date(b.created_at).getTime() : 0
+    return timeB - timeA
+  })
+  const totalUserCount = users.length
+  const learnerCount = users.filter((u) => u.role === 'user').length
+  const adminCount = users.filter((u) => u.role === 'admin').length
+  const lockedCount = users.filter((u) => u.is_locked).length
   const lessonGroups = Array.from(filteredLessons.reduce((groups, lesson) => {
     const items = groups.get(lesson.textbook_id) || []
     items.push(lesson)
@@ -317,8 +446,26 @@ export default function AdminPage() {
   const pendingCommunityReports = community.reports.filter((report) => report.status === 'pending')
   const pendingCommunityPosts = filteredCommunityPosts.filter((post) => post.reports.some((report) => report.status === 'pending'))
   const pendingCommunityVocabulary = filteredCommunityVocabulary.filter((lesson) => community.reports.some((report) => report.custom_lesson_id === lesson.id && report.status === 'pending'))
-  const displayedCommunityPosts = communityView === 'queue' ? pendingCommunityPosts : filteredCommunityPosts
-  const displayedCommunityVocabulary = communityView === 'queue' ? pendingCommunityVocabulary : filteredCommunityVocabulary
+  const displayedCommunityPosts = communityView === 'queue'
+    ? pendingCommunityPosts
+    : communityView === 'hidden'
+      ? filteredCommunityPosts.filter((post) => post.status === 'hidden')
+      : filteredCommunityPosts
+  const displayedCommunityVocabulary = communityView === 'queue'
+    ? pendingCommunityVocabulary
+    : communityView === 'hidden'
+      ? filteredCommunityVocabulary.filter((lesson) => lesson.status === 'hidden')
+      : filteredCommunityVocabulary
+  const textbookPage = Math.min(pages.textbooks, Math.max(1, Math.ceil(filteredTextbooks.length / pageSize)))
+  const lessonPage = Math.min(pages.lessons, Math.max(1, Math.ceil(lessonGroups.length / pageSize)))
+  const communityPostPage = Math.min(pages.communityPosts, Math.max(1, Math.ceil(displayedCommunityPosts.length / pageSize)))
+  const communityVocabularyPage = Math.min(pages.communityVocabulary, Math.max(1, Math.ceil(displayedCommunityVocabulary.length / pageSize)))
+  const userPage = Math.min(pages.users, Math.max(1, Math.ceil(filteredUsers.length / pageSize)))
+  const pagedTextbooks = filteredTextbooks.slice((textbookPage - 1) * pageSize, textbookPage * pageSize)
+  const pagedLessonGroups = lessonGroups.slice((lessonPage - 1) * pageSize, lessonPage * pageSize)
+  const pagedCommunityPosts = displayedCommunityPosts.slice((communityPostPage - 1) * pageSize, communityPostPage * pageSize)
+  const pagedCommunityVocabulary = displayedCommunityVocabulary.slice((communityVocabularyPage - 1) * pageSize, communityVocabularyPage * pageSize)
+  const pagedUsers = filteredUsers.slice((userPage - 1) * pageSize, userPage * pageSize)
   const maxChart = Math.max(1, ...(dashboard?.chart.map((item) => item.minutes) || [1]))
   const exportDashboard = () => {
     if (!dashboard) return
@@ -363,7 +510,8 @@ export default function AdminPage() {
             <label><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo tên hoặc slug…" /></label>
             <div className="admin-filter-controls"><AdminSelect value={textbookStatusFilter} options={[{ value: 'all', label: 'Tất cả trạng thái' }, ...statuses]} label="Lọc trạng thái giáo trình" onChange={setTextbookStatusFilter} /><span>{filteredTextbooks.length} kết quả</span></div>
           </div>
-          <div className="admin-grid">{filteredTextbooks.map((book) => <article className="admin-card" key={book.id}><div className="admin-card-top"><span className={`admin-status ${book.status}`}>{statuses.find((item) => item.value === book.status)?.label}</span><div className="admin-actions"><button onClick={() => openEditor('textbooks', book)} aria-label="Sửa giáo trình"><Pencil size={17} /></button><button className="danger" onClick={() => void deleteItem('textbooks', book)} aria-label="Xóa giáo trình"><Trash2 size={17} /></button></div></div><h3>{book.title_ko}</h3><p>{book.title_vi || book.slug}</p><AdminSelect value={book.status} options={statuses} label={`Trạng thái ${book.title_ko}`} onChange={(value) => void updateStatus('textbooks', book.id, value as Status)} /></article>)}</div>
+          <div className="admin-grid">{pagedTextbooks.map((book) => <article className="admin-card" key={book.id}><div className="admin-card-top"><span className={`admin-status ${book.status}`}>{statuses.find((item) => item.value === book.status)?.label}</span><div className="admin-actions"><button onClick={() => openEditor('textbooks', book)} aria-label="Sửa giáo trình"><Pencil size={17} /></button><button className="danger" onClick={() => void deleteItem('textbooks', book)} aria-label="Xóa giáo trình"><Trash2 size={17} /></button></div></div><h3>{book.title_ko}</h3><p>{book.title_vi || book.slug}</p><AdminSelect value={book.status} options={statuses} label={`Trạng thái ${book.title_ko}`} onChange={(value) => void updateStatus('textbooks', book.id, value as Status)} /></article>)}</div>
+          <AdminPagination page={textbookPage} totalItems={filteredTextbooks.length} pageSize={pageSize} onChange={(page) => changePage('textbooks', page)} />
           {!filteredTextbooks.length && <div className="admin-empty">Không tìm thấy giáo trình phù hợp.</div>}
         </>}
         {tab === 'lessons' && <>
@@ -377,7 +525,7 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="admin-table-wrap admin-grouped-lessons"><table><thead><tr><th></th><th>Giáo trình</th><th>Nội dung</th><th>Số bài</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>
-            {lessonGroups.map(([textbookId, group]) => {
+            {pagedLessonGroups.map(([textbookId, group]) => {
               const expanded = expandedTextbookGroups.has(textbookId)
               const closing = closingTextbookGroups.has(textbookId)
               const visuallyExpanded = expanded && !closing
@@ -395,72 +543,730 @@ export default function AdminPage() {
               </Fragment>
             })}
           </tbody></table></div>
+          <AdminPagination page={lessonPage} totalItems={lessonGroups.length} pageSize={pageSize} onChange={(page) => changePage('lessons', page)} />
           {!filteredLessons.length && <div className="admin-empty">Không tìm thấy bài học phù hợp.</div>}
         </>}
         {tab === 'exercises' && <AdminExercises />}
         {tab === 'community' && <div className="admin-community-workspace">
-          <div className="admin-community-overview">
-            <button className="urgent" onClick={() => { setCommunityView('queue'); setCommunityStatus('all') }}><span><Flag size={20} /></span><div><strong>{pendingCommunityReports.length}</strong><small>Báo cáo chờ xử lý</small></div></button>
-            <button onClick={() => { setCommunityView('posts'); setCommunityStatus('all') }}><span><MessageSquare size={20} /></span><div><strong>{community.posts.length}</strong><small>Tổng bài viết</small></div></button>
-            <button onClick={() => { setCommunityView('vocabulary'); setCommunityStatus('all') }}><span><BookOpen size={20} /></span><div><strong>{community.customLessons.length}</strong><small>Bộ từ vựng</small></div></button>
-            <article><span><EyeOff size={20} /></span><div><strong>{community.posts.filter((post) => post.status === 'hidden').length + community.customLessons.filter((lesson) => lesson.status === 'hidden').length}</strong><small>Nội dung đã ẩn</small></div></article>
+          <div className="admin-panel-title">
+            <div>
+              <h2>Quản lý cộng đồng</h2>
+              <p>Kiểm duyệt bài viết, bộ từ vựng chia sẻ và xử lý báo cáo vi phạm.</p>
+            </div>
+            <button type="button" className="admin-community-refresh" onClick={() => void load()}>
+              <RotateCcw size={16} /> Làm mới dữ liệu
+            </button>
           </div>
 
-          <div className="admin-community-nav" role="tablist" aria-label="Loại nội dung cộng đồng">
-            <button className={communityView === 'queue' ? 'active' : ''} onClick={() => { setCommunityView('queue'); setCommunityStatus('all') }}><Flag size={17} /> Cần xử lý {pendingCommunityReports.length > 0 && <b>{pendingCommunityReports.length}</b>}</button>
-            <button className={communityView === 'posts' ? 'active' : ''} onClick={() => { setCommunityView('posts'); setCommunityStatus('all') }}><MessageSquare size={17} /> Bài viết</button>
-            <button className={communityView === 'vocabulary' ? 'active' : ''} onClick={() => { setCommunityView('vocabulary'); setCommunityStatus('all') }}><BookOpen size={17} /> Bộ từ vựng</button>
+          <div className="admin-community-overview">
+            <button
+              type="button"
+              className={`urgent ${communityView === 'queue' ? 'active' : ''} ${pendingCommunityReports.length > 0 ? 'has-pending' : ''}`}
+              aria-pressed={communityView === 'queue'}
+              onClick={() => { setCommunityView('queue'); setCommunityStatus('all'); changePage('communityPosts', 1); changePage('communityVocabulary', 1) }}
+            >
+              <span><Flag size={20} /></span>
+              <div>
+                <strong>{pendingCommunityReports.length}</strong>
+                <small>Báo cáo chờ xử lý</small>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              className={`posts-summary ${communityView === 'posts' ? 'active' : ''}`}
+              aria-pressed={communityView === 'posts'}
+              onClick={() => { setCommunityView('posts'); setCommunityStatus('all'); changePage('communityPosts', 1) }}
+            >
+              <span><MessageSquare size={20} /></span>
+              <div>
+                <strong>{community.posts.length}</strong>
+                <small>Tổng bài viết</small>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              className={`vocabulary-summary ${communityView === 'vocabulary' ? 'active' : ''}`}
+              aria-pressed={communityView === 'vocabulary'}
+              onClick={() => { setCommunityView('vocabulary'); setCommunityStatus('all'); changePage('communityVocabulary', 1) }}
+            >
+              <span><BookOpen size={20} /></span>
+              <div>
+                <strong>{community.customLessons.length}</strong>
+                <small>Bộ từ vựng</small>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              className={`hidden-summary ${communityView === 'hidden' ? 'active' : ''}`}
+              aria-pressed={communityView === 'hidden'}
+              onClick={() => { setCommunityView('hidden'); setCommunityStatus('hidden'); changePage('communityPosts', 1); changePage('communityVocabulary', 1) }}
+            >
+              <span><EyeOff size={20} /></span>
+              <div>
+                <strong>{community.posts.filter((post) => post.status === 'hidden').length + community.customLessons.filter((lesson) => lesson.status === 'hidden').length}</strong>
+                <small>Nội dung đã ẩn</small>
+              </div>
+            </button>
           </div>
 
           <div className="admin-community-commandbar">
-            <label><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={communityView === 'vocabulary' ? 'Tìm tên bộ từ, mã hoặc người tạo…' : 'Tìm nội dung hoặc người đăng…'} /></label>
-            {communityView !== 'queue' && <AdminSelect value={communityStatus} options={[{ value: 'all', label: 'Tất cả trạng thái' }, { value: 'reported', label: 'Có báo cáo chờ xử lý' }, { value: 'visible', label: 'Đang hiển thị' }, { value: 'hidden', label: 'Đã ẩn' }]} label="Lọc trạng thái nội dung" onChange={setCommunityStatus} />}
-            <span>{communityView === 'queue' ? pendingCommunityPosts.length + pendingCommunityVocabulary.length : communityView === 'posts' ? filteredCommunityPosts.length : filteredCommunityVocabulary.length} mục</span>
+            <label>
+              <Search size={18} />
+              <input
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value)
+                  changePage('communityPosts', 1)
+                  changePage('communityVocabulary', 1)
+                }}
+                placeholder={communityView === 'vocabulary' ? 'Tìm tên bộ từ, mã hoặc người tạo…' : communityView === 'hidden' ? 'Tìm trong nội dung đã ẩn…' : 'Tìm nội dung hoặc người đăng…'}
+              />
+              {search && (
+                <button
+                  type="button"
+                  className="admin-search-clear"
+                  onClick={() => {
+                    setSearch('')
+                    changePage('communityPosts', 1)
+                    changePage('communityVocabulary', 1)
+                  }}
+                  aria-label="Xóa tìm kiếm"
+                >
+                  <X size={15} />
+                </button>
+              )}
+            </label>
+
+            <div className="admin-community-command-right">
+              {communityView !== 'queue' && communityView !== 'hidden' && (
+                <AdminSelect
+                  value={communityStatus}
+                  options={[
+                    { value: 'all', label: 'Tất cả trạng thái' },
+                    { value: 'reported', label: 'Có báo cáo chờ xử lý' },
+                    { value: 'visible', label: 'Đang hiển thị' },
+                    { value: 'hidden', label: 'Đã ẩn' },
+                  ]}
+                  label="Lọc trạng thái nội dung"
+                  onChange={(val) => {
+                    setCommunityStatus(val)
+                    changePage('communityPosts', 1)
+                    changePage('communityVocabulary', 1)
+                  }}
+                />
+              )}
+              <span className="admin-user-count-badge">
+                {communityView === 'queue'
+                  ? pendingCommunityPosts.length + pendingCommunityVocabulary.length
+                  : communityView === 'hidden'
+                  ? displayedCommunityPosts.length + displayedCommunityVocabulary.length
+                  : communityView === 'posts'
+                  ? filteredCommunityPosts.length
+                  : filteredCommunityVocabulary.length}{' '}
+                mục
+              </span>
+            </div>
           </div>
+
           <div className="admin-community-date-filters">
-            <span className="admin-date-filter-label"><CalendarDays size={17} /> Thời gian đăng</span>
-            <AdminSelect value={communityDay} options={[{ value: 'all', label: 'Tất cả ngày' }, ...Array.from({ length: 31 }, (_, index) => ({ value: String(index + 1), label: `Ngày ${index + 1}` }))]} label="Lọc theo ngày đăng" onChange={setCommunityDay} />
-            <AdminSelect value={communityMonth} options={[{ value: 'all', label: 'Tất cả tháng' }, ...Array.from({ length: 12 }, (_, index) => ({ value: String(index + 1), label: `Tháng ${index + 1}` }))]} label="Lọc theo tháng đăng" onChange={setCommunityMonth} />
-            <AdminSelect value={communityYear} options={[{ value: 'all', label: 'Tất cả năm' }, ...communityYears.map((year) => ({ value: String(year), label: `Năm ${year}` }))]} label="Lọc theo năm đăng" onChange={setCommunityYear} />
-            {(communityDay !== 'all' || communityMonth !== 'all' || communityYear !== 'all') && <button type="button" className="admin-clear-date-filter" onClick={() => { setCommunityDay('all'); setCommunityMonth('all'); setCommunityYear('all') }}><RotateCcw size={15} /> Xóa lọc</button>}
+            <span className="admin-date-filter-label">
+              <CalendarDays size={17} /> Thời gian đăng:
+            </span>
+            <AdminSelect
+              value={communityDay}
+              options={[{ value: 'all', label: 'Tất cả ngày' }, ...Array.from({ length: 31 }, (_, index) => ({ value: String(index + 1), label: `Ngày ${index + 1}` }))]}
+              label="Lọc theo ngày đăng"
+              onChange={(val) => { setCommunityDay(val); changePage('communityPosts', 1); changePage('communityVocabulary', 1) }}
+            />
+            <AdminSelect
+              value={communityMonth}
+              options={[{ value: 'all', label: 'Tất cả tháng' }, ...Array.from({ length: 12 }, (_, index) => ({ value: String(index + 1), label: `Tháng ${index + 1}` }))]}
+              label="Lọc theo tháng đăng"
+              onChange={(val) => { setCommunityMonth(val); changePage('communityPosts', 1); changePage('communityVocabulary', 1) }}
+            />
+            <AdminSelect
+              value={communityYear}
+              options={[{ value: 'all', label: 'Tất cả năm' }, ...communityYears.map((year) => ({ value: String(year), label: `Năm ${year}` }))]}
+              label="Lọc theo năm đăng"
+              onChange={(val) => { setCommunityYear(val); changePage('communityPosts', 1); changePage('communityVocabulary', 1) }}
+            />
+            {(communityDay !== 'all' || communityMonth !== 'all' || communityYear !== 'all' || search || communityStatus !== 'all') && (
+              <button
+                type="button"
+                className="admin-clear-date-filter"
+                onClick={() => {
+                  setCommunityDay('all')
+                  setCommunityMonth('all')
+                  setCommunityYear('all')
+                  setCommunityStatus('all')
+                  setSearch('')
+                  changePage('communityPosts', 1)
+                  changePage('communityVocabulary', 1)
+                }}
+              >
+                <RotateCcw size={15} /> Xóa lọc
+              </button>
+            )}
           </div>
 
-          {(communityView === 'queue' || communityView === 'posts') && <section className="admin-community-section">
-            <div className="admin-community-section-title"><div><MessageSquare size={18} /><span><h3>{communityView === 'queue' ? 'Bài viết bị báo cáo' : 'Danh sách bài viết'}</h3><p>{communityView === 'queue' ? 'Ưu tiên xem lý do báo cáo trước khi xử lý nội dung.' : 'Kiểm soát hiển thị, bình luận và nội dung bài viết.'}</p></span></div><b>{displayedCommunityPosts.length}</b></div>
-            <div className="admin-community-list">{displayedCommunityPosts.map((post) => {
-              const pendingReports = post.reports.filter((report) => report.status === 'pending')
-              return <article className={`admin-community-post${post.status === 'hidden' ? ' is-hidden' : ''}${pendingReports.length ? ' has-reports' : ''}`} key={post.id}>
-                <div className="admin-community-head"><div className="admin-community-author"><span>{(post.profiles?.display_name || '?').slice(0, 1).toUpperCase()}</span><div><b>{post.profiles?.display_name || 'Người học'}</b><small>{new Date(post.created_at).toLocaleString('vi-VN')}</small></div></div><div className="admin-community-badges">{post.status === 'hidden' ? <span className="hidden"><EyeOff size={13} /> Đã ẩn</span> : <span className="visible"><Eye size={13} /> Đang hiển thị</span>}{post.comments_locked && <span className="locked"><Lock size={13} /> Khóa bình luận</span>}{pendingReports.length > 0 && <span className="reported"><Flag size={13} /> {pendingReports.length} báo cáo</span>}</div></div>
-                <p className="admin-community-content">{post.content}</p>
-                {pendingReports.length > 0 && <div className="admin-report-list"><header><Flag size={15} /><b>Lý do báo cáo</b></header>{pendingReports.map((report) => <div className="admin-report-item" key={report.id}><div><b>{report.profiles?.display_name || 'Người dùng'} báo cáo</b><p>{report.reason}</p><small>{new Date(report.created_at).toLocaleString('vi-VN')}</small></div><div><button onClick={() => void resolveReport(report, 'dismissed')}>Bỏ qua</button><button className="resolve" onClick={() => void resolveReport(report, 'resolved')}><Check size={15} /> Đã xử lý</button></div></div>)}</div>}
-                <div className="admin-community-actions"><button onClick={() => void moderatePost(post, { hidden: post.status !== 'hidden' })}>{post.status === 'hidden' ? <Eye size={16} /> : <EyeOff size={16} />}{post.status === 'hidden' ? 'Hiện lại' : 'Ẩn bài'}</button><button onClick={() => void moderatePost(post, { commentsLocked: !post.comments_locked })}>{post.comments_locked ? <Unlock size={16} /> : <Lock size={16} />}{post.comments_locked ? 'Mở bình luận' : 'Khóa bình luận'}</button><button className="danger" onClick={() => void deleteCommunityPost(post)}><Trash2 size={16} /> Xóa bài</button></div>
-              </article>
-            })}</div>
-            {!displayedCommunityPosts.length && <div className="admin-community-empty"><Check size={22} /><b>{communityView === 'queue' ? 'Không có bài viết cần xử lý' : 'Không tìm thấy bài viết'}</b><span>Hãy thử thay đổi từ khóa hoặc bộ lọc hiện tại.</span></div>}
-          </section>}
+          {(communityView === 'queue' || communityView === 'posts' || communityView === 'hidden') && (
+            <section className="admin-community-section">
+              <div className="admin-community-section-title">
+                <div>
+                  <MessageSquare size={18} />
+                  <div>
+                    <h3>{communityView === 'queue' ? 'Bài viết bị báo cáo' : communityView === 'hidden' ? 'Bài viết đã ẩn' : 'Danh sách bài viết'}</h3>
+                    <p>{communityView === 'queue' ? 'Ưu tiên xem lý do báo cáo trước khi xử lý nội dung.' : communityView === 'hidden' ? 'Xem lại, khôi phục hoặc xóa vĩnh viễn các bài viết đã ẩn.' : 'Kiểm soát hiển thị, bình luận và nội dung bài viết.'}</p>
+                  </div>
+                </div>
+                <b>{displayedCommunityPosts.length}</b>
+              </div>
 
-          {(communityView === 'queue' || communityView === 'vocabulary') && <section className="admin-community-section">
-            <div className="admin-community-section-title"><div><BookOpen size={18} /><span><h3>{communityView === 'queue' ? 'Bộ từ vựng bị báo cáo' : 'Danh sách bộ từ vựng'}</h3><p>Kiểm tra người tạo, số lượng từ và trạng thái chia sẻ.</p></span></div><b>{displayedCommunityVocabulary.length}</b></div>
-            <div className="admin-community-list">{displayedCommunityVocabulary.map((lesson) => {
-              const pendingReports = community.reports.filter((report) => report.custom_lesson_id === lesson.id && report.status === 'pending')
-              return <article className={`admin-community-post admin-vocabulary-card${lesson.status === 'hidden' ? ' is-hidden' : ''}${pendingReports.length ? ' has-reports' : ''}`} key={lesson.id}>
-                <div className="admin-community-head"><div className="admin-community-author"><span>{(lesson.title || '?').slice(0, 1).toUpperCase()}</span><div><b>{lesson.title}</b><small>Tạo bởi {lesson.profiles?.display_name || 'Người học'} · {new Date(lesson.created_at).toLocaleDateString('vi-VN')}</small></div></div><div className="admin-community-badges"><span>{lesson.visibility === 'private' ? 'Riêng tư' : 'Công khai'}</span>{lesson.status === 'hidden' ? <span className="hidden"><EyeOff size={13} /> Đã ẩn</span> : <span className="visible"><Eye size={13} /> Đang hiển thị</span>}{pendingReports.length > 0 && <span className="reported"><Flag size={13} /> {pendingReports.length} báo cáo</span>}</div></div>
-                <div className="admin-vocabulary-meta"><span><strong>{lesson.words?.length || 0}</strong> từ vựng</span><span>Mã chia sẻ <strong>{lesson.code}</strong></span></div>
-                {pendingReports.length > 0 && <div className="admin-report-list"><header><Flag size={15} /><b>Lý do báo cáo</b></header>{pendingReports.map((report) => <div className="admin-report-item" key={report.id}><div><b>{report.profiles?.display_name || 'Người dùng'} báo cáo</b><p>{report.reason}</p><small>{new Date(report.created_at).toLocaleString('vi-VN')}</small></div><div><button onClick={() => void resolveReport(report, 'dismissed')}>Bỏ qua</button><button className="resolve" onClick={() => void resolveReport(report, 'resolved')}><Check size={15} /> Đã xử lý</button></div></div>)}</div>}
-                <div className="admin-community-actions"><button onClick={() => void moderateVocabularySet(lesson)}>{lesson.status === 'hidden' ? <Eye size={16} /> : <EyeOff size={16} />}{lesson.status === 'hidden' ? 'Hiện lại' : 'Ẩn bộ từ vựng'}</button></div>
-              </article>
-            })}</div>
-            {!displayedCommunityVocabulary.length && <div className="admin-community-empty"><Check size={22} /><b>{communityView === 'queue' ? 'Không có bộ từ vựng cần xử lý' : 'Không tìm thấy bộ từ vựng'}</b><span>Hãy thử thay đổi từ khóa hoặc bộ lọc hiện tại.</span></div>}
-          </section>}
+              <div className="admin-community-list">
+                {pagedCommunityPosts.map((post) => {
+                  const pendingReports = post.reports.filter((report) => report.status === 'pending')
+                  const authorName = post.profiles?.display_name || 'Người học'
+                  return (
+                    <article
+                      className={`admin-community-post${post.status === 'hidden' ? ' is-hidden' : ''}${pendingReports.length ? ' has-reports' : ''}`}
+                      key={post.id}
+                    >
+                      <div className="admin-community-head">
+                        <div className="admin-community-author">
+                          {post.profiles?.avatar_url ? (
+                            <img src={post.profiles.avatar_url} alt={authorName} className="admin-community-author-img" />
+                          ) : (
+                            <span style={{ background: getAvatarBackground(post.user_id || authorName) }}>
+                              {authorName.slice(0, 1).toUpperCase()}
+                            </span>
+                          )}
+                          <div>
+                            <b>{authorName}</b>
+                            <small title={formatAdminDateTime(post.created_at)}>
+                              {formatRelativeTime(post.created_at)} · {formatAdminDateTime(post.created_at)}
+                            </small>
+                          </div>
+                        </div>
+
+                        <div className="admin-community-badges">
+                          {post.status === 'hidden' ? (
+                            <span className="hidden"><EyeOff size={13} /> Đã ẩn</span>
+                          ) : (
+                            <span className="visible"><Eye size={13} /> Đang hiển thị</span>
+                          )}
+                          {post.comments_locked && (
+                            <span className="locked"><Lock size={13} /> Khóa bình luận</span>
+                          )}
+                          {pendingReports.length > 0 && (
+                            <span className="reported"><Flag size={13} /> {pendingReports.length} báo cáo</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <p className="admin-community-content">{post.content}</p>
+
+                      {pendingReports.length > 0 && (
+                        <div className="admin-report-list">
+                          <header><Flag size={15} /><b>Lý do báo cáo ({pendingReports.length})</b></header>
+                          {pendingReports.map((report) => (
+                            <div className="admin-report-item" key={report.id}>
+                              <div>
+                                <b>{report.profiles?.display_name || 'Người dùng'} báo cáo:</b>
+                                <p>{report.reason}</p>
+                                <small>{formatAdminDateTime(report.created_at)}</small>
+                              </div>
+                              <div>
+                                <button type="button" onClick={() => void resolveReport(report, 'dismissed')}>
+                                  Bỏ qua
+                                </button>
+                                <button type="button" className="resolve" onClick={() => void resolveReport(report, 'resolved')}>
+                                  <Check size={15} /> Đã xử lý
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="admin-community-actions">
+                        <button type="button" onClick={() => void moderatePost(post, { hidden: post.status !== 'hidden' })}>
+                          {post.status === 'hidden' ? <Eye size={16} /> : <EyeOff size={16} />}
+                          {post.status === 'hidden' ? 'Hiện lại' : 'Ẩn bài'}
+                        </button>
+                        <button type="button" onClick={() => void moderatePost(post, { commentsLocked: !post.comments_locked })}>
+                          {post.comments_locked ? <Unlock size={16} /> : <Lock size={16} />}
+                          {post.comments_locked ? 'Mở bình luận' : 'Khóa bình luận'}
+                        </button>
+                        <button type="button" className="danger" onClick={() => void deleteCommunityPost(post)}>
+                          <Trash2 size={16} /> Xóa bài
+                        </button>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+
+              <AdminPagination
+                page={communityPostPage}
+                totalItems={displayedCommunityPosts.length}
+                pageSize={pageSize}
+                onChange={(page) => changePage('communityPosts', page)}
+              />
+
+              {!displayedCommunityPosts.length && (
+                <div className="admin-community-empty">
+                  <Check size={26} />
+                  <b>{communityView === 'queue' ? 'Không có bài viết nào cần xử lý' : communityView === 'hidden' ? 'Không có bài viết nào đang bị ẩn' : 'Không tìm thấy bài viết nào'}</b>
+                  <span>Hãy thử thay đổi từ khóa hoặc bộ lọc ngày / trạng thái.</span>
+                </div>
+              )}
+            </section>
+          )}
+
+          {(communityView === 'queue' || communityView === 'vocabulary' || communityView === 'hidden') && (
+            <section className="admin-community-section">
+              <div className="admin-community-section-title">
+                <div>
+                  <BookOpen size={18} />
+                  <div>
+                    <h3>{communityView === 'queue' ? 'Bộ từ vựng bị báo cáo' : communityView === 'hidden' ? 'Bộ từ vựng đã ẩn' : 'Danh sách bộ từ vựng'}</h3>
+                    <p>{communityView === 'hidden' ? 'Xem lại, khôi phục hoặc xóa vĩnh viễn các bộ từ vựng đã ẩn.' : 'Kiểm tra nội dung từ vựng, người tạo và trạng thái chia sẻ trong cộng đồng.'}</p>
+                  </div>
+                </div>
+                <b>{displayedCommunityVocabulary.length}</b>
+              </div>
+
+              <div className="admin-community-list">
+                {pagedCommunityVocabulary.map((lesson) => {
+                  const pendingReports = community.reports.filter(
+                    (report) => report.custom_lesson_id === lesson.id && report.status === 'pending'
+                  )
+                  const creatorName = lesson.profiles?.display_name || 'Người học'
+                  return (
+                    <article
+                      className={`admin-community-post admin-vocabulary-card${lesson.status === 'hidden' ? ' is-hidden' : ''}${pendingReports.length ? ' has-reports' : ''}`}
+                      key={lesson.id}
+                    >
+                      <div className="admin-community-head">
+                        <div className="admin-community-author">
+                          <span style={{ background: getAvatarBackground(lesson.id || lesson.title) }}>
+                            {(lesson.title || '?').slice(0, 1).toUpperCase()}
+                          </span>
+                          <div>
+                            <b>{lesson.title}</b>
+                            <small title={formatAdminDateTime(lesson.created_at)}>
+                              Tạo bởi {creatorName} · {formatAdminDateTime(lesson.created_at)}
+                            </small>
+                          </div>
+                        </div>
+
+                        <div className="admin-community-badges">
+                          <span className={lesson.visibility === 'private' ? 'hidden' : 'visible'}>
+                            {lesson.visibility === 'private' ? 'Riêng tư' : 'Công khai'}
+                          </span>
+                          {lesson.status === 'hidden' ? (
+                            <span className="hidden"><EyeOff size={13} /> Đã ẩn</span>
+                          ) : (
+                            <span className="visible"><Eye size={13} /> Đang hiển thị</span>
+                          )}
+                          {pendingReports.length > 0 && (
+                            <span className="reported"><Flag size={13} /> {pendingReports.length} báo cáo</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="admin-vocabulary-meta">
+                        <span>
+                          <strong>{lesson.words?.length || 0}</strong> từ vựng
+                        </span>
+                        <span>Mã chia sẻ:</span>
+                        <button
+                          type="button"
+                          className="admin-copy-code-chip"
+                          onClick={() => handleCopyCode(lesson.code)}
+                          title="Bấm để sao chép mã"
+                        >
+                          {copiedCode === lesson.code ? <CheckCircle2 size={13} color="#16a34a" /> : <Copy size={13} />}
+                          <code>{lesson.code}</code>
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-preview-words-btn"
+                          onClick={() => setPreviewVocabularySet(lesson)}
+                          title="Xem toàn bộ từ vựng trong bộ này"
+                        >
+                          <Eye size={14} /> Xem danh sách từ ({lesson.words?.length || 0})
+                        </button>
+                      </div>
+
+                      {pendingReports.length > 0 && (
+                        <div className="admin-report-list">
+                          <header><Flag size={15} /><b>Lý do báo cáo ({pendingReports.length})</b></header>
+                          {pendingReports.map((report) => (
+                            <div className="admin-report-item" key={report.id}>
+                              <div>
+                                <b>{report.profiles?.display_name || 'Người dùng'} báo cáo:</b>
+                                <p>{report.reason}</p>
+                                <small>{formatAdminDateTime(report.created_at)}</small>
+                              </div>
+                              <div>
+                                <button type="button" onClick={() => void resolveReport(report, 'dismissed')}>
+                                  Bỏ qua
+                                </button>
+                                <button type="button" className="resolve" onClick={() => void resolveReport(report, 'resolved')}>
+                                  <Check size={15} /> Đã xử lý
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="admin-community-actions">
+                        <button type="button" onClick={() => void moderateVocabularySet(lesson)}>
+                          {lesson.status === 'hidden' ? <Eye size={16} /> : <EyeOff size={16} />}
+                          {lesson.status === 'hidden' ? 'Hiện lại' : 'Ẩn bộ từ vựng'}
+                        </button>
+                        <button type="button" className="danger" onClick={() => void deleteCommunityVocabulary(lesson)}>
+                          <Trash2 size={16} /> Xóa bộ từ
+                        </button>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+
+              <AdminPagination
+                page={communityVocabularyPage}
+                totalItems={displayedCommunityVocabulary.length}
+                pageSize={pageSize}
+                onChange={(page) => changePage('communityVocabulary', page)}
+              />
+
+              {!displayedCommunityVocabulary.length && (
+                <div className="admin-community-empty">
+                  <Check size={26} />
+                  <b>{communityView === 'queue' ? 'Không có bộ từ vựng nào cần xử lý' : communityView === 'hidden' ? 'Không có bộ từ vựng nào đang bị ẩn' : 'Không tìm thấy bộ từ vựng nào'}</b>
+                  <span>Hãy thử thay đổi từ khóa hoặc bộ lọc ngày / trạng thái.</span>
+                </div>
+              )}
+            </section>
+          )}
         </div>}
+
         {tab === 'users' && <>
-          <div className="admin-panel-title"><div><h2>Người dùng</h2><p>Quản lý vai trò và khóa tài khoản vi phạm.</p></div></div>
-          <div className="admin-toolbar admin-toolbar-with-filters">
-            <label><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo tên, email hoặc mã người dùng…" aria-label="Tìm kiếm người dùng" /></label>
-            <div className="admin-filter-controls"><span>{filteredUsers.length} người dùng</span></div>
+          <div className="admin-panel-title">
+            <div>
+              <h2>Quản lý người dùng</h2>
+              <p>Theo dõi học viên, phân quyền quản trị viên và xử lý tài khoản vi phạm.</p>
+            </div>
           </div>
-          <div className="admin-table-wrap"><table><thead><tr><th>Học viên</th><th>Email</th><th>Vai trò</th><th>Cấp / XP</th><th>Trạng thái</th><th>Đăng nhập gần nhất</th><th>Thao tác</th></tr></thead><tbody>{filteredUsers.map((user) => <tr key={user.id} className={user.is_locked ? 'admin-user-locked' : ''}><td><b>{user.display_name || 'Người học'}</b></td><td>{user.email || '—'}</td><td><AdminSelect value={user.role} options={[{ value: 'user', label: 'Học viên' }, { value: 'admin', label: 'Admin' }]} label={`Vai trò của ${user.display_name || user.email}`} onChange={(value) => void updateRole(user.id, value as 'user' | 'admin')} /></td><td>Lv. {user.level || 1} · {user.xp || 0} XP</td><td><span className={`admin-account-state ${user.is_locked ? 'locked' : 'active'}`}>{user.is_locked ? <Lock size={14}/> : <ShieldCheck size={14}/>} {user.is_locked ? 'Đã khóa' : 'Hoạt động'}</span></td><td>{user.lastSignInAt ? new Date(user.lastSignInAt).toLocaleString('vi-VN') : 'Chưa có'}</td><td><button className={`admin-lock-action ${user.is_locked ? 'unlock' : ''}`} onClick={() => void updateAccountLock(user)}>{user.is_locked ? <Unlock size={16}/> : <Lock size={16}/>} {user.is_locked ? 'Mở khóa' : 'Khóa'}</button></td></tr>)}</tbody></table></div>
-          {!filteredUsers.length && <div className="admin-empty">Không tìm thấy người dùng phù hợp.</div>}
+
+          <div className="admin-user-summary-grid">
+            <button
+              type="button"
+              className={`admin-user-stat-card purple ${userRoleFilter === 'all' && userStatusFilter === 'all' ? 'active' : ''}`}
+              onClick={() => { setUserRoleFilter('all'); setUserStatusFilter('all'); changePage('users', 1) }}
+            >
+              <div className="admin-user-stat-icon">
+                <Users size={22} />
+              </div>
+              <div className="admin-user-stat-info">
+                <small>Tổng người dùng</small>
+                <strong>{totalUserCount}</strong>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              className={`admin-user-stat-card blue ${userRoleFilter === 'user' ? 'active' : ''}`}
+              onClick={() => { setUserRoleFilter(userRoleFilter === 'user' ? 'all' : 'user'); changePage('users', 1) }}
+            >
+              <div className="admin-user-stat-icon">
+                <GraduationCap size={22} />
+              </div>
+              <div className="admin-user-stat-info">
+                <small>Học viên</small>
+                <strong>{learnerCount}</strong>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              className={`admin-user-stat-card amber ${userRoleFilter === 'admin' ? 'active' : ''}`}
+              onClick={() => { setUserRoleFilter(userRoleFilter === 'admin' ? 'all' : 'admin'); changePage('users', 1) }}
+            >
+              <div className="admin-user-stat-icon">
+                <ShieldCheck size={22} />
+              </div>
+              <div className="admin-user-stat-info">
+                <small>Quản trị viên</small>
+                <strong>{adminCount}</strong>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              className={`admin-user-stat-card red ${userStatusFilter === 'locked' ? 'active' : ''}`}
+              onClick={() => { setUserStatusFilter(userStatusFilter === 'locked' ? 'all' : 'locked'); changePage('users', 1) }}
+            >
+              <div className="admin-user-stat-icon">
+                <Lock size={22} />
+              </div>
+              <div className="admin-user-stat-info">
+                <small>Đã khóa</small>
+                <strong>{lockedCount}</strong>
+              </div>
+            </button>
+          </div>
+
+          <div className="admin-toolbar admin-toolbar-with-filters admin-user-toolbar">
+            <label className="admin-user-search-label">
+              <Search size={18} />
+              <input
+                value={search}
+                onChange={(event) => { setSearch(event.target.value); changePage('users', 1) }}
+                placeholder="Tìm theo tên, email hoặc User ID…"
+                aria-label="Tìm kiếm người dùng"
+              />
+              {search && (
+                <button
+                  type="button"
+                  className="admin-search-clear"
+                  onClick={() => { setSearch(''); changePage('users', 1) }}
+                  aria-label="Xóa tìm kiếm"
+                >
+                  <X size={15} />
+                </button>
+              )}
+            </label>
+
+            <div className="admin-filter-controls">
+              <AdminSelect
+                value={userRoleFilter}
+                options={[
+                  { value: 'all', label: 'Tất cả vai trò' },
+                  { value: 'user', label: 'Chỉ học viên' },
+                  { value: 'admin', label: 'Chỉ Admin' },
+                ]}
+                label="Lọc vai trò"
+                onChange={(val) => { setUserRoleFilter(val as any); changePage('users', 1) }}
+              />
+
+              <AdminSelect
+                value={userStatusFilter}
+                options={[
+                  { value: 'all', label: 'Tất cả trạng thái' },
+                  { value: 'active', label: 'Đang hoạt động' },
+                  { value: 'locked', label: 'Đã bị khóa' },
+                ]}
+                label="Lọc trạng thái"
+                onChange={(val) => { setUserStatusFilter(val as any); changePage('users', 1) }}
+              />
+
+              <AdminSelect
+                value={userSort}
+                options={[
+                  { value: 'newest', label: 'Mới tạo nhất' },
+                  { value: 'last_sign_in', label: 'Đăng nhập gần nhất' },
+                  { value: 'xp', label: 'XP cao nhất' },
+                  { value: 'name', label: 'Tên A - Z' },
+                ]}
+                label="Sắp xếp người dùng"
+                onChange={(val) => { setUserSort(val as any); changePage('users', 1) }}
+              />
+
+              {(search || userRoleFilter !== 'all' || userStatusFilter !== 'all' || userSort !== 'newest') && (
+                <button
+                  type="button"
+                  className="admin-clear-filter-btn"
+                  onClick={() => {
+                    setSearch('')
+                    setUserRoleFilter('all')
+                    setUserStatusFilter('all')
+                    setUserSort('newest')
+                    changePage('users', 1)
+                  }}
+                  title="Đặt lại bộ lọc"
+                >
+                  <RotateCcw size={15} /> Xóa lọc
+                </button>
+              )}
+
+              <span className="admin-user-count-badge">
+                {filteredUsers.length} / {users.length} người dùng
+              </span>
+            </div>
+          </div>
+
+          <div className="admin-table-wrap admin-user-table-wrap">
+            <table className="admin-user-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '28%' }}>Học viên</th>
+                  <th style={{ width: '22%' }}>Email & Xác thực</th>
+                  <th style={{ width: '13%' }}>Vai trò</th>
+                  <th style={{ width: '12%' }}>Cấp độ & Điểm</th>
+                  <th style={{ width: '11%' }}>Trạng thái</th>
+                  <th style={{ width: '14%' }}>Hoạt động gần nhất</th>
+                  <th style={{ width: '90px', textAlign: 'center' }}>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagedUsers.map((user) => {
+                  const isSelf = user.id === profile?.id
+                  const initial = (user.display_name || user.email || 'U').slice(0, 1).toUpperCase()
+                  return (
+                    <tr key={user.id} className={user.is_locked ? 'admin-user-locked' : ''}>
+                      <td>
+                        <div className="admin-user-cell">
+                          <div
+                            className="admin-user-avatar"
+                            style={{
+                              background: user.avatar_url ? undefined : getAvatarBackground(user.id || user.display_name || ''),
+                            }}
+                          >
+                            {user.avatar_url ? (
+                              <img src={user.avatar_url} alt={user.display_name || ''} />
+                            ) : (
+                              <span>{initial}</span>
+                            )}
+                          </div>
+                          <div className="admin-user-meta">
+                            <div className="admin-user-name-line">
+                              <b className="admin-user-name">{user.display_name || 'Người học'}</b>
+                              {isSelf && <span className="admin-user-self-pill">Bạn</span>}
+                            </div>
+                            <span className="admin-user-sub-id" title={`ID: ${user.id}`}>
+                              #{user.id.slice(0, 8)}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td>
+                        <div className="admin-user-email-col">
+                          <span className="admin-user-email-text" title={user.email || ''}>
+                            {user.email || '—'}
+                          </span>
+                          {user.emailConfirmedAt ? (
+                            <span className="admin-verified-pill" title={`Xác thực lúc ${formatAdminDateTime(user.emailConfirmedAt)}`}>
+                              <CheckCircle2 size={12} /> Đã xác thực
+                            </span>
+                          ) : (
+                            <span className="admin-unverified-pill">Chưa kích hoạt</span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td>
+                        {isSelf ? (
+                          <span className="admin-role-badge current-admin" title="Tài khoản admin hiện tại">
+                            <ShieldCheck size={14} /> Admin
+                          </span>
+                        ) : (
+                          <div className="admin-role-selector-wrap">
+                            <AdminSelect
+                              value={user.role}
+                              options={[
+                                { value: 'user', label: 'Học viên' },
+                                { value: 'admin', label: 'Quản trị viên' },
+                              ]}
+                              label={`Vai trò của ${user.display_name || user.email}`}
+                              onChange={(value) => void updateRole(user.id, value as 'user' | 'admin')}
+                            />
+                          </div>
+                        )}
+                      </td>
+
+                      <td>
+                        <div className="admin-user-progress">
+                          <span className="admin-level-tag">Lv. {user.level || 1}</span>
+                          <span className="admin-xp-tag">
+                            <Zap size={12} /> {(user.xp || 0).toLocaleString('vi-VN')} XP
+                          </span>
+                        </div>
+                      </td>
+
+                      <td>
+                        {user.is_locked ? (
+                          <span className="admin-account-badge locked" title={user.locked_at ? `Khóa lúc ${formatAdminDateTime(user.locked_at)}` : 'Tài khoản đã bị khóa'}>
+                            <Lock size={13} /> Đã khóa
+                          </span>
+                        ) : (
+                          <span className="admin-account-badge active">
+                            <span className="admin-pulse-dot" /> Hoạt động
+                          </span>
+                        )}
+                      </td>
+
+                      <td>
+                        <div className="admin-user-time-cell">
+                          <span className="admin-user-time-rel">{formatRelativeTime(user.lastSignInAt)}</span>
+                          {user.lastSignInAt && (
+                            <small className="admin-user-time-abs">{formatAdminDateTime(user.lastSignInAt)}</small>
+                          )}
+                        </div>
+                      </td>
+
+                      <td>
+                        <div className="admin-user-actions">
+                          <button
+                            type="button"
+                            className="admin-user-action-btn view"
+                            onClick={() => setSelectedUserDetail(user)}
+                            title="Xem chi tiết người dùng"
+                            aria-label="Xem chi tiết"
+                          >
+                            <Eye size={17} />
+                          </button>
+                          <button
+                            type="button"
+                            className={`admin-user-action-btn ${user.is_locked ? 'unlock' : 'lock'}`}
+                            onClick={() => void updateAccountLock(user)}
+                            disabled={isSelf}
+                            title={isSelf ? 'Không thể tự khóa tài khoản của mình' : user.is_locked ? 'Mở khóa tài khoản' : 'Khóa tài khoản'}
+                            aria-label={user.is_locked ? 'Mở khóa tài khoản' : 'Khóa tài khoản'}
+                          >
+                            {user.is_locked ? <Unlock size={17} /> : <Lock size={17} />}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <AdminPagination page={userPage} totalItems={filteredUsers.length} pageSize={pageSize} onChange={(page) => changePage('users', page)} />
+
+          {!filteredUsers.length && (
+            <div className="admin-user-empty">
+              <div className="admin-user-empty-icon">
+                <Users size={36} />
+              </div>
+              <h3>Không tìm thấy người dùng phù hợp</h3>
+              <p>Hãy thử thay đổi từ khóa tìm kiếm hoặc làm mới các bộ lọc.</p>
+              {(search || userRoleFilter !== 'all' || userStatusFilter !== 'all') && (
+                <button
+                  type="button"
+                  className="admin-primary"
+                  onClick={() => {
+                    setSearch('')
+                    setUserRoleFilter('all')
+                    setUserStatusFilter('all')
+                    changePage('users', 1)
+                  }}
+                >
+                  <RotateCcw size={16} /> Đặt lại bộ lọc
+                </button>
+              )}
+            </div>
+          )}
         </>}
       </section>}
       {previewLesson && <div className="admin-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewLesson(null) }}><section className="admin-modal admin-preview-modal" role="dialog" aria-modal="true" aria-labelledby="admin-preview-title"><header><div><span><Eye size={22} /></span><div><h2 id="admin-preview-title">Xem bài học</h2><p>Thông tin đang hiển thị cho bài học đã chọn.</p></div></div><button onClick={() => setPreviewLesson(null)} aria-label="Đóng"><X size={21} /></button></header><div className="admin-lesson-preview"><div className="admin-preview-number">Bài {previewLesson.lesson_number}</div><div className="admin-preview-copy"><span className={`admin-status ${previewLesson.status}`}>{statuses.find((item) => item.value === previewLesson.status)?.label}</span><small>Giáo trình</small><p>{previewLesson.textbooks?.title_ko || textbooks.find((book) => book.id === previewLesson.textbook_id)?.title_ko || '—'}</p><small>Tiêu đề tiếng Hàn</small><h3>{previewLesson.title_ko}</h3><small>Tiêu đề tiếng Việt</small><p>{previewLesson.title_vi || 'Chưa có tiêu đề tiếng Việt'}</p></div></div><footer><button className="admin-cancel" onClick={() => setPreviewLesson(null)}>Đóng</button><button className="admin-primary" onClick={() => { const lesson = previewLesson; setPreviewLesson(null); openEditor('lessons', lesson) }}><Pencil size={17} /> Chỉnh sửa bài học</button></footer></section></div>}

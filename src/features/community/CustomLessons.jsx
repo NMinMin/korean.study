@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   CheckCircle2, Copy, Link2, BookMarked, BookOpen, Sparkles, XCircle, Plus,
-  Image as ImageIcon, ChevronLeft, ChevronRight, Lightbulb, Globe2, LockKeyhole, Flag, EyeOff, Trash2
+  Image as ImageIcon, ChevronLeft, ChevronRight, Lightbulb, Globe2, LockKeyhole, Trash2,
+  BarChart3, X, Users
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { uploadCloudinaryAsset } from '../../services/cloudinaryUpload';
@@ -9,6 +10,9 @@ import { requestAIJson } from '../../services/aiService';
 import { playCorrectSound, playIncorrectSound } from '../../services/audioService';
 import { renderKo, shuffleArr } from '../../utils/textUtils';
 import { SwBunnyEmpty } from '../../components/common/Mascots';
+import { useAppDialog } from '../../components/common/AppDialog';
+
+const DEFAULT_CUSTOM_QUIZ_TYPES = ['fillblank'];
 
 export const genLessonCode = () => {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -68,7 +72,7 @@ function fallbackLessonContent(words) {
 export function ShareCodeBox({ code, onCreateAnother }) {
   const [copied, setCopied] = useState(false);
   const taRef = useRef(null);
-  const shareText = `Mình vừa tạo một bộ từ vựng tiếng Hàn trên app! Vào Cộng đồng > Bộ từ vựng rồi nhập mã: ${code}`;
+  const shareText = `Mình vừa tạo một bộ từ vựng tiếng Hàn trên app! Vào Cộng đồng > Khám phá rồi nhập mã: ${code}`;
 
   const doCopy = async () => {
     let ok = false;
@@ -107,13 +111,97 @@ export function ShareCodeBox({ code, onCreateAnother }) {
   );
 }
 
-export function CustomLessonHub({ profile, onStudy }) {
+const STAT_COLORS = ['#7565E8', '#46B96B', '#F2B84B', '#EF7D7D', '#5CA7E8', '#A96CE0', '#50BFC2', '#E58E4D', '#8A93A8', '#D96C9D', '#BCC2D1'];
+
+function CustomLessonStatsModal({ lesson, onClose }) {
+  const [rows, setRows] = useState(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+
+  useEffect(() => {
+    let alive = true;
+    setRows(null);
+    setPage(1);
+    if (!supabase || !lesson?.id) return undefined;
+    supabase
+      .from('custom_lesson_results')
+      .select('user_id, score, total, percentage, completed_at, profiles!custom_lesson_results_user_id_fkey(display_name)')
+      .eq('lesson_id', lesson.id)
+      .order('percentage', { ascending: false })
+      .order('completed_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (!alive) return;
+        setRows(error ? [] : (data || []));
+      });
+    return () => { alive = false; };
+  }, [lesson?.id]);
+
+  const results = rows || [];
+  const totalPages = Math.max(1, Math.ceil(results.length / pageSize));
+  const pageRows = results.slice((page - 1) * pageSize, page * pageSize);
+  const scoreGroups = [...results.reduce((groups, row) => {
+    const score = Math.round(Number(row.percentage || 0) / 10);
+    groups.set(score, (groups.get(score) || 0) + 1);
+    return groups;
+  }, new Map()).entries()].sort((a, b) => b[0] - a[0]);
+  let cursor = 0;
+  const pieSegments = scoreGroups.map(([score, count], index) => {
+    const start = cursor;
+    cursor += results.length ? count / results.length * 100 : 0;
+    return `${STAT_COLORS[index % STAT_COLORS.length]} ${start}% ${cursor}%`;
+  });
+
+  return (
+    <div className="cl-stats-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="cl-stats-modal" role="dialog" aria-modal="true" aria-label={`Thống kê ${lesson.title}`}>
+        <header>
+          <div><BarChart3 size={20} /><span><b>Thống kê bộ từ vựng</b><small>{lesson.title}</small></span></div>
+          <button type="button" onClick={onClose} aria-label="Đóng thống kê"><X size={19} /></button>
+        </header>
+        {rows === null ? (
+          <div className="cg-loading"><Sparkles size={18} /> Đang tải thống kê...</div>
+        ) : !results.length ? (
+          <div className="cg-empty"><SwBunnyEmpty /><p>Chưa có học viên hoàn thành bài kiểm tra của bộ này.</p></div>
+        ) : (
+          <>
+            <div className="cl-stats-overview">
+              <div className="cl-score-pie" style={{ background: `conic-gradient(${pieSegments.join(', ')})` }}><span><b>{results.length}</b> học viên</span></div>
+              <div className="cl-score-legend">
+                {scoreGroups.map(([score, count], index) => (
+                  <div key={score}><i style={{ background: STAT_COLORS[index % STAT_COLORS.length] }} /><span><b>{score}/10 điểm</b><small>{count} học viên · {Math.round(count / results.length * 100)}%</small></span></div>
+                ))}
+              </div>
+            </div>
+            <div className="cl-student-results">
+              <h4><Users size={16} /> Danh sách học viên</h4>
+              {pageRows.map((row) => (
+                <div key={row.user_id}>
+                  <span><b>{row.profiles?.display_name || 'Học viên'}</b><small>{new Date(row.completed_at).toLocaleString('vi-VN')}</small></span>
+                  <strong>{Math.round(Number(row.percentage || 0) / 10)}/10</strong>
+                </div>
+              ))}
+            </div>
+            {totalPages > 1 && (
+              <div className="cl-stats-pagination">
+                <button type="button" disabled={page === 1} onClick={() => setPage((value) => value - 1)}>Trang trước</button>
+                <span>{page} / {totalPages}</span>
+                <button type="button" disabled={page === totalPages} onClick={() => setPage((value) => value + 1)}>Trang sau</button>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+export function CustomLessonHub({ profile, onStudy, onBack, mode = 'library' }) {
+  const dialog = useAppDialog();
   const [subTab, setSubTab] = useState('browse');
   const [lessons, setLessons] = useState(null);
   const [codeInput, setCodeInput] = useState('');
   const [findErr, setFindErr] = useState('');
   const [finding, setFinding] = useState(false);
-  const [savedCodes, setSavedCodes] = useState([]);
   const [savedLessons, setSavedLessons] = useState(null);
 
   const [title, setTitle] = useState('');
@@ -122,7 +210,6 @@ export function CustomLessonHub({ profile, onStudy }) {
     { ko: '', vi: '', img: '', showImg: false },
     { ko: '', vi: '', img: '', showImg: false }
   ]);
-  const [quizTypes, setQuizTypes] = useState([]);
   const [visibility, setVisibility] = useState('public');
   const [generatedDraft, setGeneratedDraft] = useState(null);
   const [attachments, setAttachments] = useState([]);
@@ -132,6 +219,7 @@ export function CustomLessonHub({ profile, onStudy }) {
   const [genStep, setGenStep] = useState('');
   const [genError, setGenError] = useState('');
   const [savedCode, setSavedCode] = useState(null);
+  const [statsLesson, setStatsLesson] = useState(null);
 
   const loadSavedCodes = async () => {
     try {
@@ -143,28 +231,8 @@ export function CustomLessonHub({ profile, onStudy }) {
         .order('created_at', { ascending: false });
       if (error) throw error;
       const items = (data || []).map((bookmark) => bookmark.custom_lessons).filter(Boolean).map(mapCustomLessonRow);
-      setSavedCodes(items.map((item) => item.code));
       setSavedLessons(items);
-    } catch (e) { setSavedCodes([]); setSavedLessons([]); }
-  };
-
-  const saveToNotebook = async (code) => {
-    if (savedCodes.includes(code)) return;
-    try {
-      if (!supabase || !profile?.id) throw new Error('Phiên đăng nhập đã hết hạn');
-      let lessonId = lessons?.find((item) => item.code === code)?.id;
-      if (!lessonId) {
-        const { data, error } = await supabase.from('custom_lessons').select('id').eq('code', code).single();
-        if (error) throw error;
-        lessonId = data.id;
-      }
-      const { error } = await supabase.from('custom_lesson_bookmarks').upsert(
-        { user_id: profile.id, lesson_id: lessonId },
-        { onConflict: 'user_id,lesson_id', ignoreDuplicates: true },
-      );
-      if (error) throw error;
-      await loadSavedCodes();
-    } catch (e) { }
+    } catch (e) { setSavedLessons([]); }
   };
 
   const removeFromNotebook = async (code) => {
@@ -174,31 +242,29 @@ export function CustomLessonHub({ profile, onStudy }) {
       if (!lessonId) return;
       const { error } = await supabase.from('custom_lesson_bookmarks').delete().eq('user_id', profile.id).eq('lesson_id', lessonId);
       if (error) throw error;
-      setSavedCodes((items) => items.filter((item) => item !== code));
       setSavedLessons((items) => (items || []).filter((item) => item.code !== code));
     } catch (e) { }
   };
 
   const loadLessons = async () => {
     try {
-      if (!supabase) throw new Error('Supabase chưa được cấu hình');
+      if (!supabase || !profile?.id) throw new Error('Phiên đăng nhập đã hết hạn');
       const { data, error } = await supabase
         .from('custom_lessons')
         .select('id, code, creator_id, title, words, quiz_types, attachments, visibility, status, created_at, profiles!custom_lessons_creator_id_fkey(display_name)')
         .eq('status', 'visible')
-        .eq('visibility', 'public')
+        .eq('creator_id', profile.id)
         .order('created_at', { ascending: false });
       if (error) throw error;
       setLessons((data || []).map(mapCustomLessonRow));
     } catch (e) { setLessons([]); }
   };
 
-  useEffect(() => { loadLessons(); loadSavedCodes(); }, []);
+  useEffect(() => { loadLessons(); loadSavedCodes(); }, [profile?.id]);
 
   const updateWord = (i, field, val) => { setGeneratedDraft(null); setWords((ws) => ws.map((w, idx) => (idx === i ? { ...w, [field]: val } : w))); };
   const addWordRow = () => { setGeneratedDraft(null); setWords((ws) => [...ws, { ko: '', vi: '', img: '', showImg: false }]); };
   const removeWordRow = (i) => { setGeneratedDraft(null); setWords((ws) => ws.filter((_, idx) => idx !== i)); };
-  const toggleQuizType = (t) => { setGeneratedDraft(null); setQuizTypes((qs) => (qs.includes(t) ? qs.filter((x) => x !== t) : [...qs, t])); };
 
   const uploadWordImage = async (i, file) => {
     if (!file) return;
@@ -219,7 +285,7 @@ export function CustomLessonHub({ profile, onStudy }) {
 
   const generatePreview = async () => {
     const validWords = words.filter((w) => w.ko.trim() && w.vi.trim());
-    if (!title.trim() || validWords.length < 2 || quizTypes.length === 0 || saving) return;
+    if (!title.trim() || validWords.length < 2 || saving) return;
     setSaving(true);
     setGenError('');
     setGenStep('ai');
@@ -240,14 +306,20 @@ export function CustomLessonHub({ profile, onStudy }) {
       setGenError('AI đang bận nên hệ thống dùng nội dung dự phòng. Bạn hãy xem trước rồi vẫn có thể lưu bình thường.');
     }
 
-    setGeneratedDraft({ title: title.trim(), words: enrichedWords, quizTypes: [...quizTypes], visibility });
+    setGeneratedDraft({ title: title.trim(), words: enrichedWords, quizTypes: DEFAULT_CUSTOM_QUIZ_TYPES, visibility });
     setGenStep('');
     setSaving(false);
   };
 
   const deleteOwnSet = async (lesson) => {
     if (!supabase || !profile?.id || lesson.creatorId !== profile.id) return;
-    const confirmed = window.confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn bộ từ vựng "${lesson.title}" không?\nThao tác này sẽ xóa toàn bộ nội dung và không thể hoàn tác.`);
+    const confirmed = await dialog.confirm({
+      title: 'Xóa bộ từ vựng?',
+      message: `Bộ từ vựng “${lesson.title}” cùng toàn bộ nội dung sẽ bị xóa vĩnh viễn và không thể hoàn tác.`,
+      variant: 'warning',
+      confirmLabel: 'Xóa bộ từ vựng',
+      cancelLabel: 'Giữ lại',
+    });
     if (!confirmed) return;
 
     try {
@@ -256,30 +328,13 @@ export function CustomLessonHub({ profile, onStudy }) {
 
       setLessons((items) => (items || []).filter((item) => item.id !== lesson.id));
       setSavedLessons((items) => (items || []).filter((item) => item.id !== lesson.id));
-      setSavedCodes((items) => items.filter((code) => code !== lesson.code));
-    } catch (err) {
-      alert('Không thể xóa bộ từ vựng lúc này. Vui lòng thử lại sau.');
+    } catch {
+      await dialog.alert({
+        title: 'Chưa thể xóa bộ từ vựng',
+        message: 'Không thể xóa bộ từ vựng lúc này. Vui lòng thử lại sau.',
+        variant: 'error',
+      });
     }
-  };
-
-  const hideOwnSet = async (lesson) => {
-    if (!supabase || lesson.creatorId !== profile?.id) return;
-    const { error } = await supabase.from('custom_lessons').update({ status: 'hidden' }).eq('id', lesson.id);
-    if (!error) {
-      setLessons((items) => (items || []).filter((item) => item.id !== lesson.id));
-      setSavedLessons((items) => (items || []).map((item) => item.id === lesson.id ? { ...item, status: 'hidden' } : item));
-    }
-  };
-
-  const reportSet = async (lesson) => {
-    if (!supabase || !profile?.id || lesson.creatorId === profile.id) return;
-    const { error } = await supabase.from('content_reports').insert({
-      reporter_id: profile.id,
-      custom_lesson_id: lesson.id,
-      reason: 'Bộ từ vựng có nội dung không phù hợp',
-    });
-    if (error) setFindErr(error.code === '23505' ? 'Bạn đã báo cáo bộ này rồi.' : 'Chưa thể gửi báo cáo lúc này.');
-    else setFindErr('Đã gửi báo cáo để quản trị viên xem xét.');
   };
 
   const saveLesson = async () => {
@@ -305,7 +360,6 @@ export function CustomLessonHub({ profile, onStudy }) {
       setSavedCode(code);
       setTitle('');
       setWords([{ ko: '', vi: '', img: '', showImg: false }, { ko: '', vi: '', img: '', showImg: false }, { ko: '', vi: '', img: '', showImg: false }]);
-      setQuizTypes([]);
       setVisibility('public');
       setGeneratedDraft(null);
       setAttachments([]);
@@ -340,7 +394,12 @@ export function CustomLessonHub({ profile, onStudy }) {
       if (error) throw error;
       if (data) {
         await loadSavedCodes();
-        onStudy(mapCustomLessonRow(data));
+        if (mode === 'community') {
+          setCodeInput('');
+          setFindErr('Đã thêm bộ từ vựng vào mục “Bộ từ vựng khác”.');
+        } else {
+          onStudy(mapCustomLessonRow(data));
+        }
       }
       else setFindErr('Không tìm thấy mã này.');
     } catch (e) {
@@ -349,110 +408,94 @@ export function CustomLessonHub({ profile, onStudy }) {
     setFinding(false);
   };
 
+  if (mode === 'community') {
+    const ownLessons = lessons || [];
+    const otherLessons = (savedLessons || []).filter((lesson) => lesson.creatorId !== profile?.id);
+    const renderCommunitySet = (lesson, own) => (
+      <div key={lesson.code} className="cl-item">
+        <div className="cl-item-body">
+          <b>{lesson.title}</b>
+          <span>{own ? 'Bộ của tôi' : `bởi ${lesson.author}`} · {lesson.words.length} từ · mã {lesson.code}</span>
+        </div>
+        <div className="cl-item-actions">
+          {own ? (
+            <button className="cl-stats-btn" onClick={() => setStatsLesson(lesson)}><BarChart3 size={15} /> Xem thống kê</button>
+          ) : (
+            <button className="cl-notebook-remove" onClick={() => removeFromNotebook(lesson.code)} aria-label="Bỏ bộ từ vựng đã thêm" title="Bỏ khỏi danh sách đã thêm"><XCircle size={16} /></button>
+          )}
+          <button className="cl-study-btn" onClick={() => onStudy(lesson)}>Học ngay</button>
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="cl-hub cl-community-discovery">
+        <div className="cl-find-card">
+          <div className="cl-find-copy">
+            <span className="cl-find-icon"><Link2 size={19} /></span>
+            <div><b>Thêm bộ từ vựng bằng mã</b><span>Nhập mã 6 ký tự do học viên khác chia sẻ.</span></div>
+          </div>
+          <div className="cl-find-row">
+            <input className="cl-find-input" value={codeInput} onChange={(event) => setCodeInput(event.target.value.toUpperCase())} placeholder="Ví dụ: AB3XZ9" maxLength={6} />
+            <button className="cl-find-btn" onClick={findByCode} disabled={!codeInput.trim() || finding}>{finding ? 'Đang thêm...' : 'Thêm bằng mã'}</button>
+          </div>
+          {findErr && <div className="cl-find-err">{findErr}</div>}
+        </div>
+
+        <div className="cl-section-title"><div><BookOpen size={17} /><b>Bộ từ vựng của tôi</b></div><span>Các bộ do chính bạn tạo.</span></div>
+        {lessons === null ? <div className="cg-loading"><Sparkles size={18} /> Đang tải...</div> : ownLessons.length ? <div className="cl-list">{ownLessons.map((lesson) => renderCommunitySet(lesson, true))}</div> : <div className="cg-empty compact"><p>Bạn chưa tạo bộ từ vựng nào.</p></div>}
+
+        <div className="cl-section-title"><div><BookMarked size={17} /><b>Bộ từ vựng khác</b></div><span>Các bộ của học viên khác mà bạn đã thêm bằng mã.</span></div>
+        {savedLessons === null ? <div className="cg-loading"><Sparkles size={18} /> Đang tải...</div> : otherLessons.length ? <div className="cl-list">{otherLessons.map((lesson) => renderCommunitySet(lesson, false))}</div> : <div className="cg-empty compact"><p>Chưa có bộ nào được thêm bằng mã.</p></div>}
+        {statsLesson && <CustomLessonStatsModal lesson={statsLesson} onClose={() => setStatsLesson(null)} />}
+      </div>
+    );
+  }
+
   return (
     <div className="cl-hub">
+      {onBack && (
+        <div className="fc2-topbar">
+          <div className="fc2-top-left">
+            <button className="fc2-back" onClick={onBack} aria-label="Về Từ vựng và Ngữ pháp"><ChevronLeft size={20} /></button>
+            <span className="fc2-title"><BookOpen size={18} color="#7C6FE4" /> Bộ từ vựng</span>
+          </div>
+        </div>
+      )}
       <div className="cg-tabs mini">
-        <button className={`cg-tab ${subTab === 'browse' ? 'on' : ''}`} onClick={() => setSubTab('browse')}>Khám phá & thư viện</button>
-        <button className={`cg-tab ${subTab === 'create' ? 'on' : ''}`} onClick={() => setSubTab('create')}>+ Tạo bộ từ vựng</button>
+        <button className={`cg-tab ${subTab === 'browse' ? 'on' : ''}`} onClick={() => setSubTab('browse')}>Thư viện</button>
+        <button className={`cg-tab ${subTab === 'create' ? 'on' : ''}`} onClick={() => setSubTab('create')}>Tạo bộ từ vựng</button>
       </div>
 
       {subTab === 'browse' ? (
         <>
-          <div className="cl-find-card">
-            <div className="cl-find-copy">
-              <span className="cl-find-icon"><Link2 size={19} /></span>
-              <div>
-                <b>Thêm bộ từ vựng bằng mã</b>
-                <span>Nhập mã 6 ký tự được bạn bè hoặc giáo viên chia sẻ.</span>
-              </div>
-            </div>
-            <div className="cl-find-row">
-              <input className="cl-find-input" value={codeInput} onChange={(e) => setCodeInput(e.target.value.toUpperCase())} placeholder="Ví dụ: AB3XZ9" maxLength={6} />
-              <button className="cl-find-btn" onClick={findByCode} disabled={!codeInput.trim() || finding}>{finding ? 'Đang tìm...' : 'Tìm bộ từ vựng'}</button>
-            </div>
-            {findErr && <div className="cl-find-err">{findErr}</div>}
-          </div>
-
-          {savedLessons === null ? null : savedLessons.length > 0 && (
-            <>
-              <p className="cg-sub" style={{ marginTop: 4 }}>📁 Thư viện của tôi — các bộ đã tạo hoặc đã lưu:</p>
-              <div className="cl-list">
-                {savedLessons.map((l) => (
-                  <div key={l.code} className="cl-item">
-                    <div className="cl-item-body">
-                      <b>{l.title}</b>
-                      <span>bởi {l.author} · {l.words.length} từ · {l.visibility === 'private' ? 'Riêng tư' : 'Công khai'} · mã {l.code}</span>
-                    </div>
-                    <div className="cl-item-actions">
-                      {l.creatorId === profile?.id ? (
-                        <button
-                          className="cl-notebook-remove"
-                          onClick={() => deleteOwnSet(l)}
-                          aria-label="Xóa bộ từ vựng"
-                          title="Xóa vĩnh viễn bộ từ vựng này"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      ) : (
-                        <button
-                          className="cl-notebook-remove"
-                          onClick={() => removeFromNotebook(l.code)}
-                          aria-label="Bỏ khỏi sổ tay"
-                          title="Bỏ khỏi sổ tay"
-                        >
-                          <XCircle size={16} />
-                        </button>
-                      )}
-                      {l.creatorId === profile?.id && l.status !== 'hidden' && (
-                        <button className="cl-notebook-remove" onClick={() => hideOwnSet(l)} title="Ẩn bộ từ vựng">
-                          <EyeOff size={16} />
-                        </button>
-                      )}
-                      <button className="cl-study-btn" onClick={() => onStudy(l)}>Học ngay</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
           <div className="cl-section-title">
-            <div><BookOpen size={17} /> <b>Khám phá bộ từ vựng cộng đồng</b></div>
-            <span>Các bộ công khai được đăng ngay, không cần chờ duyệt.</span>
+            <div><BookOpen size={17} /> <b>Bộ từ vựng của tôi</b></div>
+            <span>Chỉ hiển thị các bộ từ vựng do bạn tự tạo.</span>
           </div>
 
           {lessons === null ? (
             <div className="cg-loading"><Sparkles size={18} color="#7C6FE4" /> Đang tải...</div>
           ) : lessons.length === 0 ? (
-            <div className="cg-empty"><SwBunnyEmpty /><p>Chưa có bộ từ vựng nào được chia sẻ — hãy tạo bộ đầu tiên!</p></div>
+            <div className="cg-empty"><SwBunnyEmpty /><p>Bạn chưa tự tạo bộ từ vựng nào.</p><button className="cg-post-btn" onClick={() => setSubTab('create')}>Tạo bộ từ vựng</button></div>
           ) : (
             <div className="cl-list">
               {lessons.map((l) => (
                 <div key={l.code} className="cl-item">
                   <div className="cl-item-body">
                     <b>{l.title}</b>
-                    <span>bởi {l.author} · {l.words.length} từ · mã {l.code}</span>
+                    <span>{l.words.length} từ · {l.visibility === 'private' ? 'Riêng tư' : 'Công khai'} · mã {l.code}</span>
                   </div>
                   <div className="cl-item-actions">
-                    {!savedCodes.includes(l.code) && (
-                      <button className="cl-notebook-add" onClick={() => saveToNotebook(l.code)} aria-label="Lưu vào sổ tay" title="Lưu vào sổ tay của tôi">
-                        <BookMarked size={16} />
-                      </button>
-                    )}
-                    {l.creatorId === profile?.id ? (
-                      <button
-                        className="cl-notebook-remove"
-                        onClick={() => deleteOwnSet(l)}
-                        aria-label="Xóa bộ từ vựng"
-                        title="Xóa vĩnh viễn bộ từ vựng này"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    ) : (
-                      <button className="cl-notebook-remove" onClick={() => reportSet(l)} title="Báo cáo">
-                        <Flag size={16} />
-                      </button>
-                    )}
+                    <button
+                      className="cl-notebook-remove"
+                      onClick={() => deleteOwnSet(l)}
+                      aria-label="Xóa bộ từ vựng"
+                      title="Xóa vĩnh viễn bộ từ vựng này"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                    <button className="cl-stats-btn" onClick={() => setStatsLesson(l)}><BarChart3 size={15} /> Xem thống kê</button>
                     <button className="cl-study-btn" onClick={() => onStudy(l)}>Học ngay</button>
                   </div>
                 </div>
@@ -477,7 +520,7 @@ export function CustomLessonHub({ profile, onStudy }) {
           <label className="auth-label">Quyền riêng tư</label>
           <div className="cl-quiz-types cl-visibility-types">
             <button type="button" className={`cl-quiz-chip ${visibility === 'public' ? 'on' : ''}`} onClick={() => { setVisibility('public'); setGeneratedDraft(null); }}>
-              <Globe2 size={16} /><span>Công khai<small>Hiện trong cộng đồng và có thể lưu bằng mã</small></span>
+              <Globe2 size={16} /><span>Công khai<small>Có thể chia sẻ với người khác bằng mã</small></span>
             </button>
             <button type="button" className={`cl-quiz-chip ${visibility === 'private' ? 'on' : ''}`} onClick={() => { setVisibility('private'); setGeneratedDraft(null); }}>
               <LockKeyhole size={16} /><span>Riêng tư<small>Chỉ người có mã mới thêm được vào thư viện</small></span>
@@ -511,7 +554,7 @@ export function CustomLessonHub({ profile, onStudy }) {
               ) : (
                 <div className="cl-image-actions">
                   <label className={`cl-add-img-link ${wordUploads[i] ? 'uploading' : ''}`}>
-                    <ImageIcon size={12} /> {wordUploads[i] ? 'Đang tải lên...' : 'Tải ảnh lên Cloudinary'}
+                    <ImageIcon size={12} /> {wordUploads[i] ? 'Đang tải lên...' : 'Tải ảnh'}
                     <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={wordUploads[i]} onChange={(e) => uploadWordImage(i, e.target.files?.[0])} />
                   </label>
                   <button className="cl-add-img-link" onClick={() => updateWord(i, 'showImg', true)}><Link2 size={12} /> Dán URL</button>
@@ -521,24 +564,9 @@ export function CustomLessonHub({ profile, onStudy }) {
           ))}
           <button className="cl-add-word" onClick={addWordRow}><Plus size={13} /> Thêm từ</button>
 
-          <label className="auth-label" style={{ marginTop: 8 }}>Thể thức kiểm tra (tuỳ chọn, có thể chọn nhiều)</label>
-          <p className="cg-sub" style={{ marginTop: -6, marginBottom: 2 }}>AI sẽ tự soạn câu ví dụ + mẹo ghi nhớ cho từng từ, và tạo sẵn bài kiểm tra theo các thể thức bạn chọn.</p>
-          <div className="cl-quiz-types">
-            {[
-              { id: 'fillblank', label: 'Điền từ vào câu', note: 'Điền từ Hàn còn thiếu trong câu ví dụ' },
-              { id: 'matching', label: 'Chọn từ - nghĩa', note: 'Chọn nghĩa tiếng Việt chính xác' },
-              { id: 'usage', label: 'Chọn câu dùng đúng', note: 'Chọn câu ví dụ có dùng từ mục tiêu' },
-            ].map((qt) => (
-              <button
-                key={qt.id}
-                type="button"
-                className={`cl-quiz-chip ${quizTypes.includes(qt.id) ? 'on' : ''}`}
-                onClick={() => toggleQuizType(qt.id)}
-              >
-                {quizTypes.includes(qt.id) && <CheckCircle2 size={13} />} <span>{qt.label}<small>{qt.note}</small></span>
-              </button>
-            ))}
-          </div>
+          <p className="cg-sub cl-default-quiz-note">
+            <CheckCircle2 size={14} /> Bài kiểm tra được tạo tự động theo dạng trắc nghiệm 4 đáp án.
+          </p>
 
           {uploadError && <div className="cl-find-err">{uploadError}</div>}
           {genError && <div className="cl-find-err">{genError}</div>}
@@ -548,7 +576,6 @@ export function CustomLessonHub({ profile, onStudy }) {
             const missing = [];
             if (!title.trim()) missing.push('tên bộ từ vựng');
             if (completeCount < 2) missing.push(`ít nhất 2 từ có đủ cả tiếng Hàn và nghĩa tiếng Việt (hiện có ${completeCount})`);
-            if (quizTypes.length === 0) missing.push('ít nhất 1 thể thức kiểm tra');
             if (missing.length === 0 || saving) return null;
             return (
               <div className="cl-find-err" style={{ background: '#FFF8E6', borderColor: '#F5D98A', color: '#9A7B1E' }}>
@@ -558,7 +585,7 @@ export function CustomLessonHub({ profile, onStudy }) {
           })()}
 
           {!generatedDraft ? (
-            <button className="cg-post-btn cl-save-btn" onClick={generatePreview} disabled={!title.trim() || words.filter((w) => w.ko.trim() && w.vi.trim()).length < 2 || quizTypes.length === 0 || saving}>
+            <button className="cg-post-btn cl-save-btn" onClick={generatePreview} disabled={!title.trim() || words.filter((w) => w.ko.trim() && w.vi.trim()).length < 2 || saving}>
               {genStep === 'ai' ? (<><Sparkles size={14} /> AI đang soạn câu ví dụ & bài kiểm tra...</>) : (<><Sparkles size={14} /> Tạo nội dung & xem trước</>)}
             </button>
           ) : (
@@ -582,11 +609,13 @@ export function CustomLessonHub({ profile, onStudy }) {
           )}
         </div>
       )}
+      {statsLesson && <CustomLessonStatsModal lesson={statsLesson} onClose={() => setStatsLesson(null)} />}
     </div>
   );
 }
 
 export function CustomLessonStudyView({ lessonData, onBack, onStartQuiz }) {
+  const dialog = useAppDialog();
   const [canDelete, setCanDelete] = useState(false);
 
   useEffect(() => {
@@ -599,21 +628,31 @@ export function CustomLessonStudyView({ lessonData, onBack, onStartQuiz }) {
 
   const handleDeleteFromStudy = async () => {
     if (!supabase) return;
-    const confirmed = window.confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn bộ từ vựng "${lessonData.title}" không?\nThao tác này sẽ xóa toàn bộ nội dung và không thể hoàn tác.`);
+    const confirmed = await dialog.confirm({
+      title: 'Xóa bộ từ vựng?',
+      message: `Bộ từ vựng “${lessonData.title}” cùng toàn bộ nội dung sẽ bị xóa vĩnh viễn và không thể hoàn tác.`,
+      variant: 'warning',
+      confirmLabel: 'Xóa bộ từ vựng',
+      cancelLabel: 'Giữ lại',
+    });
     if (!confirmed) return;
     try {
       const { error } = await supabase.from('custom_lessons').delete().eq('id', lessonData.id);
       if (error) throw error;
       onBack();
     } catch (e) {
-      alert('Không thể xóa bộ từ vựng lúc này. Vui lòng thử lại sau.');
+      await dialog.alert({
+        title: 'Chưa thể xóa bộ từ vựng',
+        message: 'Không thể xóa bộ từ vựng lúc này. Vui lòng thử lại sau.',
+        variant: 'error',
+      });
     }
   };
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const total = lessonData.words.length;
   const w = lessonData.words[idx];
-  const hasQuiz = Array.isArray(lessonData.quizTypes) && lessonData.quizTypes.length > 0;
+  const hasQuiz = lessonData.words.length > 0;
 
   useEffect(() => { setFlipped(false); }, [idx]);
 
@@ -727,7 +766,7 @@ function getUsageDistractors(w, allWords) {
 
 export function buildCustomQuizQuestions(lessonData) {
   const words = (lessonData.words || []).filter((w) => w.ko?.trim() && w.vi?.trim());
-  const types = lessonData.quizTypes || [];
+  const types = DEFAULT_CUSTOM_QUIZ_TYPES;
   const pool = [];
 
   // 1. Điền từ vào câu: AI tạo câu có khuyết từ, cho 4 đáp án chọn
@@ -925,6 +964,7 @@ export function CustomLessonTestView({ lessonData, onBack }) {
   const [score, setScore] = useState(0);
   const [cardStageDone, setCardStageDone] = useState(false);
   const [done, setDone] = useState(false);
+  const resultSavedRef = useRef(false);
   const q = questions[idx];
 
   useEffect(() => {
@@ -960,11 +1000,31 @@ export function CustomLessonTestView({ lessonData, onBack }) {
     setScore((s) => s + 1);
   };
 
+  const saveResult = async () => {
+    if (resultSavedRef.current || !supabase || !lessonData?.id || questions.length === 0) return;
+    resultSavedRef.current = true;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) return;
+      const { error } = await supabase.from('custom_lesson_results').upsert({
+        lesson_id: lessonData.id,
+        user_id: user.id,
+        score,
+        total: questions.length,
+        completed_at: new Date().toISOString(),
+      }, { onConflict: 'lesson_id,user_id' });
+      if (error) throw error;
+    } catch (error) {
+      resultSavedRef.current = false;
+    }
+  };
+
   const next = () => {
     if (idx + 1 < questions.length) {
       setIdx((i) => i + 1);
     } else {
       setDone(true);
+      void saveResult();
     }
   };
 
@@ -979,7 +1039,7 @@ export function CustomLessonTestView({ lessonData, onBack }) {
         </div>
         <div className="fc-nav">
           <button className="fc-nav-btn" onClick={onBack}>Về bộ từ vựng</button>
-          <button className="fc-nav-btn primary" onClick={() => { setIdx(0); setPicked(null); setCardStageDone(false); setScore(0); setDone(false); }}>
+          <button className="fc-nav-btn primary" onClick={() => { resultSavedRef.current = false; setIdx(0); setPicked(null); setCardStageDone(false); setScore(0); setDone(false); }}>
             Làm lại bài kiểm tra
           </button>
         </div>

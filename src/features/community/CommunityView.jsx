@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  MessageCircle, MessageSquare, BookOpen, ChevronLeft, Plus, Sparkles,
+  MessageCircle, MessageSquare, Compass, ChevronLeft, Plus, Sparkles,
   Heart, MessageCircle as MessageCircleIcon, Flag, Trash2, CheckCircle2, Lock
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -9,9 +9,11 @@ import { SwBunnyEmpty } from '../../components/common/Mascots';
 import CommentSection from './CommentSection';
 import ReportPostModal from './ReportPostModal';
 import { CustomLessonHub } from './CustomLessons';
+import { useAppDialog } from '../../components/common/AppDialog';
 
-export default function CommunityView({ profile, onBack, onStudyCustomLesson, hideHeader }) {
-  const [tab, setTab] = useState('feed'); // 'feed' | 'lessons'
+export default function CommunityView({ profile, onBack, onStudyCustomLesson, hideHeader, initialTab = 'feed' }) {
+  const dialog = useAppDialog();
+  const [tab, setTab] = useState(initialTab);
   const [posts, setPosts] = useState(null);
   const [liked, setLiked] = useState({});
   const [openComments, setOpenComments] = useState({});
@@ -105,13 +107,27 @@ export default function CommunityView({ profile, onBack, onStudyCustomLesson, hi
 
   const deletePost = async (post) => {
     if (deletingKey) return;
+    const confirmed = await dialog.confirm({
+      title: 'Xóa bài viết?',
+      message: 'Bài viết cùng toàn bộ bình luận liên quan sẽ bị xóa vĩnh viễn và không thể hoàn tác.',
+      variant: 'warning',
+      confirmLabel: 'Xóa bài viết',
+      cancelLabel: 'Giữ lại',
+    });
+    if (!confirmed) return;
     setDeletingKey(post.key);
     try {
       if (!supabase) throw new Error('Supabase chưa được cấu hình');
       const { error } = await supabase.from('posts').delete().eq('id', post.key);
       if (error) throw error;
       setPosts((ps) => ps.filter((p) => p.key !== post.key));
-    } catch (e) { }
+    } catch (e) {
+      await dialog.alert({
+        title: 'Chưa thể xóa bài viết',
+        message: 'Không thể xóa bài viết lúc này. Vui lòng thử lại sau.',
+        variant: 'error',
+      });
+    }
     setDeletingKey(null);
   };
 
@@ -149,16 +165,12 @@ export default function CommunityView({ profile, onBack, onStudyCustomLesson, hi
       ) : null}
 
       <div className="cg-tabs sub-community-tabs">
-        <button className={`cg-tab ${tab === 'feed' ? 'on' : ''}`} onClick={() => setTab('feed')}>
-          <MessageSquare size={16} /> <span>Bảng tin</span>
-        </button>
-        <button className={`cg-tab ${tab === 'lessons' ? 'on' : ''}`} onClick={() => setTab('lessons')}>
-          <BookOpen size={16} /> <span>Bộ từ vựng</span>
-        </button>
+        <button className={`cg-tab ${tab === 'feed' ? 'on' : ''}`} onClick={() => setTab('feed')}><MessageSquare size={16} /> Bảng tin</button>
+        <button className={`cg-tab ${tab === 'discover' ? 'on' : ''}`} onClick={() => setTab('discover')}><Compass size={16} /> Khám phá</button>
       </div>
 
       {tab === 'feed' ? (
-        <>
+      <>
           <p className="cg-sub">Nơi mọi người học chia sẻ câu hay, mẹo nhớ, hay trải nghiệm học tập — mọi người dùng app đều thấy chung một bảng tin.</p>
 
           {!showCompose ? (
@@ -255,9 +267,9 @@ export default function CommunityView({ profile, onBack, onStudyCustomLesson, hi
               })}
             </div>
           )}
-        </>
+      </>
       ) : (
-        <CustomLessonHub profile={profile} onStudy={onStudyCustomLesson} />
+        <CustomLessonHub profile={profile} onStudy={onStudyCustomLesson} mode="community" />
       )}
 
       {toastMessage && (

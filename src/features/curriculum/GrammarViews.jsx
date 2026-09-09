@@ -10,9 +10,20 @@ const normalizeSearchText = (value = '') => String(value)
   .replace(/[\u0300-\u036f]/g, '')
   .trim();
 
-export function GrammarHubView({ onBack, onAddBook, onOpenNotebook, books = [], vocabulary = [], grammar = [], userId }) {
+export function GrammarHubView({
+  onBack,
+  onAddBook,
+  onOpenVocabularySets,
+  books = [],
+  vocabulary = [],
+  grammar = [],
+  userId,
+  initialStarredOnly = false,
+  onStarredOnlyChange,
+}) {
   const [tab, setTab] = useState('vocab');
   const [vocabState, setVocabState] = useState({});
+  const [starredOnly, setStarredOnly] = useState(initialStarredOnly);
   const [query, setQuery] = useState('');
   const [textbookFilter, setTextbookFilter] = useState('all');
   const identifiedWords = useMemo(() => vocabulary
@@ -40,6 +51,7 @@ export function GrammarHubView({ onBack, onAddBook, onOpenNotebook, books = [], 
   );
   const visibleVocabulary = useMemo(() => scopedVocabulary.filter((item) => {
     if (!matchesTextbook(item)) return false;
+    if (starredOnly && !vocabState[item.word]?.starred) return false;
     if (!normalizedQuery) return true;
     const book = item?.textbookId ? textbookById.get(item.textbookId) : null;
     const haystack = normalizeSearchText([
@@ -51,7 +63,11 @@ export function GrammarHubView({ onBack, onAddBook, onOpenNotebook, books = [], 
       book?.title || book?.titleKo || book?.titleVi,
     ].filter(Boolean).join(' '));
     return haystack.includes(normalizedQuery);
-  }), [scopedVocabulary, textbookFilter, normalizedQuery, textbookById, vocabulary.length, grammar.length]);
+  }), [scopedVocabulary, textbookFilter, normalizedQuery, textbookById, vocabulary.length, grammar.length, starredOnly, vocabState]);
+  const starredCount = useMemo(
+    () => scopedVocabulary.filter((item) => vocabState[item.word]?.starred).length,
+    [scopedVocabulary, vocabState],
+  );
   const visibleGrammar = useMemo(() => scopedGrammar.filter((item) => {
     if (!matchesTextbook(item)) return false;
     if (!normalizedQuery) return true;
@@ -126,7 +142,25 @@ export function GrammarHubView({ onBack, onAddBook, onOpenNotebook, books = [], 
                 ))}
               </select>
             </label>
-            <button type="button" className="cg-post-btn content-library-notebook-btn" onClick={onOpenNotebook}><BookMarked size={16} /> Sổ tay từ vựng</button>
+            <div className="content-library-quick-actions">
+              <button
+                type="button"
+                className={`content-library-starred-filter ${starredOnly ? 'on' : ''}`}
+                onClick={() => {
+                  const nextValue = !starredOnly;
+                  setStarredOnly(nextValue);
+                  onStarredOnlyChange?.(nextValue);
+                  setTab('vocab');
+                }}
+                aria-pressed={starredOnly}
+                title={starredOnly ? 'Hiện lại tất cả từ vựng' : 'Chỉ hiện các từ đã đánh dấu sao'}
+              >
+                <BookMarked size={16} /> Sổ tay từ vựng <span>{starredCount}</span>
+              </button>
+              <button type="button" className="cg-post-btn content-library-notebook-btn" onClick={onOpenVocabularySets}>
+                <BookOpen size={16} /> Bộ từ vựng
+              </button>
+            </div>
           </div>
           <div className="fc2-content-tabs content-library-tabs" role="tablist" aria-label="Chọn loại nội dung">
             <button className={`fc2-content-tab ${tab === 'vocab' ? 'on' : ''}`} onClick={() => setTab('vocab')} role="tab" aria-selected={tab === 'vocab'}>
@@ -152,7 +186,13 @@ export function GrammarHubView({ onBack, onAddBook, onOpenNotebook, books = [], 
                     </button>
                   </div>
                 );
-              }) : <div className="content-library-empty">Không tìm thấy từ vựng phù hợp với bộ lọc hiện tại.</div>}
+              }) : (
+                <div className="content-library-empty">
+                  {starredOnly
+                    ? 'Hãy bấm biểu tượng ngôi sao ở danh sách từ vựng để lưu những từ bạn muốn ôn lại.'
+                    : 'Không tìm thấy từ vựng phù hợp với bộ lọc hiện tại.'}
+                </div>
+              )}
             </div>
           ) : (
             <div className="grammar-catalog-list content-library-list">

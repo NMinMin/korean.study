@@ -389,6 +389,12 @@ async function deleteStorageAsset(url?: string | null): Promise<void> {
     return { data }
   })
 
+  app.delete<{ Params: { id: string } }>('/admin/community/custom-lessons/:id', async (request, reply) => {
+    const { error } = await supabaseAdmin.from('custom_lessons').delete().eq('id', request.params.id)
+    if (error) return reply.code(400).send({ code: 'CUSTOM_LESSON_DELETE_FAILED', message: 'Không thể xóa bộ từ vựng.', requestId: request.id })
+    return reply.code(204).send()
+  })
+
   app.patch<{ Params: { id: string }; Body: { hidden?: boolean; commentsLocked?: boolean; reason?: string } }>('/admin/community/posts/:id', async (request, reply) => {
     if (request.body.hidden === undefined && request.body.commentsLocked === undefined) return reply.code(400).send({ code: 'MODERATION_ACTION_REQUIRED', message: 'Chưa chọn thao tác kiểm duyệt.', requestId: request.id })
     const patch = {
