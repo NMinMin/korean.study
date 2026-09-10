@@ -86,6 +86,19 @@ export default function AuthPage() {
         await auth.signIn(cleanEmail, password, remember)
       } else {
         const result = await auth.signUp({ displayName: displayName.trim(), email: cleanEmail, password, remember })
+        if (result.emailAlreadyRegistered) {
+          setBusy(false)
+          await dialog.alert({
+            title: 'Email đã được đăng ký',
+            message: 'Email này đã có tài khoản. Vui lòng đăng nhập hoặc dùng “Quên mật khẩu” nếu bạn không nhớ mật khẩu.',
+            variant: 'warning',
+            confirmLabel: 'Đăng nhập',
+          })
+          setMode('login')
+          setPassword('')
+          setConfirmPassword('')
+          return
+        }
         if (result.needsEmailConfirmation) {
           setBusy(false)
           await dialog.alert({ title: 'Hãy kiểm tra email', message: 'Tài khoản đã được tạo. Mở email chúng tôi vừa gửi để xác minh tài khoản trước khi đăng nhập.', variant: 'success', confirmLabel: 'Đã hiểu' })

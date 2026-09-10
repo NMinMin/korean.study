@@ -20,7 +20,7 @@ type AuthContextValue = {
   profile: AppProfile | null
   passwordRecovery: boolean
   signIn: (email: string, password: string, remember?: boolean) => Promise<void>
-  signUp: (input: SignUpInput) => Promise<{ needsEmailConfirmation: boolean }>
+  signUp: (input: SignUpInput) => Promise<{ needsEmailConfirmation: boolean; emailAlreadyRegistered: boolean }>
   requestPasswordReset: (email: string) => Promise<void>
   updatePassword: (password: string) => Promise<void>
   signOut: () => Promise<void>
@@ -258,12 +258,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearSessionPreference()
         throw error
       }
+      // Khi bật xác nhận email, Supabase không trả lỗi rõ ràng cho địa chỉ đã
+      // tồn tại nhằm hạn chế dò tài khoản. Phản hồi giả này có identities rỗng.
+      const emailAlreadyRegistered = Boolean(data.user && data.user.identities?.length === 0)
+      if (emailAlreadyRegistered) {
+        clearSessionPreference()
+        return { needsEmailConfirmation: false, emailAlreadyRegistered: true }
+      }
       if (data.session) {
         startRememberedSessionLifetime()
       } else {
         clearSessionPreference()
       }
-      return { needsEmailConfirmation: !data.session }
+      return { needsEmailConfirmation: !data.session, emailAlreadyRegistered: false }
     },
     async requestPasswordReset(email) {
       if (!supabase) throw new Error('Supabase chưa được cấu hình.')
