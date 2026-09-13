@@ -30,7 +30,7 @@ import {
   playCelebrationSound,
 } from './services/audioService';
 
-import { computeAndSyncUserStats } from './features/dashboard/progressService';
+import { computeAndSyncUserStats, computeRadarStats } from './features/dashboard/progressService';
 import { supabase } from './lib/supabase';
 import notificationSoundUrl from '../Sound Effect/Notification.mp3';
 import { playEffect } from './services/audioService';
@@ -644,7 +644,12 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                   />
                   <RankPreviewCard profile={profile} onOpen={openLeaderboard} />
                 </div>
-                <PersonalProgressSection profile={profile} lesson={primaryLesson} vocabulary={catalogVocabulary} />
+                <PersonalProgressSection
+                  profile={profile}
+                  lesson={primaryLesson}
+                  vocabulary={catalogVocabulary}
+                  computeRadarStats={computeRadarStats}
+                />
                 <div className="mid-row">
                   <ReviewSchedule
                     userId={profile.id}
@@ -870,7 +875,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             {view === 'curriculum-hub' && (
               <CurriculumHubView
                 myBooks={learningCatalog?.myTextbooks || []}
-                availableBooks={learningCatalog?.discoverTextbooks || []}
+                availableBooks={learningCatalog?.availableTextbooks || []}
                 addingBookId={addingTextbookId}
                 notice={catalogNotice}
                 onBack={goHome}

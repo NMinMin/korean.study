@@ -395,6 +395,14 @@ export async function addUserTextbook(textbookId: string): Promise<void> {
   if (!supabase) throw new Error('Supabase chưa được cấu hình')
   const userId = await currentAuthUserId()
   if (!userId) throw new Error('Bạn cần đăng nhập để thêm giáo trình')
+  const { data: textbook, error: textbookError } = await supabase
+    .from('textbooks')
+    .select('id')
+    .eq('id', textbookId)
+    .eq('status', 'published')
+    .maybeSingle()
+  if (textbookError) throw textbookError
+  if (!textbook) throw new Error('Giáo trình này chưa được xuất bản')
   const { error } = await supabase.from('user_textbooks').upsert(
     { user_id: userId, textbook_id: textbookId, status: 'studying' },
     { onConflict: 'user_id,textbook_id' },

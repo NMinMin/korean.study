@@ -145,9 +145,8 @@ export function QuickAccessMenu({ onDictation, onShadowing, onReview, onNotebook
       <div className="card-title"><Sparkles size={19} color="#7C6FE4" /> Truy cập nhanh</div>
       <div className="qa-grid">
         {items.map((it) => (
-          <button key={it.label} className="qa-card" style={{ background: it.bg }} onClick={it.onClick}>
+          <button key={it.label} className="qa-card" style={{ background: it.bg }} onClick={it.onClick} aria-label={it.label}>
             <it.icon size={26} color={it.color} />
-            <span style={{ color: it.color }}>{it.label}</span>
           </button>
         ))}
       </div>
