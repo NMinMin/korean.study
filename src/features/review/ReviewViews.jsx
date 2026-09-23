@@ -498,7 +498,7 @@ export function ReviewLessonSelectView({ onBack, onNext, lessons = FALLBACK_LESS
 }
 
 
-export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, dictationLines = SHADOW_LINES, shadowingLines = SHADOW_LINES, onBack, onStart }) {
+export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, dictationLines = SHADOW_LINES, shadowingLines = SHADOW_LINES, hasExamTextbook = true, onOpenCurriculum, onBack, onStart }) {
   const [stars, setStars] = useState(3);
   const [hasStandard, setHasStandard] = useState(null); // random mode: null=đang kiểm tra, false=lần đầu (đề chuẩn), true=đã làm rồi (đề mới)
   const poolSize = useMemo(() => buildReviewPool(vocabulary, grammar, dictationLines).length, [vocabulary, grammar, dictationLines]);
@@ -524,9 +524,26 @@ export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabul
   }, [stars, mode, lesson, userId]);
 
   const startExam = () => {
+    if (!hasExamTextbook || poolSize === 0) return;
     const useSeed = mode === "random" && hasStandard === false;
     onStart(diff, useSeed);
   };
+
+  if (!hasExamTextbook || poolSize === 0) {
+    return (
+      <section className="rv-page rv-review-setup">
+        <button className="fc2-back" onClick={onBack} aria-label="Về trang chủ"><ChevronLeft size={20} /></button>
+        <div className="cg-empty" role="status">
+          <BookOpen size={36} color="#7C6FE4" />
+          <h2>Chưa có tài liệu để thi thử</h2>
+          <p>{!hasExamTextbook
+            ? 'Bạn cần thêm giáo trình vào danh sách của mình và học các bài trong giáo trình để có tài liệu luyện thi.'
+            : 'Giáo trình đang chọn chưa có đủ nội dung để tạo đề. Hãy chọn giáo trình có từ vựng, ngữ pháp hoặc bài nghe và bắt đầu học nhé.'}</p>
+          {onOpenCurriculum && <button className="rv-start-btn" onClick={onOpenCurriculum}>Đến giáo trình <ChevronRight size={18} /></button>}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="rv-page rv-review-setup">
@@ -542,7 +559,7 @@ export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabul
           <p className="rv-sub">
             {mode === "bylesson"
               ? "Chọn độ khó — hệ thống chỉ lấy câu hỏi trong đúng phạm vi bài bạn đã chọn."
-              : "Đề được lấy ngẫu nhiên từ các bài đã học; sao càng cao thì phạm vi và số dạng câu càng lớn."}
+              : "Đề được lấy từ các bài có nội dung trong giáo trình đang chọn. Bạn nên học trước khi thi thử; sao càng cao thì số dạng câu càng lớn."}
           </p>
           <div className="rv-stat-row">
             {stats.map((s, i) => (
@@ -595,7 +612,7 @@ export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabul
         )}
 
         <button className="rv-start-btn rv-start-btn-full" onClick={startExam}>
-          {mode === "random" && hasStandard === false ? "Làm đề thi chuẩn" : mode === "random" ? "Bắt đầu thi thử" : "Bắt đầu ôn bài"} <ChevronRight size={18} />
+          {mode === "random" && hasStandard === false ? "Làm đề thi chuẩn" : mode !== "bylesson" ? "Bắt đầu thi thử" : "Bắt đầu ôn bài"} <ChevronRight size={18} />
         </button>
       </div>
 

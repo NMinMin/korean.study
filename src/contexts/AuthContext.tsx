@@ -249,9 +249,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
         options: {
           data: { display_name: displayName },
-          emailRedirectTo: import.meta.env.BASE_URL === '/'
-            ? `${window.location.origin}/auth/callback`
-            : `${window.location.origin}${import.meta.env.BASE_URL}#/auth/callback`,
+          // Keep the fragment free for Supabase's confirmation tokens, including
+          // static deployments that use HashRouter.
+          emailRedirectTo: new URL(import.meta.env.BASE_URL, window.location.origin).href,
         },
       })
       if (error) {
