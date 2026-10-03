@@ -4,6 +4,7 @@ import {
   Bell, XCircle
 } from 'lucide-react';
 import { todayStr } from '../../utils/streakUtils';
+import { usePreferences } from '../../contexts/PreferencesContext';
 import {
   isCelebrationSoundEnabled,
   getSoundVolume,
@@ -24,6 +25,7 @@ import {
 const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 function TargetDatePicker({ value, onChange }) {
+  const { t, language } = usePreferences();
   const initialDate = value ? new Date(`${value}T00:00:00`) : new Date();
   const [open, setOpen] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(initialDate.getFullYear(), initialDate.getMonth(), 1));
@@ -48,8 +50,8 @@ function TargetDatePicker({ value, onChange }) {
   ];
   const selectedDate = value ? new Date(`${value}T00:00:00`) : null;
   const displayValue = selectedDate
-    ? selectedDate.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
-    : 'Chọn ngày';
+    ? selectedDate.toLocaleDateString(language, { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : t('Chọn ngày');
 
   return (
     <div className="target-date-picker" ref={rootRef}>
@@ -57,13 +59,13 @@ function TargetDatePicker({ value, onChange }) {
         <CalendarDays size={17} /> <span>{displayValue}</span>
       </button>
       {open && (
-        <div className="target-date-popover" role="dialog" aria-label="Chọn ngày mục tiêu hoàn thành">
+        <div className="target-date-popover" role="dialog" aria-label={t('Chọn ngày mục tiêu hoàn thành')}>
           <div className="target-date-nav">
-            <button type="button" onClick={() => setVisibleMonth(new Date(year, month - 1, 1))} aria-label="Tháng trước"><ChevronLeft size={17} /></button>
-            <b>Tháng {month + 1}, {year}</b>
-            <button type="button" onClick={() => setVisibleMonth(new Date(year, month + 1, 1))} aria-label="Tháng sau"><ChevronRight size={17} /></button>
+            <button type="button" onClick={() => setVisibleMonth(new Date(year, month - 1, 1))} aria-label={t('Tháng trước')}><ChevronLeft size={17} /></button>
+            <b>{visibleMonth.toLocaleDateString(language, { month: 'long', year: 'numeric' })}</b>
+            <button type="button" onClick={() => setVisibleMonth(new Date(year, month + 1, 1))} aria-label={t('Tháng sau')}><ChevronRight size={17} /></button>
           </div>
-          <div className="target-date-weekdays">{['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((day) => <span key={day}>{day}</span>)}</div>
+          <div className="target-date-weekdays">{['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((day) => <span key={day}>{t(day)}</span>)}</div>
           <div className="target-date-grid">
             {cells.map((date, index) => date ? (
               <button
@@ -75,8 +77,8 @@ function TargetDatePicker({ value, onChange }) {
             ) : <span key={`empty-${index}`} />)}
           </div>
           <div className="target-date-actions">
-            <button type="button" onClick={() => setVisibleMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}>Hôm nay</button>
-            {value && <button type="button" className="clear" onClick={() => { onChange(null); setOpen(false); }}>Xóa ngày</button>}
+            <button type="button" onClick={() => setVisibleMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}>{t('Hôm nay')}</button>
+            {value && <button type="button" className="clear" onClick={() => { onChange(null); setOpen(false); }}>{t('Xóa ngày')}</button>}
           </div>
         </div>
       )}
@@ -85,6 +87,7 @@ function TargetDatePicker({ value, onChange }) {
 }
 
 export default function SettingsView({ onBack, userId, lesson, vocabulary, textbookTitle, computeHomeProgress }) {
+  const { theme, language, setTheme, setLanguage, t } = usePreferences();
   const [goal, setGoal] = useState(() => getCachedDailyGoal(userId));
   const [plan, setPlan] = useState(() => getCachedStudyPlan(userId));
   const [overallPct, setOverallPct] = useState(0);
@@ -152,20 +155,28 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
     <section className="cg-page wide-page settings-wide-page">
       <div className="fc2-topbar">
         <div className="fc2-top-left">
-          <button className="fc2-back" onClick={onBack} aria-label="Về trang chủ"><ChevronLeft size={20} /></button>
-          <span className="fc2-title"><Settings size={18} color="#8B85AB" /> Cài đặt</span>
+          <button className="fc2-back" onClick={onBack} aria-label={t('Về trang chủ')}><ChevronLeft size={20} /></button>
+          <span className="fc2-title"><Settings size={18} color="#8B85AB" /> {t('Cài đặt')}</span>
         </div>
       </div>
 
+      <div className="settings-card settings-appearance-card">
+        <div className="settings-card-title"><span><Settings size={20} /></span><div>{t('Giao diện & Ngôn ngữ')}<small>{t('Tùy chỉnh trải nghiệm của bạn')}</small></div></div>
+        <div className="settings-row"><div className="settings-row-label"><b>{t('Giao diện')}</b></div><div className="settings-theme-options" role="group" aria-label={t('Giao diện')}>
+          {[['light', 'Sáng'], ['dark', 'Tối'], ['system', 'Theo hệ thống']].map(([value, label]) => <button type="button" key={value} aria-pressed={theme === value} onClick={() => setTheme(value)}>{t(label)}</button>)}
+        </div></div>
+        <div className="settings-row"><label className="settings-row-label" htmlFor="interface-language"><b>{t('Ngôn ngữ')}</b></label><select id="interface-language" className="settings-language-select" value={language} onChange={(event) => setLanguage(event.target.value)}><option value="vi">Tiếng Việt</option><option value="en">English</option><option value="ko">한국어</option></select></div>
+        <p className="settings-hint">{t('Áp dụng ngay và tự lưu trên trình duyệt này')}</p>
+      </div>
       <div className="settings-card">
-        {syncing && <div className="settings-sync-note" role="status">Đang đồng bộ cài đặt…</div>}
-        <div className="settings-card-title"><span><Target size={20} /></span><div>Kế hoạch học tập<small>Tạo nhịp học phù hợp với bạn</small></div></div>
-        <p className="settings-hint">Đặt mục tiêu và lịch học để duy trì động lực lâu dài — tất cả đều dựa trên tiến độ thật của bạn.</p>
+        {syncing && <div className="settings-sync-note" role="status">{t('Đang đồng bộ cài đặt…')}</div>}
+        <div className="settings-card-title"><span><Target size={20} /></span><div>{t('Kế hoạch học tập')}<small>{t('Tạo nhịp học phù hợp với bạn')}</small></div></div>
+        <p className="settings-hint">{t('Đặt mục tiêu và lịch học để duy trì động lực lâu dài — tất cả đều dựa trên tiến độ thật của bạn.')}</p>
 
         <div className="settings-row settings-goal-row">
           <div className="settings-row-label">
-            <b>Mục tiêu mỗi ngày</b>
-            <span>Số phút học tối thiểu bạn muốn đạt mỗi ngày</span>
+            <b>{t('Mục tiêu mỗi ngày')}</b>
+            <span>{t('Số phút học tối thiểu bạn muốn đạt mỗi ngày')}</span>
           </div>
           <div className="settings-minute-input">
             <input
@@ -173,33 +184,33 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
               onChange={(e) => { goalDirtyRef.current = true; setGoal((g) => ({ ...g, targetMinutes: e.target.value === '' ? '' : parseInt(e.target.value, 10) })); }}
               onBlur={(e) => { goalDirtyRef.current = true; setGoal((g) => ({ ...g, targetMinutes: Math.max(5, Math.min(180, parseInt(e.target.value, 10) || 15)) })); }}
             />
-            <span>phút</span>
+            <span>{t('phút')}</span>
           </div>
         </div>
 
         <div className="settings-row settings-date-row">
           <div className="settings-row-label">
-            <b>Ngày mục tiêu hoàn thành</b>
-            <span>Đặt hạn để hoàn thành {textbookTitle || 'giáo trình đang học'}</span>
+            <b>{t('Ngày mục tiêu hoàn thành')}</b>
+            <span>{t('Đặt hạn để hoàn thành')} {textbookTitle || t('giáo trình đang học')}</span>
           </div>
           <TargetDatePicker value={plan.targetDate} onChange={(targetDate) => update({ targetDate })} />
         </div>
         {plan.targetDate && (
           <div className={`settings-projection ${daysLeft < 0 ? 'overdue' : ''}`}>
             <CalendarDays size={14} />
-            {daysLeft >= 0 ? <>Còn <b>{daysLeft}</b> ngày</> : <>Đã trễ <b>{Math.abs(daysLeft)}</b> ngày</>} · Đã hoàn thành <b>{overallPct}%</b> giáo trình
+            {daysLeft >= 0 ? <>{t('Còn')} <b>{daysLeft}</b> {t('ngày')}</> : <>{t('Đã trễ')} <b>{Math.abs(daysLeft)}</b> {t('ngày')}</>} · {t('Đã hoàn thành')} <b>{overallPct}%</b> {t('giáo trình')}
           </div>
         )}
 
         <div className="settings-row column settings-schedule-row">
           <div className="settings-row-label">
-            <b>Lịch học trong tuần</b>
-            <span>Chọn những ngày bạn dự định học</span>
+            <b>{t('Lịch học trong tuần')}</b>
+            <span>{t('Chọn những ngày bạn dự định học')}</span>
           </div>
           <div className="settings-week-row">
             {WEEK_DAYS.map((d) => (
               <button key={d.key} className={`settings-day-btn ${plan.weeklySchedule[d.key] ? 'on' : ''}`} onClick={() => toggleDay(d.key)}>
-                {d.label}
+                {t(d.label)}
               </button>
             ))}
           </div>
@@ -207,31 +218,31 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
 
         <div className="settings-row settings-reminder-row">
           <div className="settings-row-label">
-            <b>Nhắc nhở học mỗi ngày</b>
-            <span>Gửi email vào khung giờ cố định nếu hôm nay chưa học</span>
+            <b>{t('Nhắc nhở học mỗi ngày')}</b>
+            <span>{t('Gửi email vào khung giờ cố định nếu hôm nay chưa học')}</span>
           </div>
-          <button className={`settings-toggle ${plan.reminderEnabled ? 'on' : ''}`} onClick={() => update({ reminderEnabled: !plan.reminderEnabled })} aria-label="Bật/tắt nhắc nhở">
+          <button className={`settings-toggle ${plan.reminderEnabled ? 'on' : ''}`} onClick={() => update({ reminderEnabled: !plan.reminderEnabled })} aria-label={t('Bật/tắt nhắc nhở')}>
             <span className="settings-toggle-knob" />
           </button>
         </div>
         {plan.reminderEnabled && (
           <div className="settings-row settings-time-row">
-            <div className="settings-row-label"><b>Giờ nhắc</b></div>
+            <div className="settings-row-label"><b>{t('Giờ nhắc')}</b></div>
             <input type="time" className="settings-time-input" value={plan.reminderTime} onChange={(e) => update({ reminderTime: e.target.value })} />
           </div>
         )}
         <div className="settings-row settings-sound-row">
           <div className="settings-row-label">
-            <b>Âm thanh hiệu ứng</b>
-            <span>Phát khi trả lời đúng/sai, đạt mục tiêu và hoàn thành bài học</span>
+            <b>{t('Âm thanh hiệu ứng')}</b>
+            <span>{t('Phát khi trả lời đúng/sai, đạt mục tiêu và hoàn thành bài học')}</span>
           </div>
-          <button className={`settings-toggle ${celebrationSound ? 'on' : ''}`} onClick={() => { soundDirtyRef.current = true; setCelebrationSound((enabled) => !enabled); }} aria-label="Bật/tắt âm thanh chúc mừng" aria-pressed={celebrationSound}>
+          <button className={`settings-toggle ${celebrationSound ? 'on' : ''}`} onClick={() => { soundDirtyRef.current = true; setCelebrationSound((enabled) => !enabled); }} aria-label={t('Bật/tắt âm thanh chúc mừng')} aria-pressed={celebrationSound}>
             <span className="settings-toggle-knob" />
           </button>
         </div>
         <div className={`settings-row settings-volume-row ${celebrationSound ? '' : 'disabled'}`}>
           <div className="settings-row-label">
-            <b>Âm lượng</b>
+            <b>{t('Âm lượng')}</b>
             <span>{Math.round(soundVolume * 100)}%</span>
           </div>
           <input
@@ -247,18 +258,18 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
               localStorage.setItem(SOUND_VOLUME_KEY, String(nextVolume));
             }}
             onPointerUp={() => playEffect(correctSoundUrl)}
-            aria-label="Âm lượng hiệu ứng"
+            aria-label={t('Âm lượng hiệu ứng')}
           />
         </div>
         {plan.reminderEnabled && (
           <p className="settings-note">
-            <Lightbulb size={13} color="#E8A93D" /> Hệ thống sẽ gửi email nhắc học theo múi giờ tài khoản và vẫn hiện banner khi bạn đang mở ứng dụng.
+            <Lightbulb size={13} color="#E8A93D" /> {t('Hệ thống sẽ gửi email nhắc học theo múi giờ tài khoản và vẫn hiện banner khi bạn đang mở ứng dụng.')}
           </p>
         )}
         {notifPermNote && <p className="settings-note">{notifPermNote}</p>}
 
         <button className="cg-post-btn settings-save-btn" onClick={save}>
-          {saved ? <><CheckCircle2 size={15} /> Đã lưu!</> : 'Lưu kế hoạch học tập'}
+          {saved ? <><CheckCircle2 size={15} /> {t('Đã lưu!')}</> : t('Lưu kế hoạch học tập')}
         </button>
       </div>
     </section>

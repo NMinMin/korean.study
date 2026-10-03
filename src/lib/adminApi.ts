@@ -18,10 +18,11 @@ export async function adminApi<T>(path: string, init?: RequestInit): Promise<T> 
   })
   const payload = response.status === 204 ? null : await response.json().catch(() => null)
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401 || payload?.code === 'ACCOUNT_LOCKED') {
       window.dispatchEvent(new CustomEvent('kstudy:auth-expired'))
       throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
     }
+    if (response.status === 403) throw new Error(payload?.message || 'Bạn không có quyền thực hiện thao tác này.')
     if (response.status === 404) throw new Error('Backend đang chạy bản cũ hoặc sai địa chỉ API. Hãy build và khởi động lại backend.')
     throw new Error(payload?.message || 'Thao tác quản trị thất bại.')
   }

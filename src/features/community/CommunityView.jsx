@@ -81,7 +81,7 @@ export default function CommunityView({ profile, onBack, onStudyCustomLesson, hi
       setDraft('');
       setShowCompose(false);
       await loadPosts();
-    } catch (e) { }
+    } catch (e) { showToast('❌ ' + (e?.message || 'Không thể đăng bài viết lúc này.')); }
     setPosting(false);
   };
 
@@ -98,7 +98,7 @@ export default function CommunityView({ profile, onBack, onStudyCustomLesson, hi
       setPosts((current) => current.map((item) => item.key === post.key
         ? { ...item, likes: Math.max(0, (item.likes || 0) + (wasLiked ? -1 : 1)) }
         : item));
-    } catch (e) { }
+    } catch (e) { showToast('❌ ' + (e?.message || 'Không thể cập nhật lượt thích lúc này.')); }
   };
 
   const toggleComments = (postKey) => {

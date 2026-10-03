@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Flame, Bell, Hexagon, Star } from 'lucide-react';
 import { Avatar } from './Mascots';
 import { Bar } from './ProgressBar';
+import { usePreferences } from '../../contexts/PreferencesContext';
 import { hasNewCommunityActivity } from '../../features/settings/studyPlanService';
 import dashboardCardBackgroundUrl from '../../../UIUX/backgroundcard.png';
 import dashboardCardMobileBackgroundUrl from '../../../UIUX/backgroundcard_mobile.png';
@@ -15,6 +16,7 @@ export function getGreeting() {
 }
 
 export default function Header({ profile, stats, onOpenNotif, pageTitle, pageSubtitle }) {
+  const { t } = usePreferences();
   const [hasNotif, setHasNotif] = useState(false);
 
   const handleOpenNotifications = () => {
@@ -46,7 +48,7 @@ export default function Header({ profile, stats, onOpenNotif, pageTitle, pageSub
     return (
       <header className="app-page-header">
         <div className="app-page-heading">
-          <h1>{pageTitle}</h1>
+          <h1>{t(pageTitle)}</h1>
           {pageSubtitle && <p>{pageSubtitle}</p>}
         </div>
         <div className="app-page-status">
@@ -72,7 +74,7 @@ export default function Header({ profile, stats, onOpenNotif, pageTitle, pageSub
         <Avatar />
       </div>
       <div className="hello">
-        <h1>{getGreeting()}, <span>{name}!</span> 👋</h1>
+        <h1>{t(getGreeting())}, <span>{name}!</span> 👋</h1>
         <p>Hôm nay học một chút,<br />ngày mai tiến bộ hơn nhé! 💜</p>
         <div className="chips">
           <div className="chip">

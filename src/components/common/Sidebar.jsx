@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { DiamondIcon } from '../../data/fallbackData';
 import { BunnyMascot } from './Mascots';
+import { usePreferences } from '../../contexts/PreferencesContext';
 
 export const NAV_TILES = [
   { id: 'giaotrinh', label: 'Giáo trình', mobileLabel: 'Giáo trình', icon: BookOpen, color: '#4A90E2', bg: '#EEF4FD' },
@@ -16,6 +17,7 @@ export const NAV_TILES = [
 ];
 
 export default function Sidebar({ active, setActive, setView, goHome, onSignOut, isAdmin, gems = 0, onOpenShop, collapsed = false }) {
+  const { t: translate } = usePreferences();
   const handleTileClick = (id) => {
     setActive(id);
     if (id === 'giaotrinh') setView('curriculum-hub');
@@ -36,7 +38,7 @@ export default function Sidebar({ active, setActive, setView, goHome, onSignOut,
       </button>
 
       <button className={`home-pill ${active === 'home' ? 'active' : ''}`} onClick={goHome} title="Trang chủ">
-        <span className="home-pill-ico"><Home size={22} strokeWidth={2.2} /></span><span className="home-pill-label">Trang chủ</span>
+        <span className="home-pill-ico"><Home size={22} strokeWidth={2.2} /></span><span className="home-pill-label">{translate('Trang chủ')}</span>
       </button>
 
       <div className="nav-grid">
@@ -48,8 +50,8 @@ export default function Sidebar({ active, setActive, setView, goHome, onSignOut,
               <span className="nav-tile-ico" style={{ background: isActive ? 'rgba(255,255,255,.25)' : t.bg }}>
                 <Icon size={22} color={isActive ? '#fff' : t.color} />
               </span>
-              <span className="nav-tile-label nav-label-desktop">{t.label}</span>
-              <span className="nav-tile-label nav-label-mobile">{t.mobileLabel}</span>
+              <span className="nav-tile-label nav-label-desktop">{translate(t.label)}</span>
+              <span className="nav-tile-label nav-label-mobile">{translate(t.mobileLabel)}</span>
             </button>
           );
         })}
@@ -70,7 +72,7 @@ export default function Sidebar({ active, setActive, setView, goHome, onSignOut,
       </button>
       <button className="sidebar-signout" onClick={onSignOut} aria-label="Đăng xuất khỏi tài khoản">
         <LogOut size={17} />
-        <span>Đăng xuất</span>
+        <span>{translate('Đăng xuất')}</span>
       </button>
     </aside>
   );

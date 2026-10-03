@@ -1,3 +1,4 @@
+import { calculateReviewComposite } from './reviewScoring';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, BookOpen, Sparkles, Target, RotateCcw, CheckCircle2,
@@ -39,25 +40,7 @@ function pickDistractors(all, excludeIdx, n, getter) {
   return shuffleArr(pool).slice(0, n).map((i) => getter(all[i]));
 }
 
-function calculateReviewComposite(answers = [], writingResults = [], reflexResults = [], elapsedMs = 0) {
-  const mcTotal = answers.length;
-  const mcAccuracy = mcTotal ? answers.filter((answer) => answer.correct).length / mcTotal : 1;
-  const writingScores = writingResults.map((item) => item?.score).filter((score) => typeof score === "number");
-  const writingAvg = writingScores.length ? Math.round(writingScores.reduce((sum, score) => sum + score, 0) / writingScores.length) : null;
-  const reflexList = reflexResults.filter((item) => !item?.timedOut && typeof item?.score === "number");
-  const reflexAccuracy = reflexList.length ? Math.round(reflexList.reduce((sum, item) => sum + item.score, 0) / reflexList.length) : null;
-  const expectedMs = mcTotal * 18000 + writingResults.length * 60000;
-  const speedRatio = expectedMs > 0 ? Math.min(1.3, expectedMs / Math.max(elapsedMs, 1)) : 1;
-  const speedFactor = Math.min(1, speedRatio * 0.85 + 0.15);
-  const composite = writingAvg !== null && reflexAccuracy !== null
-    ? mcAccuracy * 100 * 0.45 + writingAvg * 0.3 + reflexAccuracy * 0.2 + speedFactor * 100 * 0.05
-    : writingAvg !== null
-      ? mcAccuracy * 100 * 0.5 + writingAvg * 0.35 + speedFactor * 100 * 0.15
-      : reflexAccuracy !== null
-        ? mcAccuracy * 100 * 0.7 + reflexAccuracy * 0.25 + speedFactor * 100 * 0.05
-        : mcAccuracy * 100 * 0.8 + speedFactor * 100 * 0.2;
-  return { composite, writingAvg, reflexAccuracy };
-}
+
 
 function grammarExampleForCondition(condition = "") {
   const normalized = String(condition).toLowerCase().replace(/\s+/g, " ").trim();
@@ -284,8 +267,8 @@ Trả lời CHỈ bằng JSON, không markdown, không chữ nào khác:
 }`;
   try {
     const { value: parsed } = await requestAIJson(aiPrompt);
-    if (typeof parsed.score !== "number") throw new Error("malformed");
-    return parsed;
+    if (!Number.isFinite(parsed?.score)) throw new Error("malformed");
+    return { ...parsed, score: Math.max(0, Math.min(100, Math.round(parsed.score))) };
   } catch (e) {
     return { score: 60, strengths: "Bạn đã thử viết câu bằng tiếng Hàn.", errors: "Không thể chấm chi tiết lúc này do lỗi kết nối.", naturalVersion: userAnswer, explanation: "" };
   }
@@ -751,6 +734,10 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
   // "Đổi đề mới" — chỉ áp dụng cho Ôn tập ngẫu nhiên. Luôn sinh NGẪU NHIÊN
   // thật (không seed), và tính là đã "dùng hết" đề chuẩn của mức sao này.
   const regenerate = async () => {
+    clearTimeout(autoAdvanceRef.current);
+    clearInterval(sTimerRef.current);
+    sShouldGradeRef.current = false;
+    try { sRecognitionRef.current?.abort(); } catch { /* Recording may already be closed. */ }
     if (seed) await markStandardExamTaken(difficulty.stars, lesson, userId);
     const fullPool = buildReviewPool(vocabulary, grammar, dictationLines);
     const selected = buildCoverageSelection(difficulty, fullPool, history || {}, null);
@@ -767,6 +754,7 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
   /* ---------- Giai đoạn 1: câu hỏi trắc nghiệm bao phủ kiến thức ---------- */
   if (phase === "mc") {
     const q = pool[idx];
+    if (!q) return <section className="rv-page"><div className="rv-quiz-card"><p>Bài học chưa đủ dữ liệu để tạo bộ câu hỏi ôn tập.</p><button className="fc-nav-btn" onClick={onBack}>Về bài học</button></div></section>;
     const typeLabel = { image: "Chọn hình đúng", meaning: "Chọn nghĩa đúng", listening: "Nghe hiểu", grammar: "Ngữ pháp", fillblank: "Điền từ", translate: "Dịch câu", dialogue: "Hội thoại" }[q.type];
     const playAudio = () => { if (audioRef.current) { audioRef.current.currentTime = 0; audioRef.current.play().catch(() => { }); } };
     const choose = (opt) => {
@@ -783,6 +771,7 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
       }
     };
     const next = (answerSnapshot = answers) => {
+      clearTimeout(autoAdvanceRef.current);
       if (idx + 1 >= total) {
         if (writingPrompts.length > 0) { setPhase("writing"); setPicked(null); }
         else if (shadowLines.length > 0) { setPhase("shadowing"); setPicked(null); }
@@ -982,7 +971,7 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
     else playIncorrectSound();
     const reflexRatio = sReflexSecondsRef.current > 0 ? timeLeftAtDone / sReflexSecondsRef.current : 0;
     const reflexLabel = reflexRatio >= 0.5 ? "Tuyệt vời" : reflexRatio >= 0.25 ? "Khá" : reflexRatio > 0 ? "Kịp giờ" : "Sát giờ";
-    setSReflexResults((r) => [...r, { no: sLine.no, score: graded.score, timeLeftAtDone: Math.round(timeLeftAtDone * 10) / 10, reflexLabel, timedOut: false }]);
+    setSReflexResults((r) => [...r.filter((item) => item.questionIndex !== sIdx), { questionIndex: sIdx, no: sLine.no, score: graded.score, timeLeftAtDone: Math.round(timeLeftAtDone * 10) / 10, reflexLabel, timedOut: false }]);
     setSPhaseState("done");
   };
 
@@ -1037,14 +1026,15 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
     setSPhaseState("timeout");
   };
   const retryShadow = () => { setSPhaseState("intro"); };
-  const nextShadow = () => {
-    if (sIdx + 1 >= shadowLines.length) { finishAll(answers, writingResults, sReflexResults); return; }
+  const nextShadow = (results = sReflexResults) => {
+    if (sIdx + 1 >= shadowLines.length) { finishAll(answers, writingResults, results); return; }
     setSIdx((i) => i + 1);
     setSPhaseState("intro");
   };
   const skipShadow = () => {
-    setSReflexResults((r) => [...r, { no: sLine.no, score: 0, timeLeftAtDone: 0, reflexLabel: "Bỏ qua", timedOut: true }]);
-    nextShadow();
+    const results = [...sReflexResults.filter((item) => item.questionIndex !== sIdx), { questionIndex: sIdx, no: sLine.no, score: 0, timeLeftAtDone: 0, reflexLabel: "Bỏ qua", timedOut: true }];
+    setSReflexResults(results);
+    nextShadow(results);
   };
 
   const timerColor = sTimeLeft <= 2 ? "red" : sTimeLeft <= sReflexSecondsRef.current * 0.4 ? "yellow" : "green";
@@ -1114,7 +1104,7 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
             <div className="rv-reflex-speed">
               <Target size={13} /> Tốc độ phản xạ: <b>{lastReflex.reflexLabel}</b> (còn dư {Math.max(0, lastReflex.timeLeftAtDone)}s)
             </div>
-            <button className="rv-next-btn" onClick={nextShadow}>
+            <button className="rv-next-btn" onClick={() => nextShadow()}>
               {sIdx + 1 >= shadowLines.length ? "Xem kết quả" : "Câu tiếp theo"} <ChevronRight size={16} />
             </button>
           </div>

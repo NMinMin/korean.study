@@ -103,6 +103,7 @@ export async function loadVocabularyReviewSchedule(userId: string, numberOfDays 
     .select('id, lesson_id, prompt_ko, prompt_vi, answer, explanation_vi, image_url, media_url, audio_url, sort_order')
     .in('lesson_id', completedLessonIds)
     .eq('skill_type', 'vocabulary_grammar')
+    .eq('status', 'published')
     .in('exercise_type', ['vocabulary', 'vocab', 'word', 'flashcard'])
     .order('sort_order')
   if (vocabularyResult.error || !vocabularyResult.data?.length) return emptyDays

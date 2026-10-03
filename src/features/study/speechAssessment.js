@@ -41,7 +41,7 @@ Thời gian: ${timing.elapsed || 0}/${timing.limit || 0} giây.
 Chấm theo hướng khích lệ người mới học và ưu tiên đúng nội dung, từ khóa chính. Phải bỏ qua hoàn toàn dấu câu, cách viết liền/tách từ, khác biệt khoảng trắng và sai khác nhỏ có khả năng do nhận diện giọng nói. Nếu đủ ý và phần lớn từ đúng thì cho 80-100; chỉ trừ mạnh khi thiếu cụm quan trọng, đổi nghĩa hoặc nói khác câu mẫu rõ rệt. Thời gian chỉ là tiêu chí phụ, không làm giảm quá 5 điểm nếu vẫn trong giới hạn.
 Trả về JSON: {"score":0-100,"words":[{"word":"...","status":"ok|missing|wrong"}],"strength":"...","tip":"..."}`;
   const { value: parsed, model } = await requestAIJson(prompt);
-  if (typeof parsed?.score !== 'number' || !Array.isArray(parsed?.words)) throw new Error('malformed AI response');
+  if (!Number.isFinite(parsed?.score) || !Array.isArray(parsed?.words) || parsed.words.some((item) => !item || typeof item !== 'object')) throw new Error('malformed AI response');
   const statuses = new Set(['ok', 'missing', 'wrong']);
   return {
     ...parsed,

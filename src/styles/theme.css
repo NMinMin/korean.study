@@ -1,0 +1,31 @@
+:root[data-theme="light"] { color-scheme: light; --bg: #fff; --text: #6b6375; --text-h: #08060d; }
+:root[data-theme="dark"] { color-scheme: dark; --bg: #14131e; --text: #d5d1e6; --text-h: #f4f1ff; --border: #393447; --code-bg: #292537; }
+.settings-appearance-card { margin-bottom: 20px; }
+.settings-theme-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.settings-theme-options button, .settings-language-select { padding: 10px 14px; border: 1px solid #dcd6ed; border-radius: 12px; color: #514771; background: #faf8ff; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.settings-theme-options button[aria-pressed="true"] { background: #7565df; border-color: #7565df; color: #fff; }
+.settings-theme-options button:focus-visible, .settings-language-select:focus-visible { outline: 3px solid #a79bf3; outline-offset: 3px; }
+[data-theme="dark"] body { background: #14131e; color: #d5d1e6; }
+[data-theme="dark"] :is(.app, .admin-shell, .main) { background: #14131e; color: #d5d1e6; }
+[data-theme="dark"] :is(.sidebar, .admin-sidebar, .settings-card, .target-date-popover, .app-dialog, .admin-modal, .cg-card, .cg-compose, .cg-post-card, .rv-quiz-card, .rv-result-card, .rv-detail-card, .qz-question-card, .sw-card, .fc2-card, .cl-study-card, .admin-card, .admin-chart-card, .admin-course-card, .admin-hard-words, .admin-stat, .admin-community-post, .admin-community-section, .admin-user-table-wrap, .admin-table-wrap, .admin-combobox-menu, .admin-user-detail-modal) { background: #211e2f; color: #e5e0f4; border-color: #393447; }
+[data-theme="dark"] :is(.settings-row-label b, .settings-card-title, .fc2-title, .app-page-heading h1, .app-page-heading p, .nav-tile-label, .home-pill-label, .logo-text, .admin-panel-title h2, .admin-header h1, .admin-card h3, .admin-modal h2, .admin-vocabulary-preview td, .admin-vocabulary-preview td b) { color: #ede8ff !important; }
+[data-theme="dark"] :is(.settings-hint, .settings-row-label span, .settings-card-title small, .settings-note, .admin-header p, .admin-panel-title p) { color: #b5adc9; }
+[data-theme="dark"] :is(input, textarea, select, .settings-theme-options button, .settings-date-input, .settings-minute-input, .settings-day-btn, .target-date-actions button, .fc-nav-btn, .admin-cancel, .admin-combobox-trigger) { background: #2b263a; color: #e5e0f4; border-color: #49415c; }
+[data-theme="dark"] .settings-theme-options button[aria-pressed="true"], [data-theme="dark"] .settings-day-btn.on { background: #7565df; color: #fff; }
+[data-theme="dark"] :is(.admin-table-wrap th, .admin-modal footer, .admin-lesson-group-row, .admin-user-table th, .admin-community-overview button, .admin-community-command-bar, .admin-community-date-filters) { background: #2b263a; color: #d8d0eb; border-color: #393447; }
+[data-theme="dark"] :is(.admin-table-wrap td, .admin-user-table td) { color: #d8d0eb; border-color: #393447; }
+[data-theme="dark"] .admin-vocabulary-preview { color-scheme: dark; }
+[data-theme="dark"] :is(.settings-row, .admin-modal header) { border-color: #393447; }
+[data-theme="dark"] :is(.nav-tile, .home-pill):not(.active) { background: #292437; border-color: #393447; color: #d8d0eb; }
+[data-theme="dark"] .app-dialog-copy h2 { color: #f1ecff; }
+[data-theme="dark"] .app-dialog-copy p { color: #c8bedb; }
+[data-theme="dark"] :is(.rv-page, .cg-page) { color: #e5e0f4; }
+[data-theme="dark"] :is(.card, .level-card, .cg-post, .cg-compose-card, .cg-modal, .fc2-front, .fc2-back-face, .rv-types-card, .rv-diff-card, .sw-main, .sw-result-card, .cl-preview-card) { background: #211e2f; color: #e5e0f4; border-color: #393447; }
+[data-theme="dark"] :is(.card-title, .hello h1, .level-info b, .fc2-word, .rv-quiz-question, .qz-prompt-ko, .cg-title) { color: #f1ecff; }
+[data-theme="dark"] :is(.admin-form input, .admin-form textarea, .admin-form label) { color: #e5e0f4 !important; }
+[data-theme="dark"] :is(.rv-opt-row, .qz-option):not(.correct):not(.wrong) { background: #2b263a; color: #e5e0f4; border-color: #49415c; }
+@media (max-width: 560px) { .settings-appearance-card .settings-row { align-items: flex-start; gap: 12px; flex-direction: column; } .settings-language-select { width: 100%; } }
+[data-theme="dark"] :is(.settings-row, .fc2-topbar) { background: #292437; border-color: #393447; }
+[data-theme="dark"] :is(.settings-minute-input input, .settings-date-input, .settings-time-input, .settings-language-select) { background: #2b263a !important; color: #e5e0f4 !important; -webkit-text-fill-color: #e5e0f4; color-scheme: dark; }
+:root[data-theme="dark"] .app .settings-wide-page :is(input, select, .settings-date-input, .settings-time-input) { background: #2b263a !important; color: #e5e0f4 !important; -webkit-text-fill-color: #e5e0f4 !important; color-scheme: dark !important; }
+html[data-theme="dark"] body #root .app .main .settings-wide-page .settings-card .settings-minute-input input { background-color: #2b263a !important; color: #e5e0f4 !important; -webkit-text-fill-color: #e5e0f4 !important; }

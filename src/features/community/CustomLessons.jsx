@@ -965,6 +965,7 @@ export function CustomLessonTestView({ lessonData, onBack }) {
   const [cardStageDone, setCardStageDone] = useState(false);
   const [done, setDone] = useState(false);
   const resultSavedRef = useRef(false);
+  const [saveError, setSaveError] = useState('');
   const q = questions[idx];
 
   useEffect(() => {
@@ -996,6 +997,7 @@ export function CustomLessonTestView({ lessonData, onBack }) {
   };
 
   const handleCardComplete = () => {
+    if (cardStageDone) return;
     setCardStageDone(true);
     setScore((s) => s + 1);
   };
@@ -1005,7 +1007,7 @@ export function CustomLessonTestView({ lessonData, onBack }) {
     resultSavedRef.current = true;
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.id) return;
+      if (!user?.id) throw new Error('Phiên đăng nhập đã hết hạn.');
       const { error } = await supabase.from('custom_lesson_results').upsert({
         lesson_id: lessonData.id,
         user_id: user.id,
@@ -1014,8 +1016,10 @@ export function CustomLessonTestView({ lessonData, onBack }) {
         completed_at: new Date().toISOString(),
       }, { onConflict: 'lesson_id,user_id' });
       if (error) throw error;
+      setSaveError('');
     } catch (error) {
       resultSavedRef.current = false;
+      setSaveError(error?.message || 'Không thể lưu kết quả. Vui lòng thử lại.');
     }
   };
 
@@ -1036,6 +1040,7 @@ export function CustomLessonTestView({ lessonData, onBack }) {
           <Sparkles size={32} color="#7C6FE4" />
           <h2 className="rv-result-grade">Hoàn thành bài kiểm tra!</h2>
           <p className="rv-result-score">{score} / {questions.length} <span>phần đúng ({pct}%)</span></p>
+          {saveError && <div role="alert"><p>{saveError}</p><button className="fc-nav-btn" onClick={() => void saveResult()}>Thử lưu lại</button></div>}
         </div>
         <div className="fc-nav">
           <button className="fc-nav-btn" onClick={onBack}>Về bộ từ vựng</button>

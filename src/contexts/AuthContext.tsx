@@ -162,11 +162,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const verifiedUser = verifiedAuth.user
     const fallback = profileFromUser(verifiedUser)
     const [{ data, error: profileError }, { data: roleData, error: roleError }] = await Promise.all([
-      supabase.from('profiles').select('id, display_name, avatar_url').eq('id', verifiedUser.id).maybeSingle(),
+      supabase.from('profiles').select('id, display_name, avatar_url, is_locked').eq('id', verifiedUser.id).maybeSingle(),
       supabase.from('user_roles').select('role').eq('user_id', verifiedUser.id).maybeSingle(),
     ])
     if (requestVersion !== authLoadVersion.current) return
-    if (isAuthRestError(profileError) || isAuthRestError(roleError)) {
+    if (data?.is_locked || isAuthRestError(profileError) || isAuthRestError(roleError)) {
       clearInvalidSession()
       return
     }

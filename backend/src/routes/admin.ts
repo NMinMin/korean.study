@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { supabaseAdmin } from '../lib/supabase.js'
 import { requireAdmin } from '../plugins/admin.js'
+import { adminBodySchema } from '../lib/adminValidation.js'
 
 type Status = 'draft' | 'published' | 'locked' | 'no_content'
 type ReportStatus = 'pending' | 'resolved' | 'dismissed'
@@ -33,6 +34,13 @@ function shiftDateKey(key: string, days: number) {
 
 export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.addHook('preHandler', requireAdmin)
+  app.addHook('preHandler', async (request, reply) => {
+    const schema = adminBodySchema(request.method, request.routeOptions.url || '')
+    if (!schema) return
+    const parsed = schema.safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send({ code: 'INVALID_ADMIN_INPUT', message: 'Dữ liệu không hợp lệ. Kiểm tra các trường bắt buộc, kiểu dữ liệu và trạng thái.', requestId: request.id })
+    request.body = parsed.data
+  })
 
   app.get<{ Querystring: { days?: string; refresh?: string } }>('/admin/dashboard', async (request, reply) => {
     const days = request.query.days === '30' ? 30 : 7

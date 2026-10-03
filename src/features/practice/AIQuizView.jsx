@@ -5,6 +5,7 @@ import { playCorrectSound, playIncorrectSound } from '../../services/audioServic
 import { renderKo } from '../../utils/textUtils';
 
 const AI_ENHANCED_QUESTION_COUNT = 6;
+const QUESTION_COUNT = 20;
 const compactText = (value, maxLength = 220) => String(value || '').trim().slice(0, maxLength);
 
 function compactLessonSources(vocabulary = [], grammar = []) {
@@ -163,27 +164,41 @@ Trả về CHỈ một JSON object theo mẫu:
 export async function generateAIQuestionSet({ lesson, vocabulary = [], grammar = [], previousQuestions = [] }) {
   const sources = compactLessonSources(vocabulary, grammar);
   if (!sources.length) throw new Error('LESSON_HAS_NO_AI_SOURCES');
-  const sourceMap = new Map(sources.map((source) => [source.id, source]));
+  // Draw without replacement before reusing sources in smaller lessons.
+  const selectedSources = [];
+  while (selectedSources.length < QUESTION_COUNT) {
+    selectedSources.push(...shuffleQuestions(sources).slice(0, QUESTION_COUNT - selectedSources.length));
+  }
+  const sourceMap = new Map(selectedSources.map((source) => [source.id, source]));
   const previousSet = new Set(previousQuestions.map((question) => compactText(question, 500).toLocaleLowerCase('vi')));
-  const localQuestions = sources.map((source, index) => buildLocalQuestion(source, sources, previousSet, index));
-  const questionsBySource = new Map(localQuestions.map((question) => [question.sourceId, question]));
+  const completeSet = selectedSources.map((source, index) => {
+    const question = buildLocalQuestion(source, sources, previousSet, index);
+    previousSet.add(compactText(question.question, 500).toLocaleLowerCase('vi'));
+    return question;
+  });
   let model = null;
   let aiEnhancedCount = 0;
   let usedFallback = false;
   try {
-    const aiSources = pickAISources(sources);
+    const aiSources = pickAISources([...sourceMap.values()]);
     const generated = await generateAIQuestionBatch({ lesson, sources: aiSources, previousQuestions });
     model = generated.model;
     const validAIQuestions = generated.questions
       .map((question, index) => normalizeQuestion(question, sourceMap, index))
-      .filter((question) => question && !previousSet.has(compactText(question.question, 500).toLocaleLowerCase('vi')));
-    validAIQuestions.forEach((question) => questionsBySource.set(question.sourceId, question));
-    aiEnhancedCount = validAIQuestions.length;
-    usedFallback = validAIQuestions.length === 0;
+      .filter((question) => question && !previousQuestions.some((previous) => compactText(previous, 500).toLocaleLowerCase('vi') === compactText(question.question, 500).toLocaleLowerCase('vi')));
+    const replacedSources = new Set();
+    validAIQuestions.forEach((question) => {
+      if (replacedSources.has(question.sourceId) || completeSet.some((item) => item.question.toLocaleLowerCase('vi') === question.question.toLocaleLowerCase('vi'))) return;
+      const index = completeSet.findIndex((item) => item.sourceId === question.sourceId);
+      if (index < 0) return;
+      completeSet[index] = question;
+      replacedSources.add(question.sourceId);
+    });
+    aiEnhancedCount = replacedSources.size;
+    usedFallback = aiEnhancedCount === 0;
   } catch {
     usedFallback = true;
   }
-  const completeSet = sources.map((source) => questionsBySource.get(source.id));
   return { questions: shuffleQuestions(completeSet), model, sourceCount: sources.length, aiEnhancedCount, usedFallback };
 }
 
@@ -195,6 +210,8 @@ export default function AIQuizView({ lesson, vocabulary = [], grammar = [], onBa
   const [picked, setPicked] = useState(null);
   const [correctCount, setCorrectCount] = useState(0);
   const [finished, setFinished] = useState(false);
+  const [wrongQuestions, setWrongQuestions] = useState([]);
+  const [reviewingMistakes, setReviewingMistakes] = useState(false);
   const [setNumber, setSetNumber] = useState(0);
   const previousQuestionsRef = useRef([]);
   const requestSequenceRef = useRef(0);
@@ -210,6 +227,8 @@ export default function AIQuizView({ lesson, vocabulary = [], grammar = [], onBa
     setPicked(null);
     setCorrectCount(0);
     setFinished(false);
+    setWrongQuestions([]);
+    setReviewingMistakes(false);
     try {
       const result = await generateAIQuestionSet({ lesson, vocabulary, grammar, previousQuestions: previousQuestionsRef.current });
       if (requestSequence !== requestSequenceRef.current) return;
@@ -245,10 +264,12 @@ export default function AIQuizView({ lesson, vocabulary = [], grammar = [], onBa
       playCorrectSound();
       autoAdvanceRef.current = window.setTimeout(() => next(), 950);
     } else {
+      setWrongQuestions((current) => [...current, currentQuestion]);
       playIncorrectSound();
     }
   };
   const next = () => {
+    window.clearTimeout(autoAdvanceRef.current);
     if (index + 1 >= questions.length) {
       setFinished(true);
       return;
@@ -257,14 +278,25 @@ export default function AIQuizView({ lesson, vocabulary = [], grammar = [], onBa
     setPicked(null);
   };
 
+  const reviewMistakes = () => {
+    window.clearTimeout(autoAdvanceRef.current);
+    setQuestions(shuffleQuestions(wrongQuestions));
+    setWrongQuestions([]);
+    setIndex(0);
+    setPicked(null);
+    setCorrectCount(0);
+    setFinished(false);
+    setReviewingMistakes(true);
+  };
+
   return (
     <section className="rv-page ai-quiz-session">
       <div className="rv-quiz-top">
         <button className="fc2-back" onClick={onBack} aria-label="Về bài học"><ChevronLeft size={20} /></button>
-        <span className="rv-quiz-title">AI luyện tập · Bài {lesson?.no || '—'}</span>
+        <span className="rv-quiz-title">{reviewingMistakes ? 'Ôn câu sai' : 'AI luyện tập'} · Bài {lesson?.no || '—'}</span>
         <span className="rv-quiz-count">{finished ? `Bộ ${setNumber}` : questions.length ? `${index + 1} / ${questions.length}` : 'Bộ mới'}</span>
       </div>
-      <p className="cg-sub ai-quiz-scope"><Sparkles size={15} /> Mỗi lượt là một bộ mới, chỉ dùng {vocabulary.length} từ vựng và {grammar.length} điểm ngữ pháp của bài này.</p>
+      <p className="cg-sub ai-quiz-scope"><Sparkles size={15} /> {reviewingMistakes ? `Luyện lại ${questions.length} câu sai của lượt trước. Điểm được tính riêng cho lượt ôn này.` : `Mỗi lượt gồm 20 câu ngẫu nhiên từ ${vocabulary.length} từ vựng và ${grammar.length} điểm ngữ pháp của bài này. Bài ít nội dung sẽ có nhiều dạng câu hỏi cho cùng kiến thức.`}</p>
 
       {loading ? (
         <div className="rv-loading"><Sparkles size={22} color="#7C6FE4" /> AI đang tạo bộ câu hỏi mới theo nội dung bài...</div>
@@ -279,7 +311,7 @@ export default function AIQuizView({ lesson, vocabulary = [], grammar = [], onBa
           <span className="rv-tag-type ai">HOÀN THÀNH BỘ {setNumber}</span>
           <h2>{correctCount}/{questions.length} câu đúng</h2>
           <p>{correctCount === questions.length ? 'Xuất sắc! Bạn đã nắm chắc kiến thức của bài.' : 'Bạn có thể tạo một bộ mới để luyện thêm với ngữ cảnh khác.'}</p>
-          <div className="ai-quiz-result-actions"><button className="fc-nav-btn" onClick={onBack}><ChevronLeft size={17} /> Về bài học</button><button className="rv-start-btn" onClick={() => void loadSet()}><Sparkles size={17} /> AI tạo bộ mới</button></div>
+          <div className="ai-quiz-result-actions"><button className="fc-nav-btn" onClick={onBack}><ChevronLeft size={17} /> Về bài học</button>{wrongQuestions.length > 0 && <button className="fc-nav-btn" onClick={reviewMistakes}><RotateCcw size={17} /> Ôn {wrongQuestions.length} câu sai</button>}<button className="rv-start-btn" onClick={() => void loadSet()}><Sparkles size={17} /> AI tạo bộ mới</button></div>
         </div>
       ) : currentQuestion && (
         <div className="rv-quiz-card">

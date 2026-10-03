@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { invalidateLearningCatalogCache } from './learningContent'
 
 export type ActivityKind = 'tuvung' | 'nghechep' | 'shadowing' | 'ontap'
 export type ActivityProgressRecord = { activityType: ActivityKind; progressPercent: number; completedItems: Record<string, unknown>; completedAt: string | null }
@@ -42,6 +43,7 @@ async function writeActivityProgress(payload: ActivityProgressPayload): Promise<
     })
     throw error
   }
+  invalidateLearningCatalogCache(false)
 }
 
 async function currentAuthUserId() {
