@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { createRequestCache } from './requestCache'
 
 export type LearningTextbook = {
   id: string
@@ -136,12 +137,27 @@ export type LearningExercise = {
   sortOrder: number
 }
 
+async function loadCatalogContent() {
+  if (!supabase) throw new Error('Supabase chưa được cấu hình')
+  const results = await Promise.all([
+    supabase.from('textbooks').select('id, slug, title_ko, title_vi, description, status, sort_order').order('sort_order'),
+    supabase.from('lessons').select('id, textbook_id, lesson_number, title_ko, title_vi, status').order('lesson_number'),
+    supabase.from('lesson_exercises')
+      .select('id, lesson_id, skill_type, exercise_type, prompt_ko, prompt_vi, answer, explanation_vi, media_url, image_url, audio_url, sort_order')
+      .in('skill_type', ['vocabulary_grammar', 'dictation', 'shadowing', 'review'])
+      .eq('status', 'published').order('sort_order'),
+  ])
+  for (const result of results) if (result.error) throw result.error
+  return results
+}
+
+const contentCache = createRequestCache<Awaited<ReturnType<typeof loadCatalogContent>>>(60_000)
+
 async function loadLearningCatalogUncached(preferredTextbookId?: string): Promise<LearningCatalog | null> {
   if (!supabase) return null
   const userId = await currentAuthUserId()
-  const [textbookResult, lessonResult, membershipResult, progressResult, activityResult] = await Promise.all([
-    supabase.from('textbooks').select('id, slug, title_ko, title_vi, description, status, sort_order').order('sort_order'),
-    supabase.from('lessons').select('id, textbook_id, lesson_number, title_ko, title_vi, status').order('lesson_number'),
+  const [content, membershipResult, progressResult, activityResult] = await Promise.all([
+    contentCache.get(userId || 'anonymous', loadCatalogContent),
     userId
       ? supabase.from('user_textbooks').select('textbook_id, status').eq('user_id', userId)
       : Promise.resolve({ data: [], error: null }),
@@ -152,14 +168,9 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
       ? supabase.from('activity_progress').select('lesson_id, activity_type, progress_percent, completed_at, updated_at').eq('user_id', userId)
       : Promise.resolve({ data: [], error: null }),
   ])
+  const [textbookResult, lessonResult, exerciseResult] = content
   if (textbookResult.error || lessonResult.error || membershipResult.error || progressResult.error || activityResult.error || !textbookResult.data?.length) return null
 
-  const exerciseResult = await supabase
-    .from('lesson_exercises')
-    .select('id, lesson_id, skill_type, exercise_type, prompt_ko, prompt_vi, answer, explanation_vi, media_url, image_url, audio_url, sort_order')
-    .in('skill_type', ['vocabulary_grammar', 'dictation', 'shadowing', 'review'])
-    .eq('status', 'published')
-    .order('sort_order')
   if (exerciseResult.error) return null
   const exerciseVocabularyRows = (exerciseResult.data ?? []).filter(isVocabularyGrammarVocabulary)
   const wordCounts = new Map<string, number>()
@@ -372,23 +383,20 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
   return { textbooks, myTextbooks, availableTextbooks, lessons, activeTextbook, continueLesson, continueCompletedToday, hasStarted, vocabulary, grammar, exercises }
 }
 
-const CATALOG_CACHE_MS = 1_000
-const catalogRequests = new Map<string, { expiresAt: number; promise: Promise<LearningCatalog | null> }>()
+const catalogRequests = createRequestCache<LearningCatalog | null>(15_000)
 
-export function loadLearningCatalog(preferredTextbookId?: string): Promise<LearningCatalog | null> {
-  const key = preferredTextbookId || 'active'
-  const cached = catalogRequests.get(key)
-  if (cached && cached.expiresAt > Date.now()) return cached.promise
-  const promise = loadLearningCatalogUncached(preferredTextbookId).catch((error) => {
-    catalogRequests.delete(key)
-    throw error
-  })
-  catalogRequests.set(key, { expiresAt: Date.now() + CATALOG_CACHE_MS, promise })
-  return promise
+export async function loadLearningCatalog(preferredTextbookId?: string): Promise<LearningCatalog | null> {
+  if (!supabase) return null
+  const { data } = await supabase.auth.getSession()
+  const key = `${data.session?.user.id || 'anonymous'}:${preferredTextbookId || 'active'}`
+  const result = await catalogRequests.get(key, () => loadLearningCatalogUncached(preferredTextbookId))
+  if (!result) catalogRequests.clear()
+  return result
 }
 
-export function invalidateLearningCatalogCache(): void {
+export function invalidateLearningCatalogCache(contentChanged = true): void {
   catalogRequests.clear()
+  if (contentChanged) contentCache.clear()
 }
 
 export async function addUserTextbook(textbookId: string): Promise<void> {
@@ -408,7 +416,7 @@ export async function addUserTextbook(textbookId: string): Promise<void> {
     { onConflict: 'user_id,textbook_id' },
   )
   if (error) throw error
-  invalidateLearningCatalogCache()
+  invalidateLearningCatalogCache(false)
 }
 
 export async function markLessonStarted(textbookId: string, lessonId: string): Promise<void> {
@@ -424,7 +432,7 @@ export async function markLessonStarted(textbookId: string, lessonId: string): P
     .maybeSingle()
   if (updateError) throw updateError
   if (existing) {
-    invalidateLearningCatalogCache()
+    invalidateLearningCatalogCache(false)
     return
   }
   const { error: insertError } = await supabase.from('lesson_progress').insert({
@@ -437,7 +445,7 @@ export async function markLessonStarted(textbookId: string, lessonId: string): P
     updated_at: marker.updated_at,
   })
   if (insertError) throw insertError
-  invalidateLearningCatalogCache()
+  invalidateLearningCatalogCache(false)
 }
 
 export async function syncLessonProgress(
@@ -463,5 +471,5 @@ export async function syncLessonProgress(
     { onConflict: 'user_id,lesson_id' },
   )
   if (error) throw error
-  invalidateLearningCatalogCache()
+  invalidateLearningCatalogCache(false)
 }

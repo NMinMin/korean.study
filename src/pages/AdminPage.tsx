@@ -92,6 +92,7 @@ export default function AdminPage() {
   const [lessons, setLessons] = useState<Lesson[]>([])
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
+  const loadSequence = useRef(0)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [textbookStatusFilter, setTextbookStatusFilter] = useState('all')
@@ -131,23 +132,36 @@ export default function AdminPage() {
   }, [range])
 
   const load = useCallback(async () => {
+    const sequence = ++loadSequence.current
     setLoading(true); setError('')
     try {
-      if (tab === 'dashboard') setDashboard(await adminApi<DashboardData>(`/dashboard?days=${range}`))
-      if (tab === 'textbooks') setTextbooks(await adminApi<Textbook[]>('/textbooks'))
+      if (tab === 'dashboard') {
+        const data = await adminApi<DashboardData>(`/dashboard?days=${range}`)
+        if (sequence === loadSequence.current) setDashboard(data)
+      }
+      if (tab === 'textbooks') {
+        const data = await adminApi<Textbook[]>('/textbooks')
+        if (sequence === loadSequence.current) setTextbooks(data)
+      }
       if (tab === 'lessons') {
         const [bookData, lessonData] = await Promise.all([adminApi<Textbook[]>('/textbooks'), adminApi<Lesson[]>('/lessons')])
-        setTextbooks(bookData); setLessons(lessonData)
+        if (sequence === loadSequence.current) { setTextbooks(bookData); setLessons(lessonData) }
       }
-      if (tab === 'users') setUsers(await adminApi<AdminUser[]>('/users'))
-      if (tab === 'community') setCommunity(await adminApi<CommunityData>('/community'))
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể tải dữ liệu quản trị.') }
-    finally { setLoading(false) }
+      if (tab === 'users') {
+        const data = await adminApi<AdminUser[]>('/users')
+        if (sequence === loadSequence.current) setUsers(data)
+      }
+      if (tab === 'community') {
+        const data = await adminApi<CommunityData>('/community')
+        if (sequence === loadSequence.current) setCommunity(data)
+      }
+    } catch (cause) { if (sequence === loadSequence.current) setError(cause instanceof Error ? cause.message : 'Không thể tải dữ liệu quản trị.') }
+    finally { if (sequence === loadSequence.current) setLoading(false) }
   }, [range, tab])
-  useEffect(() => { void load() }, [load])
+  useEffect(() => { void load(); return () => { loadSequence.current += 1 } }, [load])
 
   useEffect(() => {
-    if (!supabase) return
+    if (!supabase || tab !== 'dashboard') return
     let timer: ReturnType<typeof setTimeout> | undefined
     const refresh = () => {
       clearTimeout(timer)
@@ -161,7 +175,7 @@ export default function AdminPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'vocabulary_progress' }, refresh)
       .subscribe()
     return () => { clearTimeout(timer); void supabase?.removeChannel(channel) }
-  }, [range, refreshDashboard])
+  }, [range, refreshDashboard, tab])
 
   useEffect(() => {
     if (!supabase) return
