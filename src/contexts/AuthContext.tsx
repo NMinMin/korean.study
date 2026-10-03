@@ -131,8 +131,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearAuthState()
     clearSessionPreference()
     if (supabase) {
+      const client = supabase
       window.setTimeout(() => {
-        void supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+        void client.auth.signOut({ scope: 'local' }).catch(() => undefined)
       }, 0)
     }
   }, [clearAuthState])

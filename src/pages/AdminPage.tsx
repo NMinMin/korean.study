@@ -160,7 +160,7 @@ export default function AdminPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'lesson_progress' }, refresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'vocabulary_progress' }, refresh)
       .subscribe()
-    return () => { clearTimeout(timer); void supabase.removeChannel(channel) }
+    return () => { clearTimeout(timer); void supabase?.removeChannel(channel) }
   }, [range, refreshDashboard])
 
   useEffect(() => {
@@ -172,7 +172,7 @@ export default function AdminPage() {
         if (tab === 'community') void adminApi<CommunityData>('/community').then(setCommunity).catch(() => undefined)
       })
       .subscribe()
-    return () => { void supabase.removeChannel(channel) }
+    return () => { void supabase?.removeChannel(channel) }
   }, [tab])
 
   const updateStatus = async (kind: 'textbooks' | 'lessons', id: string, status: Status) => {

@@ -17,6 +17,7 @@ export type ShopState = {
 }
 
 export async function loadShopState(): Promise<ShopState> {
+  if (!supabase) throw new Error('Supabase chưa được cấu hình.')
   const { data, error } = await supabase.rpc('get_my_plant_shop')
   if (error) throw error
   const value = data as { balance?: number; selected_plant?: string; plants?: StorePlant[] } | null
@@ -28,6 +29,7 @@ export async function loadShopState(): Promise<ShopState> {
 }
 
 export async function awardLessonGems(textbookId: string, lessonId: string) {
+  if (!supabase) throw new Error('Supabase chưa được cấu hình.')
   const { data, error } = await supabase.rpc('award_lesson_gems', {
     p_textbook_id: String(textbookId),
     p_lesson_id: String(lessonId),
@@ -37,12 +39,14 @@ export async function awardLessonGems(textbookId: string, lessonId: string) {
 }
 
 export async function purchasePlant(plantId: string) {
+  if (!supabase) throw new Error('Supabase chưa được cấu hình.')
   const { data, error } = await supabase.rpc('purchase_plant', { p_plant_id: plantId })
   if (error) throw error
   return data as { purchased: boolean; balance: number }
 }
 
 export async function selectPlant(plantId: string) {
+  if (!supabase) throw new Error('Supabase chưa được cấu hình.')
   const { data, error } = await supabase.rpc('select_plant', { p_plant_id: plantId })
   if (error) throw error
   return data as { selected_plant: string }

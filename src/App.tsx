@@ -1,17 +1,17 @@
-import { useEffect, type ComponentType } from 'react'
+import { lazy, Suspense, useEffect, type ComponentType } from 'react'
 import { BrowserRouter, HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import LegacyDashboard from './App.jsx'
+import './styles/dashboard.css'
 import { AuthProvider, useAuth, type AppProfile } from './contexts/AuthContext'
 import AuthPage from './pages/AuthPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
-import AdminPage from './pages/AdminPage'
 import { userStorageKey } from './lib/storageKeys'
 import { AppDialogProvider } from './components/common/AppDialog'
 
-const Dashboard = LegacyDashboard as ComponentType<{
-  authenticatedProfile: AppProfile
-  onSignOut: () => Promise<void>
-}>
+const Dashboard = lazy(async () => {
+  const module = await import('./App.jsx')
+  return { default: module.default as ComponentType<{ authenticatedProfile: AppProfile; onSignOut: () => Promise<void> }> }
+})
+const AdminPage = lazy(() => import('./pages/AdminPage'))
 
 function AppRoutes() {
   const auth = useAuth()
@@ -40,7 +40,7 @@ function AppRoutes() {
     return <Navigate to="/auth/reset-password" replace />
   }
 
-  return <Routes>
+  return <Suspense fallback={<div className="app-loading" role="status">Đang tải nội dung…</div>}><Routes>
     <Route path="/auth" element={auth.profile ? <Navigate to={auth.profile.role === 'admin' ? '/admin' : '/'} replace /> : <AuthPage />} />
     <Route path="/auth/callback" element={<Navigate to={auth.profile?.role === 'admin' ? '/admin' : '/'} replace />} />
     <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
@@ -54,7 +54,7 @@ function AppRoutes() {
       : auth.profile.role === 'admin'
         ? <Navigate to="/admin" replace />
         : <Dashboard authenticatedProfile={auth.profile} onSignOut={auth.signOut} />} />
-  </Routes>
+  </Routes></Suspense>
 }
 
 export default function App() {
