@@ -3680,9 +3680,12 @@
     grid-template-columns: 1fr;
   }
 }
-.admin-vocabulary-preview { padding: 0; border: 0; width: min(900px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); }
+.admin-vocabulary-preview { position: fixed; inset: 0; margin: auto; padding: 0; border: 0; width: min(900px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); color: #3b3558; color-scheme: light; font-family: 'Quicksand', sans-serif; }
 .admin-vocabulary-preview::backdrop { background: rgba(30, 25, 55, .55); }
+.admin-vocabulary-preview header > div { display: block; }
 .admin-vocabulary-preview-body { padding: 20px; }
-.admin-vocabulary-preview td { vertical-align: top; }
+.admin-vocabulary-preview .admin-table-wrap { overflow-x: auto; }
+.admin-vocabulary-preview td { vertical-align: top; color: #3b3558; }
+.admin-vocabulary-preview td b { color: #2e2a4a; }
 .admin-vocabulary-preview td p { margin: 0 0 6px; white-space: pre-wrap; }
 .admin-vocabulary-preview td small { white-space: pre-wrap; }
