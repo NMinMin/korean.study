@@ -777,7 +777,12 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             {view === 'test-custom-lesson' && customLessonData && (
               <CustomLessonTestView lessonData={customLessonData} onBack={() => setView('study-custom-lesson')} />
             )}
-            {view === 'aiquiz' && <AIQuizView onBack={goHome} />}
+            {view === 'aiquiz' && <AIQuizView
+              lesson={selectedLesson}
+              vocabulary={lessonVocabulary}
+              grammar={lessonGrammar}
+              onBack={() => setView('lesson-detail')}
+            />}
             {view === 'review-hub' && (
               <ReviewHubView
                 onBack={() => setView(reviewHubBackView)}

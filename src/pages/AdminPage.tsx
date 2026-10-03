@@ -19,6 +19,27 @@ type CommunityPost = { id: string; user_id: string; content: string; status: 'vi
 type CommunityVocabularySet = { id: string; creator_id: string; title: string; code: string; words: unknown[]; visibility: 'public' | 'private'; status: 'visible' | 'hidden'; created_at: string; profiles?: { display_name?: string } }
 type CommunityData = { posts: CommunityPost[]; reports: CommunityReport[]; customLessons: CommunityVocabularySet[] }
 
+function VocabularySetPreview({ lesson, onClose }: { lesson: CommunityVocabularySet; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const words = Array.isArray(lesson.words) ? lesson.words : []
+  useEffect(() => {
+    const dialog = dialogRef.current
+    dialog?.showModal()
+    return () => dialog?.close()
+  }, [])
+  const text = (value: unknown) => typeof value === 'string' ? value : ''
+  return <dialog ref={dialogRef} className="admin-modal admin-vocabulary-preview" aria-labelledby="vocabulary-preview-title" onCancel={onClose} onClick={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <header><div><h2 id="vocabulary-preview-title">{lesson.title}</h2><p>{words.length} từ vựng · Mã {lesson.code}</p></div><button type="button" autoFocus onClick={onClose} aria-label="Đóng danh sách từ"><X size={20} /></button></header>
+    <div className="admin-vocabulary-preview-body">
+      {words.length ? <div className="admin-table-wrap"><table><thead><tr><th>STT</th><th>Tiếng Hàn</th><th>Nghĩa tiếng Việt</th><th>Ví dụ / Mẹo nhớ</th></tr></thead><tbody>{words.map((value, index) => {
+        const word = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+        return <tr key={index}><td>{index + 1}</td><td lang="ko"><b>{text(word.ko) || '—'}</b></td><td>{text(word.vi) || '—'}</td><td>{text(word.example) && <p lang="ko">{text(word.example)}</p>}{text(word.exampleVi) && <p>{text(word.exampleVi)}</p>}{text(word.mnemonic) && <small>{text(word.mnemonic)}</small>}</td></tr>
+      })}</tbody></table></div> : <div className="admin-empty">Bộ từ vựng này chưa có từ nào.</div>}
+    </div>
+    <footer><button type="button" className="admin-cancel" onClick={onClose}>Đóng</button></footer>
+  </dialog>
+}
+
 const statuses: { value: Status; label: string }[] = [
   { value: 'draft', label: 'Bản nháp' }, { value: 'published', label: 'Đã xuất bản' },
   { value: 'locked', label: 'Đã khóa' }, { value: 'no_content', label: 'Chưa có nội dung' },
@@ -1274,6 +1295,7 @@ export default function AdminPage() {
         {editor.kind === 'textbooks' ? <><label>Slug *<input value={draft.slug || ''} onChange={(e) => setDraft({ ...draft, slug: e.target.value })} placeholder="vi-du: sejong-2-1" /></label><label>Tên tiếng Hàn *<input value={draft.titleKo || ''} onChange={(e) => setDraft({ ...draft, titleKo: e.target.value })} /></label><label>Tên tiếng Việt<input value={draft.titleVi || ''} onChange={(e) => setDraft({ ...draft, titleVi: e.target.value })} /></label><label>Thứ tự<input type="number" min="0" value={draft.sortOrder || '0'} onChange={(e) => setDraft({ ...draft, sortOrder: e.target.value })} /></label><label className="wide">Mô tả<textarea rows={3} value={draft.description || ''} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></label></> : <><label className="wide">Giáo trình *<AdminSelect value={draft.textbookId || ''} options={textbooks.map((book) => ({ value: book.id, label: book.title_ko }))} onChange={(value) => setDraft({ ...draft, textbookId: value })} /></label><label>Số bài *<input type="number" min="1" value={draft.lessonNumber || '1'} onChange={(e) => setDraft({ ...draft, lessonNumber: e.target.value })} /></label><label>Tên tiếng Hàn *<input value={draft.titleKo || ''} onChange={(e) => setDraft({ ...draft, titleKo: e.target.value })} /></label><label className="wide">Tên tiếng Việt<input value={draft.titleVi || ''} onChange={(e) => setDraft({ ...draft, titleVi: e.target.value })} /></label></>}
         <label className="wide">Trạng thái<AdminSelect value={draft.status || 'draft'} options={statuses} onChange={(value) => setDraft({ ...draft, status: value })} /></label>
       </div><footer><button className="admin-cancel" onClick={() => setEditor(null)}>Hủy</button><button className="admin-primary" onClick={() => void saveEditor()} disabled={saving}><Save size={18} /> {saving ? 'Đang lưu…' : 'Lưu thay đổi'}</button></footer></section></div>}
+      {previewVocabularySet && <VocabularySetPreview lesson={previewVocabularySet} onClose={() => setPreviewVocabularySet(null)} />}
     </main>
   </div>
 }
