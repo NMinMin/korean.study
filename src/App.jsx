@@ -525,7 +525,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     setReviewSeed(null);
     setLesson(primaryLesson);
     setReviewIntroBackView('home');
-    setView('review-intro');
+    setView('mock-exam');
     setActive('thithu');
   };
 
@@ -549,7 +549,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const lessonDictationLines = databaseDictationLines.length
     ? databaseDictationLines
     : (selectedLessonIsFallback ? SHADOW_LINES : []);
-  const reviewLessons = reviewMode === 'bylesson' && reviewSelectedLessons.length
+  const reviewLessons = view !== 'mock-exam' && reviewMode === 'bylesson' && reviewSelectedLessons.length
     ? catalogLessons.filter((item) => reviewSelectedLessons.includes(item.id) || reviewSelectedLessons.includes(item.no) || reviewSelectedLessons.includes(String(item.no)))
     : catalogLessons.filter((item) => item.status !== 'locked');
   const reviewLessonIds = new Set(reviewLessons.map((item) => item.id));
@@ -558,18 +558,11 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const reviewExercises = learningCatalog?.exercises?.filter((exercise) => reviewLessonIds.has(exercise.lessonId)) || [];
   const reviewDictationLinesFromDatabase = mapDatabaseLines(reviewExercises, 'dictation');
   const reviewShadowLinesFromDatabase = mapDatabaseLines(reviewExercises, 'shadowing');
-  const reviewVocabulary = reviewVocabularyFromDatabase.length
-    ? reviewVocabularyFromDatabase
-    : (lessonVocabulary?.length ? lessonVocabulary : (catalogVocabulary?.length ? catalogVocabulary : VOCAB_SAMPLE));
-  const reviewGrammar = reviewGrammarFromDatabase.length
-    ? reviewGrammarFromDatabase
-    : (lessonGrammar?.length ? lessonGrammar : (catalogGrammar?.length ? catalogGrammar : GRAMMAR_SAMPLE));
-  const reviewDictationLines = reviewDictationLinesFromDatabase.length
-    ? reviewDictationLinesFromDatabase
-    : (lessonDictationLines?.length ? lessonDictationLines : (databaseDictationLines?.length ? databaseDictationLines : SHADOW_LINES));
-  const reviewShadowLines = reviewShadowLinesFromDatabase.length
-    ? reviewShadowLinesFromDatabase
-    : (lessonShadowLines?.length ? lessonShadowLines : (databaseShadowLines?.length ? databaseShadowLines : SHADOW_LINES));
+  // Review questions must come from the selected catalog, never sample data.
+  const reviewVocabulary = reviewVocabularyFromDatabase;
+  const reviewGrammar = reviewGrammarFromDatabase;
+  const reviewDictationLines = reviewDictationLinesFromDatabase;
+  const reviewShadowLines = reviewShadowLinesFromDatabase;
   const reviewExamExercise = reviewExercises.find((exercise) => exercise.skillType === 'review' && (exercise.answer?.standardExamSet || exercise.answer?.standardExam));
   const reviewExamConfig = reviewExamExercise
     ? { ...reviewExamExercise.answer, title: reviewExamExercise.promptKo, description: reviewExamExercise.promptVi || reviewExamExercise.answer?.description }
@@ -722,6 +715,8 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 shadowingLines={reviewShadowLines}
                 examConfig={reviewExamConfig}
                 mode="mock-exam"
+                hasExamTextbook={Boolean(learningCatalog?.activeTextbook?.isAdded)}
+                onOpenCurriculum={() => { setView('curriculum-hub'); setActive('giaotrinh'); }}
                 availableLessons={catalogLessons}
                 selectedLessons={reviewSelectedLessons}
                 onSelectLessons={(lessonIds) => {
