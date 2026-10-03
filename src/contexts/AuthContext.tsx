@@ -161,14 +161,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const verifiedUser = verifiedAuth.user
     const fallback = profileFromUser(verifiedUser)
-    const [{ data, error: profileError }, { data: roleData, error: roleError }] = await Promise.all([
-      supabase.from('profiles').select('id, display_name, avatar_url, is_locked').eq('id', verifiedUser.id).maybeSingle(),
+    const [{ data, error: profileError }, { data: roleData, error: roleError }, { data: accountLocked, error: lockError }] = await Promise.all([
+      supabase.from('profiles').select('id, display_name, avatar_url').eq('id', verifiedUser.id).maybeSingle(),
       supabase.from('user_roles').select('role').eq('user_id', verifiedUser.id).maybeSingle(),
+      supabase.rpc('is_my_account_locked'),
     ])
     if (requestVersion !== authLoadVersion.current) return
-    if (data?.is_locked || isAuthRestError(profileError) || isAuthRestError(roleError)) {
+    if (accountLocked === true || isAuthRestError(profileError) || isAuthRestError(roleError)) {
       clearInvalidSession()
       return
+    }
+    if (lockError || typeof accountLocked !== 'boolean') {
+      // Fail closed when the account-status check is unavailable.
+      clearAuthState()
+      throw new Error('Không thể kiểm tra trạng thái tài khoản. Vui lòng cập nhật database và thử lại.')
     }
     setSession(nextSession)
     setProfile(data ? {
@@ -187,6 +193,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     supabase.auth.getSession()
       .then(({ data, error }) => error ? clearInvalidSession() : loadProfile(data.session))
+      .catch(() => clearAuthState())
       .finally(() => setLoading(false))
     const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true)
@@ -199,7 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return
       }
       // Supabase khuyến nghị không gọi tiếp API auth ngay bên trong callback.
-      window.setTimeout(() => void loadProfile(nextSession), 0)
+      window.setTimeout(() => void loadProfile(nextSession).catch(() => clearAuthState()), 0)
     })
     return () => listener.subscription.unsubscribe()
   }, [clearAuthState, clearInvalidSession, loadProfile])
