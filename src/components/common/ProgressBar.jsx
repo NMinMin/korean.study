@@ -3,7 +3,7 @@ import { BookMarked, Mic, Headphones, MessageCircle } from 'lucide-react';
 
 export function Bar({ pct, color, h = 8, track = '#ECEAF6' }) {
   return (
-    <div style={{ height: h, background: track, borderRadius: 99, overflow: 'hidden' }}>
+    <div className="progress-track" style={{ height: h, background: track, borderRadius: 99, overflow: 'hidden' }}>
       <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 99, transition: 'width .6s ease' }} />
     </div>
   );
@@ -11,7 +11,7 @@ export function Bar({ pct, color, h = 8, track = '#ECEAF6' }) {
 
 export function ProgressIcon({ type, color, bg }) {
   const wrap = {
-    width: 46, height: 46, borderRadius: 14, background: bg,
+    width: 46, height: 46, borderRadius: 14, background: 'var(--progress-icon-bg, ' + bg + ')',
     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   };
   const map = {

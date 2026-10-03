@@ -1,3 +1,4 @@
+@import './theme-palette.css';
 :root[data-theme="light"] { color-scheme: light; --bg: #fff; --text: #6b6375; --text-h: #08060d; }
 :root[data-theme="dark"] { color-scheme: dark; --bg: #14131e; --text: #d5d1e6; --text-h: #f4f1ff; --border: #393447; --code-bg: #292537; }
 .settings-appearance-card { margin-bottom: 20px; }
@@ -48,3 +49,15 @@ html[data-theme="dark"] .app textarea:not(.ok):not(.wrong),
 html[data-theme="dark"] .app select { background:#2b263a !important; color:#e5e0f4 !important; -webkit-text-fill-color:#e5e0f4 !important; color-scheme:dark; }
 html[data-theme="dark"] .app :is(.content-library-search input,.content-library-filter select) { border:0; }
 html[data-theme="dark"] .app .rank-preview-body b { color:#ffc57c !important; }
+/* Inline lesson surfaces and shared progress tracks. */
+html[data-theme="dark"] .app { --progress-icon-bg:#302744; }
+html[data-theme="dark"] .app .activity-card { background:#262334 !important; }
+html[data-theme="dark"] .app .activity-card.activity-locked { background:#211e2f !important; border-color:#49415c; opacity:1; }
+html[data-theme="dark"] .app .activity-card.activity-locked .activity-btn { background:#403951 !important; color:#bdb5ce; }
+html[data-theme="dark"] .app .activity-label { color:#c9baff !important; }
+html[data-theme="dark"] .app .progress-track { background:#403951 !important; }
+html[data-theme="dark"] .app :is(.study-hub-ico,.gm-badge,.rv-exit-modal-icon) { background:#302744 !important; }
+html[data-theme="dark"] .app .cl-find-err { background:#382d20 !important; border-color:#805a31 !important; color:#ffcf87 !important; }
+html[data-theme="dark"] .app :is(.vocab-notebook-controls input,.cg-empty p) { color:#d5cbea !important; }
+html[data-theme="dark"] .app :is(.gm-pattern,.gm-formula-form) { color:#bcaaff !important; }
+html[data-theme="dark"] .app :is(.rv-star-btn.on,.cl-quiz-chip.on,.lesson-row.current) { border-color:#9583ef; }

@@ -1,0 +1,27 @@
+import {AppDialogProvider} from '../src/components/common/AppDialog';
+import React,{useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {PreferencesProvider,usePreferences} from '../src/contexts/PreferencesContext';
+import LessonsView from '../src/features/curriculum/LessonsView';
+import {LessonDetailView,FlashcardView} from '../src/features/study/VocabViews';
+import DictationView from '../src/features/study/DictationView';
+import ShadowingView from '../src/features/study/ShadowingView';
+import {ReviewIntroView} from '../src/features/review/ReviewViews';
+import PlantShopView from '../src/features/shop/PlantShopView';
+import {CustomLessonHub} from '../src/features/community/CustomLessons';
+import CommunityView from '../src/features/community/CommunityView';
+import {GRAMMAR_SAMPLE} from '../src/data/fallbackData';
+import {initStorageShim} from '../src/services/storageShim';
+import '../src/index.css';
+import '../src/styles/dashboard.css';
+import '../src/styles/theme.css';
+initStorageShim();
+const noop=()=>{};
+const lesson={id:'theme-preview',no:1,title:'저는 이지윤이에요',words:2,status:'current'};
+const words=[{word:'안녕하세요',meaningVi:'Xin chào'},{word:'감사합니다',meaningVi:'Cảm ơn'}];
+const grammar=[GRAMMAR_SAMPLE[0]];
+const lines=[{no:1,ko:'안녕하세요.',vi:'Xin chào.',audioUrl:null}];
+function Preview(){const [view,setView]=useState('lesson');const {theme,setTheme}=usePreferences();const props={lesson,onBack:noop,onFinish:noop,onProgress:noop};const names={lesson:'Bài học',lessons:'Danh sách bài',flashcard:'Flashcard',dictation:'Nghe chép',shadowing:'Shadowing',review:'Ôn tập',shop:'Cửa hàng',sets:'Bộ từ',community:'Cộng đồng'};
+const screens={lesson:<LessonDetailView {...props} textbookTitle="Giáo trình" onStartActivity={noop}/>,lessons:<LessonsView onBack={noop} onSelect={noop} lessons={[lesson,{...lesson,no:2,status:'locked'}]}/>,flashcard:<FlashcardView {...props} vocabulary={words} grammar={grammar}/>,dictation:<DictationView {...props} lines={lines} vocabulary={words}/>,shadowing:<ShadowingView {...props} lines={lines}/>,review:<ReviewIntroView {...props} mode="bylesson" selectedLessons={[lesson]} vocabulary={words} grammar={grammar} dictationLines={lines} shadowingLines={lines} onStart={noop}/>,shop:<PlantShopView shop={{balance:60,plants:[{id:'mugunghwa',name:'Mugunghwa',description:'Cây tiến độ',price:150,owned:true,selected:true},{id:'cherry',name:'Anh đào',description:'Hoa anh đào',price:150,owned:false}]}} onBack={noop} onBuy={noop} onSelect={noop}/>,sets:<CustomLessonHub onBack={noop} onStudy={noop}/>,community:<CommunityView onBack={noop} onStudyCustomLesson={noop}/>};
+return <div className="app"><main className="main"><nav className="fc2-topbar" style={{flexWrap:'wrap'}}>{Object.entries(names).map(([id,name])=><button key={id} className="fc-nav-btn" onClick={()=>setView(id)}>{name}</button>)}<button className="fc-nav-btn" onClick={()=>setTheme(theme==='dark'?'light':'dark')}>Đổi sáng/tối</button></nav>{screens[view]}</main></div>}
+createRoot(document.getElementById('root')).render(<PreferencesProvider><AppDialogProvider><Preview/></AppDialogProvider></PreferencesProvider>);
