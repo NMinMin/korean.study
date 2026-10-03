@@ -12872,9 +12872,9 @@ textarea.fc2-note {
 
 /* Keep every editable text surface light even when the OS/browser uses a dark
    form-control color scheme. Semantic correct/wrong fields retain their color. */
-.app input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]),
-.app textarea:not(.ok):not(.wrong),
-.app select {
+:root:not([data-theme="dark"]) .app input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]),
+:root:not([data-theme="dark"]) .app textarea:not(.ok):not(.wrong),
+:root:not([data-theme="dark"] ) .app select {
   background: #fff !important;
   color: #2E2A4A !important;
   -webkit-text-fill-color: #2E2A4A !important;
@@ -14753,8 +14753,8 @@ textarea.fc2-note {
 
 @media (max-width: 600px) {
   .lb-selector-wrap { width: 100%; min-width: 0; flex-direction: column; align-items: stretch; }
-  .lb-selector-wrap .admin-combobox { width: 100%; min-width: 0; }
-  .lb-selector-wrap .admin-combobox-trigger { width: 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+  .lb-selector-wrap .app-combobox { width: 100%; min-width: 0; }
+  .lb-selector-wrap .app-combobox-trigger { width: 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
   .lb-row.single-col-row { display: grid; grid-template-columns: 32px 32px minmax(0, 1fr); gap: 8px; padding: 12px 10px; }
   .lb-rank-badge { min-width: 0; }
   .lb-avatar-circle { width: 32px; height: 32px; }

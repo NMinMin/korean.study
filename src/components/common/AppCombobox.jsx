@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
+import './AppCombobox.css';
 
 export default function AppCombobox({ value, options, onChange, placeholder = 'Chọn...' }) {
   const [open, setOpen] = useState(false);
@@ -17,10 +18,15 @@ export default function AppCombobox({ value, options, onChange, placeholder = 'C
   }, []);
 
   return (
-    <div className={`admin-combobox ${open ? 'open' : ''}`} ref={rootRef}>
+    <div className={`app-combobox ${open ? 'open' : ''}`} ref={rootRef} onKeyDown={(event) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        rootRef.current?.querySelector('.app-combobox-trigger')?.focus();
+      }
+    }}>
       <button
         type="button"
-        className="admin-combobox-trigger"
+        className="app-combobox-trigger"
         onClick={() => setOpen((prev) => !prev)}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -29,7 +35,7 @@ export default function AppCombobox({ value, options, onChange, placeholder = 'C
         <ChevronDown size={17} />
       </button>
       {open && (
-        <div className="admin-combobox-menu" role="listbox">
+        <div className="app-combobox-menu" role="listbox">
           {options.map((opt) => {
             const isSelected = opt.value === value;
             return (

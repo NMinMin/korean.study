@@ -29,3 +29,22 @@
 [data-theme="dark"] :is(.settings-minute-input input, .settings-date-input, .settings-time-input, .settings-language-select) { background: #2b263a !important; color: #e5e0f4 !important; -webkit-text-fill-color: #e5e0f4; color-scheme: dark; }
 :root[data-theme="dark"] .app .settings-wide-page :is(input, select, .settings-date-input, .settings-time-input) { background: #2b263a !important; color: #e5e0f4 !important; -webkit-text-fill-color: #e5e0f4 !important; color-scheme: dark !important; }
 html[data-theme="dark"] body #root .app .main .settings-wide-page .settings-card .settings-minute-input input { background-color: #2b263a !important; color: #e5e0f4 !important; -webkit-text-fill-color: #e5e0f4 !important; }
+/* Shared page surfaces: loaded independently of lazy admin styles. */
+html[data-theme="dark"] .app :is(.app-page-header,.recent-card,.rank-preview-card,.gm-hub-card,.curriculum-empty,.vl-row,.grammar-catalog-card,.lb-header-bar,.lb-row,.lb-my-rank-card,.book-card,.word-of-day,.wod-card) { background:#211e2f; border-color:#393447; color:#e5e0f4; }
+html[data-theme="dark"] .app :is(.app-header-streak,.app-header-user,.app-header-notification,.gem-btn,.sidebar-signout,.chip,.content-library-search,.content-library-filter,.content-library-starred-filter,.fc2-content-tab:not(.on),.qa-card,.day,.review-cycle,.add-book,.gm-book-action,.lb-xp-pill,.lb-avatar-circle,.lb-page-btn:not(.active)) { background:#292437 !important; border-color:#49415c; color:#d5cbea; }
+html[data-theme="dark"] .app :is(.app-page-heading h1,.app-page-heading p,.curriculum-section-head h2,.gm-hub-card b,.vl-ko,.grammar-catalog-content b,.lb-name,.cont-info b,.goal-msg,.goal-ring-row text,.recent-item b,.rank-preview-body b,.book-meta b,.chip b,.gem-btn span,.day-date) { color:#f1ecff !important; fill:#f1ecff; }
+html[data-theme="dark"] .app :is(.curriculum-section-head p,.gm-hub-count,.vl-vi,.grammar-catalog-content p,.recent-item span,.rank-preview-body span,.day-name,.day-words,.cont-book,.hello p,.chip small) { color:#b5adc9; }
+html[data-theme="dark"] .app .header { background-image:linear-gradient(rgba(20,19,30,.85),rgba(20,19,30,.85)),var(--dashboard-card-background); }
+html[data-theme="dark"] .app :is(.content-library-search input,.content-library-filter select) { background:transparent !important; color:#e5e0f4 !important; -webkit-text-fill-color:#e5e0f4 !important; color-scheme:dark; }
+html[data-theme="dark"] .app .day.selected { background:#45356c !important; border-color:#a99af1; }
+html[data-theme="dark"] .app .lb-row.me { background:#302744; border-color:#a99af1; }
+html[data-theme="dark"] .app .lb-my-rank-card { background:#372b22; border-color:#805a31; }
+html[data-theme="dark"] .app .curriculum-section-head>span { background:#302744; color:#c9baff; }
+html[data-theme="dark"] .app .sidebar-signout { color:#ff9ba9; }
+html[data-theme="dark"] .app .wod-ko { color:#f1ecff; }
+html[data-theme="dark"] .app :is(.nav-tile-ico,.home-pill-ico,.chip-ico,.gm-hub-badge,.rank-preview-ico,.vl-audio,.fc2-content-tab-count) { background:#302744 !important; color:#c9baff !important; }
+html[data-theme="dark"] .app input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]),
+html[data-theme="dark"] .app textarea:not(.ok):not(.wrong),
+html[data-theme="dark"] .app select { background:#2b263a !important; color:#e5e0f4 !important; -webkit-text-fill-color:#e5e0f4 !important; color-scheme:dark; }
+html[data-theme="dark"] .app :is(.content-library-search input,.content-library-filter select) { border:0; }
+html[data-theme="dark"] .app .rank-preview-body b { color:#ffc57c !important; }
