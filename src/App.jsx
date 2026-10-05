@@ -669,7 +669,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 onBack={goHome}
                 hideHeader
                 initialTab={communityInitialTab}
-                onStudyCustomLesson={(item) => { setCustomLessonData(item); setCustomLessonBackView('congdong'); setCommunityInitialTab('discover'); setView('test-custom-lesson'); }}
+                onStudyCustomLesson={(item) => { setCustomLessonData(item); setCustomLessonBackView('congdong'); setCommunityInitialTab('discover'); setView('study-custom-lesson'); }}
               />
             )}
             {view === 'tuvung-chude' && <TopicsView onBack={goHome} />}
@@ -691,7 +691,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 <CustomLessonHub
                   profile={profile}
                   onBack={() => setView('nguphap-hub')}
-                  onStudy={(item) => { setCustomLessonData(item); setCustomLessonBackView('vocab-sets'); setView('test-custom-lesson'); }}
+                  onStudy={(item) => { setCustomLessonData(item); setCustomLessonBackView('vocab-sets'); setView('study-custom-lesson'); }}
                 />
               </section>
             )}
@@ -770,7 +770,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
               />
             )}
             {view === 'test-custom-lesson' && customLessonData && (
-              <CustomLessonTestView key={customLessonData.id} lessonData={customLessonData} onBack={() => { setView(customLessonBackView); setActive(customLessonBackView === 'congdong' ? 'congdong' : 'nguphap'); }} />
+              <CustomLessonTestView key={customLessonData.id} lessonData={customLessonData} onBack={() => setView('study-custom-lesson')} />
             )}
             {view === 'aiquiz' && <AIQuizView
               lesson={selectedLesson}

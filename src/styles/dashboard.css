@@ -14783,3 +14783,13 @@ textarea.fc2-note {
 .cl-creation-loader { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 32px; border-radius: 20px; background: var(--ks-surface-ffffff, #fff); color: var(--ks-text-423b60, #423b60); text-align: center; }
 .cl-loader-spin { animation: cl-loader-turn 1.5s linear infinite; color: #7565e8; }
 @keyframes cl-loader-turn { to { transform: rotate(360deg); } }
+
+.cl-vocabulary-list { display: grid; gap: 12px; margin: 20px 0; }
+.cl-vocabulary-row { display: flex; align-items: flex-start; gap: 14px; padding: 18px; border: 1px solid var(--ks-border-e9e4f4, #e9e4f4); border-radius: 16px; background: var(--ks-surface-ffffff, #fff); }
+.cl-vocabulary-row > img { width: 64px; height: 64px; object-fit: cover; border-radius: 12px; }
+.cl-vocabulary-copy { display: grid; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+.cl-vocabulary-copy > b { font-size: 22px; }
+.cl-vocabulary-copy > span { font-size: 16px; }
+.cl-vocabulary-copy p { margin: 4px 0 0; }
+.cl-vocabulary-copy small { line-height: 1.6; }
+@media (max-width: 520px) { .cl-vocabulary-row { padding: 12px; gap: 10px; } .cl-vocabulary-row > img { width: 44px; height: 44px; } }

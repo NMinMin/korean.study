@@ -645,6 +645,7 @@ export function CustomLessonStudyView({ lessonData, onBack, onStartQuiz }) {
   const [canDelete, setCanDelete] = useState(false);
 
   useEffect(() => {
+    if (!supabase) return;
     supabase.auth.getUser().then(({ data }) => {
       if (data?.user?.id && data.user.id === lessonData.creatorId) {
         setCanDelete(true);
@@ -674,73 +675,35 @@ export function CustomLessonStudyView({ lessonData, onBack, onStartQuiz }) {
       });
     }
   };
-  const [idx, setIdx] = useState(0);
-  const [flipped, setFlipped] = useState(false);
-  const total = lessonData.words.length;
-  const w = lessonData.words[idx];
-  const hasQuiz = lessonData.words.length > 0;
-
-  useEffect(() => { setFlipped(false); }, [idx]);
-
-  const next = () => { if (idx + 1 < total) setIdx((i) => i + 1); else onBack(); };
-  const prev = () => { if (idx > 0) setIdx((i) => i - 1); };
-
+  const words = lessonData.words || [];
   return (
     <section className="rv-page">
       <div className="rv-quiz-top">
-        <button className="fc2-back" onClick={onBack} aria-label="Về Cộng đồng"><ChevronLeft size={20} /></button>
+        <button className="fc2-back" onClick={onBack} aria-label="Quay lại"><ChevronLeft size={20} /></button>
         <span className="rv-quiz-title">{lessonData.title}</span>
-        {canDelete && (
-          <button
-            className="cl-notebook-remove"
-            onClick={handleDeleteFromStudy}
-            aria-label="Xóa bộ từ vựng"
-            title="Xóa vĩnh viễn bộ từ vựng này"
-            style={{ marginLeft: 8 }}
-          >
-            <Trash2 size={16} />
-          </button>
-        )}
-        <span className="rv-quiz-count">{idx + 1} / {total}</span>
+        {canDelete && <button className="cl-notebook-remove" onClick={handleDeleteFromStudy} aria-label="Xóa bộ từ vựng"><Trash2 size={16} /></button>}
+        <span className="rv-quiz-count">{words.length} từ</span>
       </div>
-      <div className="fc2-progress-bar"><div style={{ width: `${((idx + 1) / total) * 100}%` }} /></div>
-      <p className="cg-sub" style={{ marginTop: 0 }}>Bộ từ vựng của {lessonData.author}</p>
-
-      {hasQuiz && (
-        <button className="cl-quiz-launch" onClick={() => onStartQuiz(lessonData)}>
-          <Sparkles size={14} /> Làm bài kiểm tra AI tạo sẵn cho bộ này
-        </button>
-      )}
-
-      <div className="cl-study-card" onClick={() => setFlipped((f) => !f)}>
-        {!flipped ? (
-          <>
-            {w.img && <img className="cl-study-img" src={w.img} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
-            <span className="cl-study-word" lang="ko">{w.ko}</span>
-            <span className="cl-study-hint">Bấm để xem nghĩa</span>
-          </>
-        ) : (
-          <div className="cl-study-back">
-            <span className="cl-study-meaning">{w.vi}</span>
-            {w.example && (
-              <div className="cl-study-example">
-                <p lang="ko">{renderKo(w.example)}</p>
-                {w.exampleVi && <p className="cl-study-example-vi">{w.exampleVi}</p>}
-              </div>
-            )}
-            {w.mnemonic && (
-              <div className="cl-study-mnemonic"><Lightbulb size={13} color="#F5A623" /> {w.mnemonic}</div>
-            )}
-          </div>
-        )}
+      <p className="cg-sub">Bộ từ vựng của {lessonData.author} · Học các từ dưới đây trước khi làm trắc nghiệm.</p>
+      <div className="cl-vocabulary-list">
+        {words.map((word, index) => (
+          <article className="cl-vocabulary-row" key={index}>
+            <span className="cl-word-number">{index + 1}</span>
+            {word.img && <img src={word.img} alt="" loading="lazy" />}
+            <div className="cl-vocabulary-copy">
+              <b lang="ko">{word.ko}</b>
+              <span lang="vi">{word.vi}</span>
+              {word.example && <p lang="ko">{renderKo(word.example)}</p>}
+              {word.exampleVi && <small>{word.exampleVi}</small>}
+              {word.mnemonic && <small className="cl-study-mnemonic"><Lightbulb size={14} /> {word.mnemonic}</small>}
+            </div>
+          </article>
+        ))}
       </div>
-
+      {!words.length && <p>Chưa có từ vựng trong bộ này.</p>}
       <div className="fc-nav">
-        <button className="fc-nav-btn" disabled={idx === 0} onClick={prev}><ChevronLeft size={18} /> Câu trước</button>
-        <div className="fc-dots">
-          {lessonData.words.map((_, i) => (<button key={i} className={`fc-dot ${i === idx ? 'on' : ''}`} onClick={() => setIdx(i)} />))}
-        </div>
-        <button className="fc-nav-btn primary" onClick={next}>{idx + 1 >= total ? 'Hoàn thành' : 'Từ tiếp theo'} <ChevronRight size={18} /></button>
+        <button className="fc-nav-btn" onClick={onBack}>Quay lại</button>
+        <button className="fc-nav-btn primary" disabled={!words.length} onClick={() => onStartQuiz(lessonData)}><Sparkles size={16} /> Làm trắc nghiệm <ChevronRight size={18} /></button>
       </div>
     </section>
   );
