@@ -13,7 +13,7 @@ import { renderKo, shuffleArr } from '../../utils/textUtils';
 import { SwBunnyEmpty } from '../../components/common/Mascots';
 import { useAppDialog } from '../../components/common/AppDialog';
 
-const DEFAULT_CUSTOM_QUIZ_TYPES = ['fillblank'];
+const DEFAULT_CUSTOM_QUIZ_TYPES = ['meaning'];
 
 export const genLessonCode = () => {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -46,11 +46,10 @@ Với MỖI từ theo đúng thứ tự trên, hãy soạn:
 1. "example": một câu tiếng Hàn tự nhiên, đơn giản, có dùng đúng từ đó, đánh dấu chính xác từ mục tiêu bằng ** ** (ví dụ: "저는 아침에 **커피**를 마셔요.").
 2. "exampleVi": bản dịch tiếng Việt của câu ví dụ trên.
 3. "mnemonic": một mẹo ghi nhớ ngắn (1 câu) bằng tiếng Việt để người Việt dễ nhớ từ này — có thể chiết tự Hán Việt nếu phù hợp, liên tưởng âm thanh, hoặc hình ảnh. Không bịa chiết tự hay nghĩa của từng âm tiết; nếu dùng liên tưởng âm thanh, ghi rõ đó chỉ là liên tưởng để nhớ.
-4. "quiz": câu hỏi điền từ gồm "prompt" có đúng một chỗ trống ( _____ ), "options" gồm 4 từ tiếng Hàn khác nhau và chỉ một đáp án đúng theo ngữ cảnh, "correct" là từ mục tiêu trong options. Các đáp án nhiễu phải cùng loại từ hoặc cùng dạng biểu đạt với đáp án đúng, có độ dài và cấu trúc tương đương, hợp ngữ pháp khi điền vào câu nhưng sai về nghĩa/ngữ cảnh. Không trộn danh từ đơn lẻ với lời chào hay câu cảm thán khiến đáp án quá dễ đoán. Câu hỏi không được chứa từ mục tiêu hoặc bản dịch của đáp án ngoài chỗ trống.
-5. "wrongExamples": Mảng gồm đúng 3 câu tiếng Hàn dùng SAI từ mục tiêu đó hoặc sai ngữ pháp/ngữ cảnh (làm đáp án nhiễu cho bài trắc nghiệm "Chọn câu dùng đúng"), mỗi câu là một câu hoàn chỉnh nhưng kết hợp sai ngữ cảnh của từ này.
+4. "quiz": trắc nghiệm chọn nghĩa tiếng Việt của từ tiếng Hàn. "prompt" phải bằng chính xác từ tiếng Hàn mục tiêu; "correct" phải bằng chính xác nghĩa tiếng Việt đã cho; "options" gồm đúng 4 nghĩa tiếng Việt khác nhau, chứa correct và 3 nghĩa sai. Đáp án nhiễu cùng loại từ, cấu trúc và độ dài tương đương, không đồng nghĩa hay cũng đúng với từ mục tiêu. Không tạo câu điền từ tiếng Hàn.
 
 Trả lời CHỈ bằng JSON, không thêm markdown hay chữ nào khác, theo đúng cấu trúc:
-{"items": [{"example": "...", "exampleVi": "...", "mnemonic": "...", "quiz": {"prompt": "... ( _____ ) ...", "options": ["...", "...", "...", "..."], "correct": "..."}, "wrongExamples": ["...", "...", "..."]}]}
+{"items": [{"example": "...", "exampleVi": "...", "mnemonic": "...", "quiz": {"prompt": "từ tiếng Hàn", "options": ["...", "...", "...", "..."], "correct": "..."}, "wrongExamples": ["...", "...", "..."]}]}
 
 Mảng "items" phải có đúng ${words.length} phần tử, theo đúng thứ tự danh sách từ ở trên.`;
 
@@ -58,10 +57,10 @@ Mảng "items" phải có đúng ${words.length} phần tử, theo đúng thứ 
   if (!Array.isArray(parsed.items) || parsed.items.length !== words.length) throw new Error('malformed AI response');
   parsed.items.forEach((item, index) => {
     const q = item?.quiz;
-    if (!q || typeof q.prompt !== 'string' || q.prompt.split('( _____ )').length !== 2
+    if (!q || q.prompt !== words[index].ko
       || !Array.isArray(q.options) || q.options.length !== 4
       || q.options.some((o) => typeof o !== 'string' || !o.trim() || o !== o.trim())
-      || new Set(q.options).size !== 4 || q.correct !== words[index].ko
+      || new Set(q.options).size !== 4 || q.correct !== words[index].vi
       || !q.options.includes(q.correct)) throw new Error('Invalid AI question');
   });
   return parsed.items;
@@ -330,7 +329,7 @@ export function CustomLessonHub({ profile, onStudy, onBack, mode = 'library' }) 
       setSaving(false);
       return;
     }
-    const questions = enrichedWords.map((w, i) => ({ ...w.quiz, type: 'fillblank', targetKo: w.ko, targetVi: w.vi, promptVi: w.exampleVi, mnemonic: w.mnemonic, key: 'fb:' + i }));
+    const questions = enrichedWords.map((w, i) => ({ ...w.quiz, type: 'meaning', targetKo: w.ko, targetVi: w.vi, promptVi: w.exampleVi, mnemonic: w.mnemonic, key: 'fb:' + i }));
     setGeneratedDraft({ title: title.trim(), words: enrichedWords, questions, quizTypes: DEFAULT_CUSTOM_QUIZ_TYPES, visibility });
     setGenStep('');
     setSaving(false);
@@ -592,7 +591,7 @@ export function CustomLessonHub({ profile, onStudy, onBack, mode = 'library' }) 
           <button className="cl-add-word" onClick={addWordRow}><Plus size={13} /> Thêm từ</button>
 
           <p className="cg-sub cl-default-quiz-note">
-            <CheckCircle2 size={14} /> Bài kiểm tra được tạo tự động theo dạng trắc nghiệm 4 đáp án.
+            <CheckCircle2 size={14} /> Xem từ tiếng Hàn và chọn nghĩa tiếng Việt trong 4 đáp án.
           </p>
 
           {uploadError && <div className="cl-find-err">{uploadError}</div>}
@@ -747,125 +746,23 @@ export function CustomLessonStudyView({ lessonData, onBack, onStartQuiz }) {
   );
 }
 
-const FALLBACK_KO_DISTRACTORS = [
-  '사과', '학교', '친구', '물', '커피', '책', '가방', '식당', '선생님',
-  '공부', '영화', '시간', '오늘', '내일', '병원', '날씨', '가족', '음악',
-  '바다', '사진', '우유', '빵', '의자', '모자', '시계', '공원', '운동'
-];
-
-function getKoDistractors(correctKo, allWords) {
-  const fromSet = shuffleArr(
-    allWords.map((w) => w.ko?.trim()).filter((k) => k && k !== correctKo)
-  );
-  const result = [...new Set(fromSet)];
-  if (result.length < 3) {
-    const fromPool = shuffleArr(FALLBACK_KO_DISTRACTORS.filter((k) => k !== correctKo && !result.includes(k)));
-    for (const item of fromPool) {
-      result.push(item);
-      if (result.length >= 3) break;
-    }
-  }
-  return result.slice(0, 3);
-}
-
-function getUsageDistractors(w, allWords) {
-  const rawList = Array.isArray(w.wrongExamples) ? w.wrongExamples.filter((s) => typeof s === 'string' && s.trim()) : [];
-  const cleanCorrect = (w.example || '').replace(/\*\*/g, '').trim();
-  const validWrong = rawList.filter((s) => s.trim() !== cleanCorrect);
-  const result = [...new Set(validWrong)];
-
-  if (result.length < 3) {
-    const templates = [
-      `저는 ${w.ko}을/를 시원하게 마셨어요.`,
-      `어제 ${w.ko}을/를 입고 잠을 잤어요.`,
-      `${w.ko}이/가 너무 빨라서 따라갈 수 없어요.`,
-      `내일 ${w.ko}에게 편지를 보낼 거예요.`
-    ];
-    for (const t of shuffleArr(templates)) {
-      if (t !== cleanCorrect && !result.includes(t)) {
-        result.push(t);
-        if (result.length >= 3) break;
-      }
-    }
-  }
-  return result.slice(0, 3);
-}
-
 export function buildCustomQuizQuestions(lessonData) {
-  if (Array.isArray(lessonData.questions) && lessonData.questions.length) {
-    return shuffleArr(lessonData.questions.map((q) => ({ ...q, options: shuffleArr([...q.options]) })));
-  }
-  // Compatibility for vocabulary sets saved before the question bank was added.
-
+  const stored = Array.isArray(lessonData.questions) ? lessonData.questions : [];
   const words = (lessonData.words || []).filter((w) => w.ko?.trim() && w.vi?.trim());
-  const types = DEFAULT_CUSTOM_QUIZ_TYPES;
-  const pool = [];
-
-  // 1. Điền từ vào câu: AI tạo câu có khuyết từ, cho 4 đáp án chọn
-  if (types.includes('fillblank')) {
-    words.forEach((w, i) => {
-      const ex = w.example || `저는 오늘 **${w.ko}** 단어를 공부해요.`;
-      const cleanTarget = w.ko.trim();
-      let blanked = ex;
-      if (blanked.includes('**')) {
-        blanked = blanked.replace(/\*\*(.+?)\*\*/, '( _____ )');
-      } else {
-        blanked = blanked.replace(new RegExp(cleanTarget, 'g'), '( _____ )');
-      }
-      const distractors = getKoDistractors(cleanTarget, words);
-      const options = shuffleArr([cleanTarget, ...distractors]);
-      pool.push({
-        type: 'fillblank',
-        prompt: blanked,
-        promptVi: w.exampleVi,
-        targetKo: cleanTarget,
-        targetVi: w.vi,
-        correct: cleanTarget,
-        options,
-        mnemonic: w.mnemonic,
-        key: `fb:${i}:${cleanTarget}`
-      });
-    });
-  }
-
-  // 2. Chọn câu dùng đúng: 4 đáp án chọn câu dùng từ & ngữ pháp chuẩn xác
-  if (types.includes('usage')) {
-    words.forEach((w, i) => {
-      const correctSentence = (w.example || `저는 오늘 ${w.ko} 단어를 공부해요.`).replace(/\*\*/g, '').trim();
-      const distractors = getUsageDistractors(w, words);
-      const options = shuffleArr([correctSentence, ...distractors]);
-      pool.push({
-        type: 'usage',
-        prompt: w.ko,
-        promptVi: w.vi,
-        correct: correctSentence,
-        options,
-        explanation: w.exampleVi ? `Câu đúng: "${correctSentence}" (${w.exampleVi})` : undefined,
-        key: `us:${i}:${w.ko}`
-      });
-    });
-  }
-
-  const shuffledQuestions = shuffleArr(pool);
-
-  // 3. Chọn từ - nghĩa: Nối các card tiếng Hàn với tiếng Việt
-  if (types.includes('matching') && words.length >= 2) {
-    const batchSize = words.length <= 6 ? words.length : 5;
-    for (let b = 0; b < words.length; b += batchSize) {
-      const slice = words.slice(b, b + batchSize);
-      if (slice.length >= 2) {
-        shuffledQuestions.push({
-          type: 'matching_cards',
-          pairs: slice.map((w) => ({ ko: w.ko.trim(), vi: w.vi.trim() })),
-          batchIndex: Math.floor(b / batchSize) + 1,
-          totalBatches: Math.ceil(words.length / batchSize),
-          key: `mc:${b}`
-        });
-      }
-    }
-  }
-
-  return shuffledQuestions;
+  // Older sentence quizzes are adapted locally without another AI request.
+  const pool = words.map((word, index) => {
+    const ko = word.ko.trim();
+    const vi = word.vi.trim();
+    const question = stored.find((q) => q.type === 'meaning' && q.prompt === ko && q.correct === vi);
+    const options = question ? question.options : [...new Set([
+      vi, ...words.map((w) => w.vi.trim()).filter((meaning) => meaning !== vi),
+      ...['trường học', 'gia đình', 'thời gian', 'thời tiết', 'bạn bè', 'đồ ăn'].filter((meaning) => meaning !== vi)
+    ])].slice(0, 4);
+    return { ...question, type: 'meaning', prompt: ko, correct: vi, options: shuffleArr([...options]),
+      targetKo: ko, targetVi: vi, img: word.img, mnemonic: word.mnemonic,
+      promptVi: word.exampleVi, example: word.example, key: 'meaning:' + index };
+  });
+  return shuffleArr(pool);
 }
 
 export function MatchingCardGame({ pairs, onComplete }) {
@@ -1096,18 +993,11 @@ export function CustomLessonTestView({ lessonData, onBack }) {
       <div className="fc2-progress-bar"><div style={{ width: `${((idx + 1) / questions.length) * 100}%` }} /></div>
 
       <div className="qz-question-card">
-        {q.type === 'fillblank' && (
+        {q.type === 'meaning' && (
           <>
-            <p className="qz-instruction">Điền từ còn thiếu vào chỗ trống trong câu:</p>
-            <div className="qz-blank-sentence" lang="ko">
-              {q.prompt.split('( _____ )').map((part, pIdx, arr) => (
-                <React.Fragment key={pIdx}>
-                  {part}
-                  {pIdx < arr.length - 1 && <span className="qz-blank-spot">{picked || '( _____ )'}</span>}
-                </React.Fragment>
-              ))}
-            </div>
-            {picked && q.promptVi && <p className="cl-study-example-vi" style={{ marginTop: 6 }}>Nghĩa câu: {q.promptVi}</p>}
+            <p className="qz-instruction">Chọn nghĩa tiếng Việt của từ tiếng Hàn:</p>
+            {q.img && <img className="cl-study-img" src={q.img} alt="" />}
+            <div className="qz-blank-sentence" lang="ko">{q.prompt}</div>
 
             <div className="qz-options">
               {q.options.map((opt, oIdx) => {
@@ -1119,7 +1009,7 @@ export function CustomLessonTestView({ lessonData, onBack }) {
                   <button
                     key={opt}
                     className={`qz-option ${cls}`}
-                    lang="ko"
+                    lang="vi"
                     onClick={() => choose(opt)}
                     disabled={!!picked}
                   >
@@ -1132,7 +1022,10 @@ export function CustomLessonTestView({ lessonData, onBack }) {
 
             {picked && (
               <div className={`qz-feedback-box ${picked === q.correct ? 'correct' : 'wrong'}`}>
-                <span className="qz-feedback-tag">{picked === q.correct ? 'Chính xác!' : `Đáp án đúng: ${q.correct} (${q.targetVi || ''})`}</span>
+                <span className="qz-feedback-tag">{picked === q.correct ? 'Chính xác!' : `Đáp án đúng: ${q.correct}`}</span>
+                <p className="qz-feedback-text"><span lang="ko">{q.targetKo}</span> — {q.targetVi}</p>
+                {q.example && <p lang="ko">{renderKo(q.example)}</p>}
+                {q.promptVi && <p>{q.promptVi}</p>}
                 {q.mnemonic && (
                   <p className="qz-feedback-text">
                     <Lightbulb size={13} style={{ verticalAlign: 'middle', marginRight: 4, color: '#F5A623' }} />
