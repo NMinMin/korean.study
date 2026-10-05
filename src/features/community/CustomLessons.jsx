@@ -45,8 +45,8 @@ ${wordList}
 Với MỖI từ theo đúng thứ tự trên, hãy soạn:
 1. "example": một câu tiếng Hàn tự nhiên, đơn giản, có dùng đúng từ đó, đánh dấu chính xác từ mục tiêu bằng ** ** (ví dụ: "저는 아침에 **커피**를 마셔요.").
 2. "exampleVi": bản dịch tiếng Việt của câu ví dụ trên.
-3. "mnemonic": một mẹo ghi nhớ ngắn (1 câu) bằng tiếng Việt để người Việt dễ nhớ từ này — có thể chiết tự Hán Việt nếu phù hợp, liên tưởng âm thanh, hoặc hình ảnh.
-4. "quiz": câu hỏi điền từ gồm "prompt" có đúng một chỗ trống ( _____ ), "options" gồm 4 từ tiếng Hàn khác nhau và chỉ một đáp án đúng theo ngữ cảnh, "correct" là từ mục tiêu trong options.
+3. "mnemonic": một mẹo ghi nhớ ngắn (1 câu) bằng tiếng Việt để người Việt dễ nhớ từ này — có thể chiết tự Hán Việt nếu phù hợp, liên tưởng âm thanh, hoặc hình ảnh. Không bịa chiết tự hay nghĩa của từng âm tiết; nếu dùng liên tưởng âm thanh, ghi rõ đó chỉ là liên tưởng để nhớ.
+4. "quiz": câu hỏi điền từ gồm "prompt" có đúng một chỗ trống ( _____ ), "options" gồm 4 từ tiếng Hàn khác nhau và chỉ một đáp án đúng theo ngữ cảnh, "correct" là từ mục tiêu trong options. Các đáp án nhiễu phải cùng loại từ hoặc cùng dạng biểu đạt với đáp án đúng, có độ dài và cấu trúc tương đương, hợp ngữ pháp khi điền vào câu nhưng sai về nghĩa/ngữ cảnh. Không trộn danh từ đơn lẻ với lời chào hay câu cảm thán khiến đáp án quá dễ đoán. Câu hỏi không được chứa từ mục tiêu hoặc bản dịch của đáp án ngoài chỗ trống.
 5. "wrongExamples": Mảng gồm đúng 3 câu tiếng Hàn dùng SAI từ mục tiêu đó hoặc sai ngữ pháp/ngữ cảnh (làm đáp án nhiễu cho bài trắc nghiệm "Chọn câu dùng đúng"), mỗi câu là một câu hoàn chỉnh nhưng kết hợp sai ngữ cảnh của từ này.
 
 Trả lời CHỈ bằng JSON, không thêm markdown hay chữ nào khác, theo đúng cấu trúc:
@@ -1066,12 +1066,14 @@ export function CustomLessonTestView({ lessonData, onBack }) {
 
   if (done) {
     const pct = Math.round((score / questions.length) * 100);
+    const grade = Number(((score / questions.length) * 10).toFixed(1)).toLocaleString('vi-VN');
     return (
       <section className="rv-page">
         <div className="rv-result-card">
           <Sparkles size={32} color="#7C6FE4" />
           <h2 className="rv-result-grade">Hoàn thành bài kiểm tra!</h2>
-          <p className="rv-result-score">{score} / {questions.length} <span>phần đúng ({pct}%)</span></p>
+          <p className="rv-result-score" role="status">{grade} / 10 <span>điểm</span></p>
+          <p>Đúng {score} / {questions.length} câu ({pct}%)</p>
           {saveError && <div role="alert"><p>{saveError}</p><button className="fc-nav-btn" onClick={() => void saveResult()}>Thử lưu lại</button></div>}
         </div>
         <div className="fc-nav">
@@ -1105,7 +1107,7 @@ export function CustomLessonTestView({ lessonData, onBack }) {
                 </React.Fragment>
               ))}
             </div>
-            {q.promptVi && <p className="cl-study-example-vi" style={{ marginTop: 6 }}>Nghĩa câu: {q.promptVi}</p>}
+            {picked && q.promptVi && <p className="cl-study-example-vi" style={{ marginTop: 6 }}>Nghĩa câu: {q.promptVi}</p>}
 
             <div className="qz-options">
               {q.options.map((opt, oIdx) => {
