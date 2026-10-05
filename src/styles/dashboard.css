@@ -14778,3 +14778,8 @@ textarea.fc2-note {
   .community-view-container .cl-find-row input { min-width: 0; flex: 1 1 140px; }
   .community-view-container .cg-tab { flex: 1; min-width: 0; padding: 10px 8px; }
 }
+
+.cl-creation-overlay { position: fixed; inset: 0; z-index: 100000; display: grid; place-items: center; background: rgba(24,20,42,.6); padding: 20px; }
+.cl-creation-loader { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 32px; border-radius: 20px; background: var(--ks-surface-ffffff, #fff); color: var(--ks-text-423b60, #423b60); text-align: center; }
+.cl-loader-spin { animation: cl-loader-turn 1.5s linear infinite; color: #7565e8; }
+@keyframes cl-loader-turn { to { transform: rotate(360deg); } }

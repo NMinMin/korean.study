@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   CheckCircle2, Copy, Link2, BookMarked, BookOpen, Sparkles, XCircle, Plus,
@@ -29,6 +30,7 @@ export const mapCustomLessonRow = (row) => ({
   author: row.profiles?.display_name || 'Người học',
   createdAt: new Date(row.created_at).getTime(),
   words: Array.isArray(row.words) ? row.words : [],
+  questions: Array.isArray(row.questions) ? row.questions : [],
   quizTypes: Array.isArray(row.quiz_types) ? row.quiz_types : [],
   attachments: Array.isArray(row.attachments) ? row.attachments : [],
   visibility: row.visibility || 'public',
@@ -44,29 +46,49 @@ Với MỖI từ theo đúng thứ tự trên, hãy soạn:
 1. "example": một câu tiếng Hàn tự nhiên, đơn giản, có dùng đúng từ đó, đánh dấu chính xác từ mục tiêu bằng ** ** (ví dụ: "저는 아침에 **커피**를 마셔요.").
 2. "exampleVi": bản dịch tiếng Việt của câu ví dụ trên.
 3. "mnemonic": một mẹo ghi nhớ ngắn (1 câu) bằng tiếng Việt để người Việt dễ nhớ từ này — có thể chiết tự Hán Việt nếu phù hợp, liên tưởng âm thanh, hoặc hình ảnh.
-4. "wrongExamples": Mảng gồm đúng 3 câu tiếng Hàn dùng SAI từ mục tiêu đó hoặc sai ngữ pháp/ngữ cảnh (làm đáp án nhiễu cho bài trắc nghiệm "Chọn câu dùng đúng"), mỗi câu là một câu hoàn chỉnh nhưng kết hợp sai ngữ cảnh của từ này.
+4. "quiz": câu hỏi điền từ gồm "prompt" có đúng một chỗ trống ( _____ ), "options" gồm 4 từ tiếng Hàn khác nhau và chỉ một đáp án đúng theo ngữ cảnh, "correct" là từ mục tiêu trong options.
+5. "wrongExamples": Mảng gồm đúng 3 câu tiếng Hàn dùng SAI từ mục tiêu đó hoặc sai ngữ pháp/ngữ cảnh (làm đáp án nhiễu cho bài trắc nghiệm "Chọn câu dùng đúng"), mỗi câu là một câu hoàn chỉnh nhưng kết hợp sai ngữ cảnh của từ này.
 
 Trả lời CHỈ bằng JSON, không thêm markdown hay chữ nào khác, theo đúng cấu trúc:
-{"items": [{"example": "...", "exampleVi": "...", "mnemonic": "...", "wrongExamples": ["...", "...", "..."]}]}
+{"items": [{"example": "...", "exampleVi": "...", "mnemonic": "...", "quiz": {"prompt": "... ( _____ ) ...", "options": ["...", "...", "...", "..."], "correct": "..."}, "wrongExamples": ["...", "...", "..."]}]}
 
 Mảng "items" phải có đúng ${words.length} phần tử, theo đúng thứ tự danh sách từ ở trên.`;
 
   const { value: parsed } = await requestAIJson(prompt);
   if (!Array.isArray(parsed.items) || parsed.items.length !== words.length) throw new Error('malformed AI response');
+  parsed.items.forEach((item, index) => {
+    const q = item?.quiz;
+    if (!q || typeof q.prompt !== 'string' || q.prompt.split('( _____ )').length !== 2
+      || !Array.isArray(q.options) || q.options.length !== 4
+      || q.options.some((o) => typeof o !== 'string' || !o.trim() || o !== o.trim())
+      || new Set(q.options).size !== 4 || q.correct !== words[index].ko
+      || !q.options.includes(q.correct)) throw new Error('Invalid AI question');
+  });
   return parsed.items;
 }
 
-function fallbackLessonContent(words) {
-  return words.map((word) => ({
-    example: `저는 오늘 **${word.ko}** 단어를 공부해요.`,
-    exampleVi: `Hôm nay tôi học từ “${word.ko}” (${word.vi}).`,
-    mnemonic: `Liên tưởng “${word.ko}” với hình ảnh hoặc tình huống quen thuộc mang nghĩa “${word.vi}”.`,
-    wrongExamples: [
-      `저는 ${word.ko}을/를 시원하게 마셨어요.`,
-      `어제 ${word.ko}을/를 입고 학교에 갔어요.`,
-      `${word.ko}이/가 너무 빨라서 따라갈 수 없어요.`
-    ]
-  }));
+function CreationLoader({ step }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const focus = document.activeElement;
+    const siblings = [...document.body.children].filter((el) => !el.contains(ref.current));
+    const previous = siblings.map((el) => el.inert);
+    siblings.forEach((el) => { el.inert = true; });
+    ref.current?.focus();
+    const preventLeave = (event) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', preventLeave);
+    return () => {
+      siblings.forEach((el, i) => { el.inert = previous[i]; });
+      window.removeEventListener('beforeunload', preventLeave);
+      focus?.focus?.();
+    };
+  }, []);
+  return createPortal(<div className="cl-creation-overlay" ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Đang xử lý bộ từ vựng">
+    <div className="cl-creation-loader" role="status"><Sparkles className="cl-loader-spin" size={30} />
+      <b>{step === 'saving' ? 'Đang lưu bộ từ vựng và câu hỏi...' : 'AI đang tạo câu hỏi trắc nghiệm...'}</b>
+      <span>Vui lòng chờ hoàn tất.</span>
+    </div>
+  </div>, document.body);
 }
 
 export function ShareCodeBox({ code, onCreateAnother }) {
@@ -226,7 +248,7 @@ export function CustomLessonHub({ profile, onStudy, onBack, mode = 'library' }) 
       if (!supabase || !profile?.id) throw new Error('Supabase chưa được cấu hình');
       const { data, error } = await supabase
         .from('custom_lesson_bookmarks')
-        .select('lesson_id, custom_lessons(id, code, creator_id, title, words, quiz_types, attachments, visibility, status, created_at, profiles!custom_lessons_creator_id_fkey(display_name))')
+        .select('lesson_id, custom_lessons(id, code, creator_id, title, words, questions, quiz_types, attachments, visibility, status, created_at, profiles!custom_lessons_creator_id_fkey(display_name))')
         .eq('user_id', profile.id)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -251,7 +273,7 @@ export function CustomLessonHub({ profile, onStudy, onBack, mode = 'library' }) 
       if (!supabase || !profile?.id) throw new Error('Phiên đăng nhập đã hết hạn');
       const { data, error } = await supabase
         .from('custom_lessons')
-        .select('id, code, creator_id, title, words, quiz_types, attachments, visibility, status, created_at, profiles!custom_lessons_creator_id_fkey(display_name)')
+        .select('id, code, creator_id, title, words, questions, quiz_types, attachments, visibility, status, created_at, profiles!custom_lessons_creator_id_fkey(display_name)')
         .eq('status', 'visible')
         .eq('creator_id', profile.id)
         .order('created_at', { ascending: false });
@@ -285,7 +307,7 @@ export function CustomLessonHub({ profile, onStudy, onBack, mode = 'library' }) 
 
   const generatePreview = async () => {
     const validWords = words.filter((w) => w.ko.trim() && w.vi.trim());
-    if (!title.trim() || validWords.length < 2 || saving) return;
+    if (!title.trim() || validWords.length < 2 || saving || Object.values(wordUploads).some(Boolean)) return;
     setSaving(true);
     setGenError('');
     setGenStep('ai');
@@ -295,18 +317,21 @@ export function CustomLessonHub({ profile, onStudy, onBack, mode = 'library' }) 
       const items = await generateLessonContent(enrichedWords);
       enrichedWords = enrichedWords.map((w, i) => ({
         ...w,
+        quiz: items[i].quiz,
         example: items[i]?.example,
         exampleVi: items[i]?.exampleVi,
         mnemonic: items[i]?.mnemonic,
         wrongExamples: Array.isArray(items[i]?.wrongExamples) ? items[i].wrongExamples : []
       }));
     } catch (e) {
-      const items = fallbackLessonContent(enrichedWords);
-      enrichedWords = enrichedWords.map((w, i) => ({ ...w, ...items[i], enrichmentSource: 'fallback' }));
-      setGenError('AI đang bận nên hệ thống dùng nội dung dự phòng. Bạn hãy xem trước rồi vẫn có thể lưu bình thường.');
+      setGeneratedDraft(null);
+      setGenError('Không tạo được câu hỏi AI hợp lệ. Vui lòng thử lại trước khi lưu.');
+      setGenStep('');
+      setSaving(false);
+      return;
     }
-
-    setGeneratedDraft({ title: title.trim(), words: enrichedWords, quizTypes: DEFAULT_CUSTOM_QUIZ_TYPES, visibility });
+    const questions = enrichedWords.map((w, i) => ({ ...w.quiz, type: 'fillblank', targetKo: w.ko, targetVi: w.vi, promptVi: w.exampleVi, mnemonic: w.mnemonic, key: 'fb:' + i }));
+    setGeneratedDraft({ title: title.trim(), words: enrichedWords, questions, quizTypes: DEFAULT_CUSTOM_QUIZ_TYPES, visibility });
     setGenStep('');
     setSaving(false);
   };
@@ -350,13 +375,14 @@ export function CustomLessonHub({ profile, onStudy, onBack, mode = 'library' }) 
         creator_id: profile.id,
         title: generatedDraft.title,
         words: generatedDraft.words,
+        questions: generatedDraft.questions,
         quiz_types: generatedDraft.quizTypes,
         visibility: generatedDraft.visibility,
         attachments,
       }).select('id').single();
       if (error) throw error;
       const { error: bookmarkError } = await supabase.from('custom_lesson_bookmarks').insert({ user_id: profile.id, lesson_id: createdLesson.id });
-      if (bookmarkError) throw bookmarkError;
+      if (bookmarkError) setGenError('Bộ từ vựng đã lưu. Chưa thêm được vào danh sách đã lưu, bạn có thể dùng mã để thêm lại.');
       setSavedCode(code);
       setTitle('');
       setWords([{ ko: '', vi: '', img: '', showImg: false }, { ko: '', vi: '', img: '', showImg: false }, { ko: '', vi: '', img: '', showImg: false }]);
@@ -388,7 +414,7 @@ export function CustomLessonHub({ profile, onStudy, onBack, mode = 'library' }) 
       }
       const { data, error } = await supabase
         .from('custom_lessons')
-        .select('id, code, creator_id, title, words, quiz_types, attachments, visibility, status, created_at, profiles!custom_lessons_creator_id_fkey(display_name)')
+        .select('id, code, creator_id, title, words, questions, quiz_types, attachments, visibility, status, created_at, profiles!custom_lessons_creator_id_fkey(display_name)')
         .eq('id', importedId)
         .maybeSingle();
       if (error) throw error;
@@ -454,6 +480,7 @@ export function CustomLessonHub({ profile, onStudy, onBack, mode = 'library' }) 
 
   return (
     <div className="cl-hub">
+      {saving && <CreationLoader step={genStep} />}
       {onBack && (
         <div className="fc2-topbar">
           <div className="fc2-top-left">
@@ -511,7 +538,7 @@ export function CustomLessonHub({ profile, onStudy, onBack, mode = 'library' }) 
             <span><Sparkles size={20} /></span>
             <div>
               <h3>Tạo bộ từ vựng của riêng bạn</h3>
-              <p>Thêm từ, chọn dạng kiểm tra, xem nội dung AI tạo rồi mới lưu và lấy mã.</p>
+              <p>Thêm từ để AI tạo câu hỏi trắc nghiệm, xem trước rồi lưu và lấy mã.</p>
             </div>
           </div>
           <label className="auth-label">Tên bộ từ vựng</label>
@@ -590,13 +617,13 @@ export function CustomLessonHub({ profile, onStudy, onBack, mode = 'library' }) 
             </button>
           ) : (
             <div className="cl-generated-preview">
-              <div className="cl-section-title"><div><Sparkles size={17} /><b>Xem trước nội dung đã tạo</b></div><span>Mỗi thể thức đã chọn sẽ có câu hỏi cho toàn bộ {generatedDraft.words.length} từ.</span></div>
+              <div className="cl-section-title"><div><Sparkles size={17} /><b>Xem trước nội dung đã tạo</b></div><span>{generatedDraft.questions.length} câu hỏi trắc nghiệm sẽ được lưu cùng bộ từ vựng.</span></div>
               <div className="cl-preview-grid">
                 {generatedDraft.words.map((word, index) => (
                   <article key={`${word.ko}:${index}`} className="cl-preview-word">
                     {word.img && <img src={word.img} alt="" />}
                     <b lang="ko">{word.ko}</b><span>{word.vi}</span>
-                    <p lang="ko">{renderKo(word.example)}</p>
+                    <p lang="ko">{word.quiz.prompt}</p><small>{word.quiz.options.join(" · ")}</small><small>Đáp án: {word.quiz.correct}</small>
                     <small><Lightbulb size={12} /> {word.mnemonic}</small>
                   </article>
                 ))}
@@ -765,6 +792,11 @@ function getUsageDistractors(w, allWords) {
 }
 
 export function buildCustomQuizQuestions(lessonData) {
+  if (Array.isArray(lessonData.questions) && lessonData.questions.length) {
+    return shuffleArr(lessonData.questions.map((q) => ({ ...q, options: shuffleArr([...q.options]) })));
+  }
+  // Compatibility for vocabulary sets saved before the question bank was added.
+
   const words = (lessonData.words || []).filter((w) => w.ko?.trim() && w.vi?.trim());
   const types = DEFAULT_CUSTOM_QUIZ_TYPES;
   const pool = [];
@@ -958,7 +990,7 @@ export function MatchingCardGame({ pairs, onComplete }) {
 }
 
 export function CustomLessonTestView({ lessonData, onBack }) {
-  const [questions] = useState(() => buildCustomQuizQuestions(lessonData));
+  const [questions, setQuestions] = useState(() => buildCustomQuizQuestions(lessonData));
   const [idx, setIdx] = useState(0);
   const [picked, setPicked] = useState(null);
   const [score, setScore] = useState(0);
@@ -1044,7 +1076,7 @@ export function CustomLessonTestView({ lessonData, onBack }) {
         </div>
         <div className="fc-nav">
           <button className="fc-nav-btn" onClick={onBack}>Về bộ từ vựng</button>
-          <button className="fc-nav-btn primary" onClick={() => { resultSavedRef.current = false; setIdx(0); setPicked(null); setCardStageDone(false); setScore(0); setDone(false); }}>
+          <button className="fc-nav-btn primary" onClick={() => { resultSavedRef.current = false; setIdx(0); setPicked(null); setCardStageDone(false); setScore(0); setQuestions(buildCustomQuizQuestions(lessonData)); setDone(false); }}>
             Làm lại bài kiểm tra
           </button>
         </div>
