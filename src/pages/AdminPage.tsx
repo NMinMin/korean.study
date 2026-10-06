@@ -2,7 +2,8 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { adminApi } from '../lib/adminApi'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { BookOpen, BookText, Users, LayoutDashboard, LogOut, X, ShieldCheck, GraduationCap, Plus, Search, Eye, EyeOff, Lock, Unlock, Flag, MessageSquare, Pencil, Trash2, ChevronDown, ChevronUp, Save, Check, Clock3, Star, Download, TrendingUp, ClipboardList, CalendarDays, RotateCcw, Bell, Copy, Zap, CheckCircle2, Mail, Calendar, Shield } from 'lucide-react'
+import { usePreferences } from '../contexts/PreferencesContext'
+import { BookOpen, BookText, Users, LayoutDashboard, LogOut, X, ShieldCheck, GraduationCap, Plus, Search, Eye, EyeOff, Lock, Unlock, Flag, MessageSquare, Pencil, Trash2, ChevronDown, ChevronUp, Save, Check, Clock3, Star, Download, TrendingUp, ClipboardList, CalendarDays, RotateCcw, Bell, Copy, Zap, CheckCircle2, Mail, Calendar, Shield, Sun, Moon } from 'lucide-react'
 import { playEffect } from '../services/audioService'
 import notificationSoundUrl from '../../Sound Effect/Notification.mp3'
 import AdminExercises from './AdminExercises'
@@ -87,6 +88,7 @@ function AdminPagination({ page, totalItems, pageSize, onChange }: { page: numbe
 export default function AdminPage() {
   const dialog = useAppDialog()
   const { profile, signOut } = useAuth()
+  const { setTheme } = usePreferences()
   const [tab, setTab] = useState<'dashboard' | 'textbooks' | 'lessons' | 'exercises' | 'community' | 'users'>('dashboard')
   const [textbooks, setTextbooks] = useState<Textbook[]>([])
   const [lessons, setLessons] = useState<Lesson[]>([])
@@ -522,6 +524,7 @@ export default function AdminPage() {
         <button className={tab === 'users' ? 'active' : ''} onClick={() => setTab('users')}><Users size={20} /><span>Người dùng</span><b>{users.length || dashboard?.totalUsers || 0}</b></button>
       </nav>
       <div className="admin-account"><div className="admin-avatar">{(profile?.displayName || 'A').slice(0, 1).toUpperCase()}</div><div><b>{profile?.displayName || 'Quản trị viên'}</b><small>Quản trị viên</small></div></div>
+      <button type="button" className="admin-theme-toggle" aria-label="Chuyển giao diện sáng/tối" title="Chuyển giao diện sáng/tối" onClick={() => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark')}><Sun className="admin-theme-sun" size={18} /><Moon className="admin-theme-moon" size={18} /><span>Sáng / Tối</span></button>
       <button className="admin-signout" onClick={() => void signOut()}><LogOut size={18} /><span>Đăng xuất</span></button>
     </aside>
     <main className="admin-page">
