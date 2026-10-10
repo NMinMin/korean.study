@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Flame, Bell, Hexagon, Star } from 'lucide-react';
+import { Flame, Bell, Hexagon, Star, BookOpen, Users, Settings, Trophy, ChevronLeft } from 'lucide-react';
 import { Avatar } from './Mascots';
 import { Bar } from './ProgressBar';
 import { usePreferences } from '../../contexts/PreferencesContext';
@@ -15,7 +15,14 @@ export function getGreeting() {
   return 'Chào buổi tối';
 }
 
-export default function Header({ profile, stats, onOpenNotif, pageTitle, pageSubtitle }) {
+const MOBILE_PAGE_DETAILS = {
+  'Bài học': { icon: BookOpen, subtitle: 'Học theo nhịp của bạn' },
+  'Cộng đồng': { icon: Users, subtitle: 'Kết nối cùng người học' },
+  'Cài đặt': { icon: Settings, subtitle: 'Trải nghiệm theo ý bạn' },
+  'Xếp hạng': { icon: Trophy, subtitle: 'Cùng nhau tiến bộ mỗi ngày' },
+};
+
+export default function Header({ profile, stats, onOpenNotif, pageTitle, pageSubtitle, onToggleLeaderboard, leaderboardOpen = false, onMobileBack, mobileBackLabel = 'Về Bài học' }) {
   const { t } = usePreferences();
   const [hasNotif, setHasNotif] = useState(false);
 
@@ -43,16 +50,30 @@ export default function Header({ profile, stats, onOpenNotif, pageTitle, pageSub
   const xpPct = xpMax ? ((xp % 200) / 200) * 100 : 0;
   const streak = stats?.streak ?? 0;
   const name = profile?.displayName || 'bạn';
+  const mobilePage = MOBILE_PAGE_DETAILS[pageTitle];
+  const PageIcon = mobilePage?.icon;
 
   if (pageTitle) {
     return (
-      <header className="app-page-header">
+      <header className={`app-page-header ${mobilePage || onMobileBack ? 'mobile-section-header' : ''}`}>
         <div className="app-page-heading">
-          <h1>{t(pageTitle)}</h1>
+          <div className="app-page-title">
+            {onMobileBack && <button className="mobile-page-back" onClick={onMobileBack} aria-label={t(mobileBackLabel)} title={t(mobileBackLabel)}><ChevronLeft size={20} /></button>}
+            {PageIcon && <span className="mobile-page-icon" aria-hidden="true"><PageIcon size={18} /></span>}
+            <h1>{t(pageTitle)}</h1>
+          </div>
           {pageSubtitle && <p>{pageSubtitle}</p>}
+          {mobilePage && <p className="mobile-page-subtitle">{t(mobilePage.subtitle)}</p>}
         </div>
         <div className="app-page-status">
           <span className="app-header-streak"><Flame size={19} color="#F0642E" fill="#F79A5E" /><b>{streak}</b> ngày</span>
+          {onToggleLeaderboard && <button
+            className={`app-header-notification mobile-header-trophy ${leaderboardOpen ? 'active' : ''}`}
+            onClick={onToggleLeaderboard}
+            aria-label={t(leaderboardOpen ? 'Về Cộng đồng' : 'Xem xếp hạng')}
+            title={t(leaderboardOpen ? 'Về Cộng đồng' : 'Xem xếp hạng')}
+            aria-pressed={leaderboardOpen}
+          >{leaderboardOpen ? <Users size={19} /> : <Trophy size={19} />}</button>}
           <button className="app-header-notification" onClick={handleOpenNotifications} aria-label="Mở thông báo">
             <Bell size={19} />{hasNotif && <span className="notif-dot notif-dot-sm" />}
           </button>
@@ -72,7 +93,9 @@ export default function Header({ profile, stats, onOpenNotif, pageTitle, pageSub
     >
       <div className="avatar-btn avatar-display" aria-label="Ảnh đại diện">
         <Avatar />
+        <span className="mobile-streak-badge" role="img" aria-label={`${streak} ngày streak`}><Flame size={11} fill="currentColor" /><b>{streak}</b></span>
       </div>
+      <button className="mobile-home-bell app-header-notification" onClick={handleOpenNotifications} aria-label={hasNotif ? 'Mở thông báo mới' : 'Mở thông báo'}><Bell size={21} />{hasNotif && <span className="notif-dot notif-dot-sm" />}</button>
       <div className="hello">
         <h1>{t(getGreeting())}, <span>{name}!</span> 👋</h1>
         <p>Hôm nay học một chút,<br />ngày mai tiến bộ hơn nhé! 💜</p>

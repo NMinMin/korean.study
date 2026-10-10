@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Target, Edit2, Sparkles, Headphones, Mic, Trophy, ChevronRight,
   TrendingUp, BookOpen, Plus, Play, CalendarDays, Coffee, BookMarked,
-  Lightbulb, Type, Flame, Check
+  Lightbulb, Type, Flame, Check, X
 } from 'lucide-react';
 import { Bar } from '../../components/common/ProgressBar';
 import { Plant } from '../../components/common/Mascots';
@@ -341,6 +341,7 @@ export function PersonalProgressSection({ profile, lesson, vocabulary, computeRa
 export function ReviewSchedule({ userId, onReview }) {
   const [schedule, setSchedule] = useState([]);
   const [selected, setSelected] = useState(0);
+  const detailDialog = useRef(null);
 
   useEffect(() => {
     let alive = true;
@@ -375,6 +376,24 @@ export function ReviewSchedule({ userId, onReview }) {
         <div className="card-title"><CalendarDays size={19} color="#7C6FE4" /> Lịch ôn từ vựng</div>
         <span className="review-cycle" title="Phương pháp lặp lại ngắt quãng">Lặp lại ngắt quãng · 1–3–7 ngày</span>
       </div>
+      <div className="mobile-review-days">
+        {schedule.map((day, index) => <button key={day.dateKey} className={`mobile-review-day ${index === 0 ? 'today' : ''}`} onClick={() => { setSelected(index); detailDialog.current?.showModal(); }} aria-haspopup="dialog" aria-label={`Xem chi tiết ${day.label}, ${day.date.toLocaleDateString('vi-VN')}`}>
+          <span><b>{day.label}</b><small>{day.date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</small></span>
+          <span className="mobile-review-count">{day.evaluation ? `${day.evaluation.score}%` : day.words.length ? `${day.words.length} từ` : 'Nghỉ'}</span><ChevronRight size={16} />
+        </button>)}
+      </div>
+      <dialog ref={detailDialog} className="review-day-dialog" aria-labelledby="review-day-title" onClick={(event) => { if (event.target === event.currentTarget) detailDialog.current?.close(); }}>
+        <div className="review-dialog-content">
+          <button className="review-dialog-close" onClick={() => detailDialog.current?.close()} aria-label="Đóng chi tiết lịch ôn"><X size={20} /></button>
+          <h2 id="review-day-title">{picked?.label} · {picked?.date.toLocaleDateString('vi-VN')}</h2>
+          {picked && <>
+            <p>{picked.evaluation ? `${picked.evaluation.rating} · ${picked.evaluation.correctCount}/${picked.evaluation.totalCount} từ đúng — ${picked.evaluation.feedback}` : picked.words.length ? `${picked.words.length} từ đang chờ bạn ôn lại` : 'Ngày nghỉ — không có từ nào cần ôn'}</p>
+            {picked.words.length > 0 && <ul className="review-dialog-words">{picked.words.map((word) => <li key={word.id}><b>{word.word}</b><span>{word.meaningVi}</span></li>)}</ul>}
+            {selected === 0 && picked.words.length > 0 && <button className="primary-btn" onClick={() => { detailDialog.current?.close(); onReview(picked.words, picked.dateKey); }}>Ôn ngay</button>}
+            {selected > 0 && picked.words.length > 0 && <p className="settings-hint">Các từ này sẽ đến lịch ôn vào ngày đã chọn.</p>}
+          </>}
+        </div>
+      </dialog>
       <div className="days">
         {schedule.map((d, index) => (
           <div key={d.date.toISOString()} className={`day ${index === 0 ? 'today' : ''} ${d.date.getDay() === 6 ? 'saturday' : ''} ${d.date.getDay() === 0 ? 'sunday' : ''} ${selected === index ? 'selected' : ''} ${d.words.length ? 'has-review' : d.evaluation ? 'reviewed-day' : 'rest-day'}`} role="button" tabIndex={0} onClick={() => setSelected(index)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(index); } }}>

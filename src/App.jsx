@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Sparkles, BookOpen, Headphones, Mic, Target, Trophy, Settings
+  Sparkles, BookOpen, Headphones, Mic, Target, Settings, NotebookPen, CalendarDays, Sprout, ChevronRight
 } from 'lucide-react';
 
 import './styles/dashboard.css';
@@ -47,6 +47,7 @@ import {
 // Layout & Common Components
 import Sidebar from './components/common/Sidebar';
 import Header from './components/common/Header';
+import { usePreferences } from './contexts/PreferencesContext';
 import ComingSoonView from './components/common/ComingSoonView';
 import {
   ConfettiBurst,
@@ -105,7 +106,9 @@ const ROOT_PAGE_META = {
   'mock-exam': ['Thi thử', 'Luyện tập trong giao diện tập trung.'],
   xephang: ['Xếp hạng', 'Theo dõi thành tích của bạn theo từng giáo trình.'],
   congdong: ['Cộng đồng', 'Chia sẻ bài viết và trao đổi cùng những người học khác.'],
-  caidat: ['Cài đặt', 'Điều chỉnh kế hoạch học tập và tài khoản.'],
+  caidat: ['Cài đặt', 'Tùy chỉnh giao diện, ngôn ngữ và tài khoản.'],
+  'learning-hub': ['Bài học', 'Chọn nội dung học và lên kế hoạch của bạn.'],
+  'study-plan': ['Kế hoạch học tập', 'Đặt mục tiêu và duy trì nhịp học mỗi ngày.'],
 };
 
 const ACTIVE_STUDY_VIEWS = new Set([
@@ -116,6 +119,7 @@ const ACTIVE_STUDY_VIEWS = new Set([
 ]);
 
 export default function KoreanStudyDashboard({ authenticatedProfile = null, onSignOut = null }) {
+  const { t } = usePreferences();
   const [profile, setProfile] = useState(authenticatedProfile || undefined);
   const [active, setActive] = useState('home');
   const [view, setView] = useState('home');
@@ -588,6 +592,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             </div>
           )}
           <Sidebar
+              view={view}
               active={active}
               setActive={setActive}
               setView={setView}
@@ -606,11 +611,19 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 onOpenNotif={openNotif}
                 pageTitle={ROOT_PAGE_META[view][0]}
                 pageSubtitle={ROOT_PAGE_META[view][1]}
+                onMobileBack={view === 'vocab-sets' ? () => { setActive('nguphap'); setView('nguphap-hub'); } : ['curriculum-hub', 'nguphap-hub', 'mock-exam', 'study-plan'].includes(view) ? () => { setActive('giaotrinh'); setView('learning-hub'); } : undefined}
+                mobileBackLabel={view === 'vocab-sets' ? 'Về Từ vựng và Ngữ pháp' : 'Về Bài học'}
+                leaderboardOpen={view === 'xephang'}
+                onToggleLeaderboard={['congdong', 'xephang'].includes(view) ? () => {
+                  if (view === 'xephang') { setActive('congdong'); setView('congdong'); }
+                  else openLeaderboard();
+                } : undefined}
               />
             )}
             {view === 'home' && (
               <div className="dashboard-grid">
                 <Header profile={profile} stats={userStats} onOpenNotif={openNotif} />
+                <button className="mobile-shop-entry" onClick={() => { setActive('cuahang'); setView('cuahang'); refreshShop(); }}><span className="mobile-shop-icon"><Sprout size={23} /></span><span><b>{t('Shop cây')}</b><small>{t('Đổi kim cương lấy cây cho góc học tập')}</small></span><span className="mobile-shop-balance"><DiamondIcon size={17} />{shop.balance.toLocaleString('vi-VN')}</span><ChevronRight size={18} /></button>
                 <ReminderBanner userId={profile.id} onGoStudy={() => openLesson(primaryLesson, 'home')} />
                 <div className="dashboard-overview">
                   <ContinueLearning
@@ -624,7 +637,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                   />
                   <WordOfDayWidget vocabulary={catalogVocabulary} onOpen={() => { setShowStarredVocabulary(false); setView('nguphap-hub'); setActive('nguphap'); }} />
                   <RecentActivityCard profile={profile} lesson={primaryLesson} vocabulary={catalogVocabulary} />
-                  <DailyGoalRing userId={profile.id} onChangeGoal={() => { setActive('caidat'); setView('caidat'); }} />
+                  <DailyGoalRing userId={profile.id} onChangeGoal={() => { if (window.matchMedia('(max-width: 860px)').matches) { setActive('giaotrinh'); setView('study-plan'); } else { setActive('caidat'); setView('caidat'); } }} />
                   <QuickAccessMenu
                     onDictation={goDictation}
                     onShadowing={goShadowing}
@@ -656,6 +669,15 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 </div>
               </div>
             )}
+            {view === 'learning-hub' && <section className="learning-hub-grid">
+              {[
+                { title: 'Giáo trình', description: 'Giáo trình của tôi và lộ trình học', icon: BookOpen, target: 'curriculum-hub', active: 'giaotrinh' },
+                { title: 'Từ vựng & Ngữ pháp', description: 'Tra cứu, ôn tập và quản lý sổ tay', icon: NotebookPen, target: 'nguphap-hub', active: 'nguphap' },
+                { title: 'Thi thử', description: 'Luyện tập và kiểm tra kiến thức', icon: Target, action: goReview },
+                { title: 'Kế hoạch học tập', description: 'Mục tiêu, lịch học và nhắc nhở', icon: CalendarDays, target: 'study-plan', active: 'giaotrinh' },
+              ].map(({ title, description, icon: Icon, target, active: section, action }) => <button key={title} className="learning-hub-entry" onClick={action || (() => { setActive(section); setView(target); })}><span><Icon size={25} /></span><div><b>{t(title)}</b><small>{t(description)}</small></div><ChevronRight size={19} /></button>)}
+            </section>}
+            {view === 'study-plan' && <SettingsView planOnly onBack={() => setView('learning-hub')} userId={profile.id} lesson={primaryLesson} vocabulary={catalogVocabulary} textbookTitle={activeTextbookTitle} />}
             {view === 'xephang' && (
               <RankingCommunityView
                 profile={profile}
@@ -687,7 +709,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
               />
             )}
             {view === 'vocab-sets' && (
-              <section className="cg-page wide-page">
+              <section className="cg-page wide-page vocabulary-sets-page">
                 <CustomLessonHub
                   profile={profile}
                   onBack={() => setView('nguphap-hub')}
@@ -707,6 +729,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             )}
             {view === 'mock-exam' && (
               <ReviewIntroView
+                mobileHeaderProvided
                 lesson={lesson || primaryLesson}
                 userId={profile.id}
                 vocabulary={reviewVocabulary}

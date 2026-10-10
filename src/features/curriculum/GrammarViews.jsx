@@ -153,12 +153,13 @@ export function GrammarHubView({
                   setTab('vocab');
                 }}
                 aria-pressed={starredOnly}
+                aria-label={starredOnly ? 'Đóng sổ tay từ vựng, hiện lại tất cả từ vựng' : 'Mở sổ tay từ vựng, chỉ hiện các từ đã đánh dấu sao'}
                 title={starredOnly ? 'Hiện lại tất cả từ vựng' : 'Chỉ hiện các từ đã đánh dấu sao'}
               >
-                <BookMarked size={16} /> Sổ tay từ vựng <span>{starredCount}</span>
+                <BookMarked size={16} /><span className="content-library-action-label">{starredOnly ? 'Đóng sổ tay' : 'Sổ tay từ vựng'}</span><span className="content-library-starred-count">{starredCount}</span>
               </button>
               <button type="button" className="cg-post-btn content-library-notebook-btn" onClick={onOpenVocabularySets}>
-                <BookOpen size={16} /> Bộ từ vựng
+                <BookOpen size={16} /><span className="content-library-action-label">Bộ từ vựng</span>
               </button>
             </div>
           </div>

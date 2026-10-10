@@ -17,6 +17,7 @@ export default function CommunityView({ profile, onBack, onStudyCustomLesson, hi
   const [posts, setPosts] = useState(null);
   const [liked, setLiked] = useState({});
   const [openComments, setOpenComments] = useState({});
+  const [compactFeed, setCompactFeed] = useState(() => window.matchMedia('(max-width: 860px)').matches);
   const [showCompose, setShowCompose] = useState(false);
   const [draft, setDraft] = useState('');
   const [posting, setPosting] = useState(false);
@@ -25,6 +26,13 @@ export default function CommunityView({ profile, onBack, onStudyCustomLesson, hi
   const [submittingReport, setSubmittingReport] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [currentUserId, setCurrentUserId] = useState(null);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 860px)');
+    const sync = () => setCompactFeed(media.matches);
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -101,8 +109,8 @@ export default function CommunityView({ profile, onBack, onStudyCustomLesson, hi
     } catch (e) { showToast('❌ ' + (e?.message || 'Không thể cập nhật lượt thích lúc này.')); }
   };
 
-  const toggleComments = (postKey) => {
-    setOpenComments((curr) => ({ ...curr, [postKey]: !curr[postKey] }));
+  const toggleComments = (postKey, isOpen) => {
+    setOpenComments((curr) => ({ ...curr, [postKey]: !isOpen }));
   };
 
   const deletePost = async (post) => {
@@ -165,8 +173,8 @@ export default function CommunityView({ profile, onBack, onStudyCustomLesson, hi
       ) : null}
 
       <div className="cg-tabs sub-community-tabs">
-        <button className={`cg-tab ${tab === 'feed' ? 'on' : ''}`} onClick={() => setTab('feed')}><MessageSquare size={16} /> Bảng tin</button>
-        <button className={`cg-tab ${tab === 'discover' ? 'on' : ''}`} onClick={() => setTab('discover')}><Compass size={16} /> Khám phá</button>
+        <button className={`cg-tab ${tab === 'feed' ? 'on' : ''}`} aria-pressed={tab === 'feed'} onClick={() => setTab('feed')}><MessageSquare size={16} /><span>Bảng tin</span></button>
+        <button className={`cg-tab ${tab === 'discover' ? 'on' : ''}`} aria-pressed={tab === 'discover'} onClick={() => setTab('discover')}><Compass size={16} /><span>Khám phá</span></button>
       </div>
 
       {tab === 'feed' ? (
@@ -220,35 +228,31 @@ export default function CommunityView({ profile, onBack, onStudyCustomLesson, hi
           ) : (
             <div className="cg-feed">
               {posts.map((p) => {
-                const isCommentsOpen = openComments[p.key] ?? true;
+                const isCommentsOpen = openComments[p.key] ?? !compactFeed;
                 return (
-                  <div key={p.key} className="cg-post">
+                  <article key={p.key} className="cg-post">
                     <div className="cg-post-head">
                       <span className="cg-post-avatar">{(p.author || '?')[0].toUpperCase()}</span>
                       <div className="cg-post-meta">
                         <b>{p.author}</b>
                         <span className="cg-post-time">{timeAgo(p.createdAt)}</span>
                       </div>
+                      {currentUserId && p.userId !== currentUserId && (
+                        <button className="cg-post-manage cg-report-btn" onClick={() => setReportingPost(p)} aria-label="Báo cáo bài viết" title="Báo cáo bài viết"><Flag size={17} /></button>
+                      )}
+                      {currentUserId && p.userId === currentUserId && (
+                        <button className="cg-post-manage cg-report-btn delete-post-btn" onClick={() => deletePost(p)} disabled={deletingKey === p.key} aria-label="Xóa bài viết của bạn" title="Xóa bài viết của bạn"><Trash2 size={17} /></button>
+                      )}
                     </div>
                     <p className="cg-post-body">{p.content}</p>
 
                     <div className="cg-post-actions">
-                      <button className={`cg-like-btn ${liked[p.key] ? 'on' : ''}`} onClick={() => toggleLike(p)}>
-                        <Heart size={14} fill={liked[p.key] ? '#E5566B' : 'none'} color={liked[p.key] ? '#E5566B' : 'currentColor'} /> {p.likes || 0}
+                      <button className={`cg-like-btn ${liked[p.key] ? 'on' : ''}`} aria-pressed={Boolean(liked[p.key])} aria-label={`${liked[p.key] ? 'Bỏ thích' : 'Thích'} bài viết, ${p.likes || 0} lượt thích`} onClick={() => toggleLike(p)}>
+                        <Heart size={17} fill={liked[p.key] ? '#E5566B' : 'none'} color={liked[p.key] ? '#E5566B' : 'currentColor'} /><span className="cg-action-label">{liked[p.key] ? 'Đã thích' : 'Thích'}</span><span>{p.likes || 0}</span>
                       </button>
-                      <button className={`cg-comment-btn ${isCommentsOpen ? 'on' : ''}`} onClick={() => toggleComments(p.key)}>
-                        <MessageCircleIcon size={14} /> {p.commentCount || 0}
+                      <button className={`cg-comment-btn ${isCommentsOpen ? 'on' : ''}`} aria-expanded={isCommentsOpen} aria-controls={`post-comments-${p.key}`} aria-label={`Bình luận bài viết, ${p.commentCount || 0} bình luận`} onClick={() => toggleComments(p.key, isCommentsOpen)}>
+                        <MessageCircleIcon size={17} /><span className="cg-action-label">Bình luận</span><span>{p.commentCount || 0}</span>
                       </button>
-                      {currentUserId && p.userId !== currentUserId && (
-                        <button className="cg-report-btn" onClick={() => setReportingPost(p)} title="Báo cáo vi phạm">
-                          <Flag size={13} /> Báo cáo
-                        </button>
-                      )}
-                      {currentUserId && p.userId === currentUserId && (
-                        <button className="cg-report-btn delete-post-btn" onClick={() => deletePost(p)} disabled={deletingKey === p.key} title="Xoá bài viết của bạn">
-                          <Trash2 size={13} /> {deletingKey === p.key ? 'Đang xoá...' : 'Xoá'}
-                        </button>
-                      )}
                       {p.commentsLocked && (
                         <span className="cg-comments-locked"><Lock size={12} /> Đã khoá bình luận</span>
                       )}
@@ -262,7 +266,7 @@ export default function CommunityView({ profile, onBack, onStudyCustomLesson, hi
                         commentsLocked={p.commentsLocked}
                       />
                     )}
-                  </div>
+                  </article>
                 );
               })}
             </div>
