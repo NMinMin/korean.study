@@ -7,7 +7,7 @@ import {
 import { Bar } from '../../components/common/ProgressBar';
 import { Plant } from '../../components/common/Mascots';
 import {
-  getDailyGoal, getStudyPlan, WEEK_DAYS,
+  getDailyGoal, getStudyPlan, getCachedDailyGoal, getCachedStudyPlan, WEEK_DAYS,
 } from '../settings/studyPlanService';
 import {
   isCelebrationSoundEnabled,
@@ -15,6 +15,7 @@ import {
 } from '../../services/audioService';
 import { computeLeaderboard } from '../leaderboard/leaderboardApi';
 import { loadVocabularyReviewSchedule } from '../../lib/reviewSchedule';
+import '../community/community-skeleton.css';
 
 function PurpleMugunghwaIcon({ className = '' }) {
   return (
@@ -61,6 +62,9 @@ export function DailyGoalRing({ userId, onChangeGoal }) {
   const refresh = () => Promise.all([getDailyGoal(userId), getStudyPlan(userId)]).then(([g, p]) => {
     setGoal(g);
     setPlan(p);
+  }).catch(() => {
+    setGoal(getCachedDailyGoal(userId));
+    setPlan(getCachedStudyPlan(userId));
   });
   useEffect(() => {
     const syncImmediately = (event) => event.detail ? setGoal(event.detail) : refresh();
@@ -91,16 +95,16 @@ export function DailyGoalRing({ userId, onChangeGoal }) {
     if (!done) celebratedRef.current = false;
   }, [goal]);
 
-  if (!goal || !plan) return null;
+  const loading = !goal || !plan;
   const weekdayKey = WEEK_DAYS[(new Date().getDay() + 6) % 7]?.key;
-  const isRestDay = plan.weeklySchedule?.[weekdayKey] === false;
-  const pct = Math.min(100, Math.round((goal.todayMinutes / Math.max(1, goal.targetMinutes)) * 100));
+  const isRestDay = !loading && plan.weeklySchedule?.[weekdayKey] === false;
+  const pct = loading ? 0 : Math.min(100, Math.round((goal.todayMinutes / Math.max(1, goal.targetMinutes)) * 100));
   const r = 40, c = 2 * Math.PI * r;
   const dash = c * (pct / 100);
   const done = pct >= 100;
 
   return (
-    <section className="card goal-card">
+    <section className="card goal-card" aria-busy={loading}>
       <div className="card-title-row">
         <div className="card-title"><Target size={19} color="#7C6FE4" /> Mục tiêu trong ngày</div>
         <button className="link-btn" onClick={onChangeGoal}><Edit2 size={13} /> Đổi mục tiêu</button>
@@ -117,13 +121,13 @@ export function DailyGoalRing({ userId, onChangeGoal }) {
           <circle cx="50" cy="50" r={r} fill="none" stroke="#EEEBF8" strokeWidth="9" />
           <circle
             cx="50" cy="50" r={r} fill="none" stroke={done ? '#3FA95C' : '#7C6FE4'} strokeWidth="9" strokeLinecap="round"
-            strokeDasharray={`${dash} ${c}`} transform="rotate(-90 50 50)" style={{ transition: 'stroke-dasharray .4s' }}
+            className="goal-ring-progress" strokeDasharray={`${c} ${c}`} strokeDashoffset={c - dash} opacity={pct > 0 ? 1 : 0} transform="rotate(-90 50 50)"
           />
           <text x="50" y="47" textAnchor="middle" fontSize="20" fontWeight="800" fill="#2E2A4A">{pct}%</text>
-          <text x="50" y="64" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#8B85AB">{Math.round(goal.todayMinutes)}/{goal.targetMinutes} phút</text>
+          <text x="50" y="64" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#8B85AB">{loading ? 'Đang tải' : `${Math.round(goal.todayMinutes)}/${goal.targetMinutes} phút`}</text>
         </svg>
         <div className="goal-msg">
-          {done
+          {loading ? <span>Đang cập nhật mục tiêu hôm nay...</span> : done
             ? <span>🎉 Chúc mừng, bạn đã đạt mục tiêu học hôm nay!</span>
             : <span>Còn khoảng {Math.max(0, Math.round(goal.targetMinutes - goal.todayMinutes))} phút nữa là đạt mục tiêu hôm nay!</span>}
         </div>
@@ -147,6 +151,7 @@ export function QuickAccessMenu({ onDictation, onShadowing, onReview, onNotebook
         {items.map((it) => (
           <button key={it.label} className="qa-card" style={{ background: it.bg }} onClick={it.onClick} aria-label={it.label}>
             <it.icon size={26} color={it.color} />
+            <span className="qa-label">{it.label}</span>
           </button>
         ))}
       </div>
@@ -254,7 +259,15 @@ export function ContinueLearning({ onGo, textbook, lesson, hasStarted = false, p
   );
 }
 
-export function RadarChart({ axes, size = 200 }) {
+const EMPTY_RADAR_AXES = [
+  { key: 'tuvung', label: 'Từ vựng', pct: 0 },
+  { key: 'nguphap', label: 'Ngữ pháp', pct: 0 },
+  { key: 'nghe', label: 'Nghe hiểu', pct: 0 },
+  { key: 'phatam', label: 'Phát âm', pct: 0 },
+  { key: 'chuyencan', label: 'Chuyên cần', pct: 0 },
+];
+
+export function RadarChart({ axes, size = 200, loading = false }) {
   const cx = size / 2, cy = size / 2, r = size / 2 - 38;
   const n = axes.length;
   const angleFor = (i) => (-90 + i * (360 / n)) * (Math.PI / 180);
@@ -274,8 +287,10 @@ export function RadarChart({ axes, size = 200 }) {
         const [x, y] = pointAt(i, 1);
         return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="#E7E3F6" strokeWidth="1" />;
       })}
-      <polygon points={dataPath} fill="rgba(124,111,228,.35)" stroke="#7C6FE4" strokeWidth="2" strokeLinejoin="round" />
-      {dataPoints.map(([x, y], i) => <circle key={i} cx={x} cy={y} r="3.5" fill="#7C6FE4" />)}
+      {!loading && <g className="radar-data">
+        <polygon points={dataPath} fill="rgba(124,111,228,.35)" stroke="#7C6FE4" strokeWidth="2" strokeLinejoin="round" />
+        {dataPoints.map(([x, y], i) => <circle key={i} cx={x} cy={y} r="3.5" fill="#7C6FE4" />)}
+      </g>}
       {axes.map((ax, i) => {
         const [lx, ly] = pointAt(i, 1.26);
         return (
@@ -291,7 +306,8 @@ export function RadarChart({ axes, size = 200 }) {
 export function PersonalProgressSection({ profile, lesson, vocabulary, computeRadarStats }) {
   const [axes, setAxes] = useState(null);
   const [detail, setDetail] = useState(null);
-  const [showDetail, setShowDetail] = useState(false);
+  const [showDetail, setShowDetail] = useState(() => window.matchMedia('(min-width: 861px)').matches);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -300,32 +316,35 @@ export function PersonalProgressSection({ profile, lesson, vocabulary, computeRa
       if (!alive) return;
       setAxes(d.axes);
       setDetail(d.detail);
+      setLoadError(false);
+    }).catch(() => {
+      if (alive) setLoadError(true);
     });
     return () => { alive = false; };
   }, [profile, lesson, vocabulary, computeRadarStats]);
 
-  if (!axes) return null;
+  const loading = !axes && !loadError;
 
   return (
-    <section className="card radar-card">
+    <section className="card radar-card" aria-busy={loading}>
       <div className="card-title-row">
         <div className="card-title"><Target size={19} color="#7C6FE4" /> Tiến độ cá nhân</div>
-        <button className="link-btn" onClick={() => setShowDetail((v) => !v)}>
+        <button className="link-btn" disabled={!detail} onClick={() => setShowDetail((v) => !v)}>
           {showDetail ? 'Thu gọn' : 'Xem chi tiết'} <ChevronRight size={15} className={showDetail ? 'chev-rot' : ''} />
         </button>
       </div>
       <div className={`radar-row ${showDetail ? 'with-detail' : ''}`}>
-        <div className="radar-chart-wrap"><RadarChart axes={axes} size={200} /></div>
+        <div className="radar-chart-wrap"><RadarChart axes={axes || EMPTY_RADAR_AXES} size={200} loading={!axes} /></div>
         {showDetail && detail && (
           <div className="radar-detail">
             <div className="radar-achieve-grid">
-              <div className="radar-achieve"><Type size={16} color="#7C6FE4" /><span>{detail.vocab.count}/{detail.vocab.total}</span><small>Từ vựng</small></div>
-              <div className="radar-achieve"><Headphones size={16} color="#4A90E2" /><span>{detail.listening.count}/{detail.listening.total}</span><small>Nghe</small></div>
-              <div className="radar-achieve"><Mic size={16} color="#3FA95C" /><span>{detail.pronunciation.count}/{detail.pronunciation.total}</span><small>Phát âm</small></div>
+              <div className="radar-achieve"><Type size={16} color="#7C6FE4" /><span>{detail ? `${detail.vocab.count}/${detail.vocab.total}` : loading ? <span className="community-skeleton-block radar-value-skeleton" aria-hidden="true" /> : '—'}</span><small>Từ vựng</small></div>
+              <div className="radar-achieve"><Headphones size={16} color="#4A90E2" /><span>{detail ? `${detail.listening.count}/${detail.listening.total}` : loading ? <span className="community-skeleton-block radar-value-skeleton" aria-hidden="true" /> : '—'}</span><small>Nghe</small></div>
+              <div className="radar-achieve"><Mic size={16} color="#3FA95C" /><span>{detail ? `${detail.pronunciation.count}/${detail.pronunciation.total}` : loading ? <span className="community-skeleton-block radar-value-skeleton" aria-hidden="true" /> : '—'}</span><small>Phát âm</small></div>
               <div className="radar-achieve">
                 <Target size={16} color="#E5566B" />
-                <span>{detail.reflex ? `${detail.reflex.avgTimeLeft}s` : '—'}</span>
-                <small>Phản xạ{detail.reflex ? ` (${detail.reflex.count} lượt)` : ' (chưa có)'}</small>
+                <span>{loading ? <span className="community-skeleton-block radar-value-skeleton" aria-hidden="true" /> : detail?.reflex ? `${detail.reflex.avgTimeLeft}s` : '—'}</span>
+                <small>Phản xạ{detail?.reflex ? ` (${detail.reflex.count} lượt)` : detail ? ' (chưa có)' : ''}</small>
               </div>
               <div className="radar-achieve radar-achieve-wide">
                 <Flame size={16} color="#F0642E" fill="#F79A5E" /><span>{detail.retained.count}/{detail.retained.total}</span><small>Kiến thức còn nhớ (từ nhớ lâu)</small>
@@ -334,31 +353,50 @@ export function PersonalProgressSection({ profile, lesson, vocabulary, computeRa
           </div>
         )}
       </div>
+      <p className={`radar-loading-note ${axes ? 'is-ready' : ''}`} role="status">{loadError ? 'Chưa tải được tiến độ. Vui lòng thử lại sau.' : 'Đang cập nhật tiến độ...'}</p>
     </section>
   );
 }
 
 export function ReviewSchedule({ userId, onReview }) {
-  const [schedule, setSchedule] = useState([]);
+  const [schedule, setSchedule] = useState(() => Array.from({ length: 14 }, (_, index) => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() + index);
+    return {
+      dateKey: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
+      date,
+      words: [],
+      label: index === 0 ? 'Hôm nay' : index === 1 ? 'Ngày mai' : date.toLocaleDateString('vi-VN', { weekday: 'short' }),
+    };
+  }));
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [selected, setSelected] = useState(0);
   const detailDialog = useRef(null);
 
   useEffect(() => {
     let alive = true;
     const refresh = async () => {
-      const result = await loadVocabularyReviewSchedule(userId, 14);
-      const days = result.map((item, index) => {
-        const [year, month, day] = item.dateKey.split('-').map(Number);
-        const date = new Date(year, month - 1, day);
-        return {
-          dateKey: item.dateKey,
-          date,
-          words: item.words,
-          evaluation: item.evaluation,
-          label: index === 0 ? 'Hôm nay' : index === 1 ? 'Ngày mai' : date.toLocaleDateString('vi-VN', { weekday: 'short' }),
-        };
-      });
-      if (alive) setSchedule(days);
+      try {
+        const result = await loadVocabularyReviewSchedule(userId, 14);
+        const days = result.map((item, index) => {
+          const [year, month, day] = item.dateKey.split('-').map(Number);
+          const date = new Date(year, month - 1, day);
+          return {
+            dateKey: item.dateKey,
+            date,
+            words: item.words,
+            evaluation: item.evaluation,
+            label: index === 0 ? 'Hôm nay' : index === 1 ? 'Ngày mai' : date.toLocaleDateString('vi-VN', { weekday: 'short' }),
+          };
+        });
+        if (alive) { setSchedule(days); setLoadError(false); }
+      } catch {
+        if (alive) setLoadError(true);
+      } finally {
+        if (alive) setLoading(false);
+      }
     };
     void refresh();
     const handleReviewUpdated = () => { void refresh(); };
@@ -371,15 +409,16 @@ export function ReviewSchedule({ userId, onReview }) {
 
   const picked = schedule[selected];
   return (
-    <section className="card review">
+    <section className="card review" aria-busy={loading}>
       <div className="card-title-row">
         <div className="card-title"><CalendarDays size={19} color="#7C6FE4" /> Lịch ôn từ vựng</div>
         <span className="review-cycle" title="Phương pháp lặp lại ngắt quãng">Lặp lại ngắt quãng · 1–3–7 ngày</span>
       </div>
+      {(loading || loadError) && <span className={loading ? 'community-skeleton-status' : 'settings-hint'} role="status">{loading ? 'Đang tải lịch ôn từ vựng...' : 'Chưa tải được lịch ôn. Vui lòng thử lại sau.'}</span>}
       <div className="mobile-review-days">
-        {schedule.map((day, index) => <button key={day.dateKey} className={`mobile-review-day ${index === 0 ? 'today' : ''}`} onClick={() => { setSelected(index); detailDialog.current?.showModal(); }} aria-haspopup="dialog" aria-label={`Xem chi tiết ${day.label}, ${day.date.toLocaleDateString('vi-VN')}`}>
+        {schedule.map((day, index) => <button key={day.dateKey} disabled={loading || loadError} className={`mobile-review-day ${index === 0 ? 'today' : ''}`} onClick={() => { setSelected(index); detailDialog.current?.showModal(); }} aria-haspopup="dialog" aria-label={`Xem chi tiết ${day.label}, ${day.date.toLocaleDateString('vi-VN')}`}>
           <span><b>{day.label}</b><small>{day.date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</small></span>
-          <span className="mobile-review-count">{day.evaluation ? `${day.evaluation.score}%` : day.words.length ? `${day.words.length} từ` : 'Nghỉ'}</span><ChevronRight size={16} />
+          <span className="mobile-review-count">{loading ? <span className="community-skeleton-block review-count-skeleton" aria-hidden="true" /> : loadError ? '—' : day.evaluation ? `${day.evaluation.score}%` : day.words.length ? `${day.words.length} từ` : 'Nghỉ'}</span><ChevronRight size={16} />
         </button>)}
       </div>
       <dialog ref={detailDialog} className="review-day-dialog" aria-labelledby="review-day-title" onClick={(event) => { if (event.target === event.currentTarget) detailDialog.current?.close(); }}>
@@ -396,11 +435,11 @@ export function ReviewSchedule({ userId, onReview }) {
       </dialog>
       <div className="days">
         {schedule.map((d, index) => (
-          <div key={d.date.toISOString()} className={`day ${index === 0 ? 'today' : ''} ${d.date.getDay() === 6 ? 'saturday' : ''} ${d.date.getDay() === 0 ? 'sunday' : ''} ${selected === index ? 'selected' : ''} ${d.words.length ? 'has-review' : d.evaluation ? 'reviewed-day' : 'rest-day'}`} role="button" tabIndex={0} onClick={() => setSelected(index)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(index); } }}>
+          <div key={d.date.toISOString()} className={`day ${index === 0 ? 'today' : ''} ${d.date.getDay() === 6 ? 'saturday' : ''} ${d.date.getDay() === 0 ? 'sunday' : ''} ${selected === index ? 'selected' : ''} ${d.words.length ? 'has-review' : d.evaluation ? 'reviewed-day' : 'rest-day'}`} role="button" aria-disabled={loading || loadError} tabIndex={loading || loadError ? -1 : 0} onClick={() => { if (!loading && !loadError) setSelected(index); }} onKeyDown={(event) => { if (!loading && !loadError && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setSelected(index); } }}>
             {d.words.length > 0 && <PurpleMugunghwaIcon className="day-review-flower" />}
             <span className="day-name">{d.label}</span>
             <span className="day-date">{d.date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</span>
-            <span className="day-words">{d.evaluation ? `${d.evaluation.score}%` : d.words.length ? `${d.words.length} từ` : 'Nghỉ ngơi'}</span>
+            <span className="day-words">{loading ? <span className="community-skeleton-block review-count-skeleton" aria-hidden="true" /> : loadError ? '—' : d.evaluation ? `${d.evaluation.score}%` : d.words.length ? `${d.words.length} từ` : 'Nghỉ ngơi'}</span>
             {d.evaluation && <span className={`review-rating ${d.evaluation.rating.toLowerCase()}`}>{d.evaluation.rating}</span>}
             {index === 0 && d.words.length ? (
               <button
@@ -409,11 +448,11 @@ export function ReviewSchedule({ userId, onReview }) {
               >
                 Ôn ngay
               </button>
-            ) : <span className={`day-ico ${d.words.length || d.evaluation ? '' : 'rest'}`}>{d.words.length ? <BookMarked size={16} /> : d.evaluation ? <Check size={16} /> : <Coffee size={16} />}</span>}
+            ) : <span className={`day-ico ${d.words.length || d.evaluation ? '' : 'rest'}`}>{loading ? <span className="community-skeleton-block review-count-skeleton" aria-hidden="true" /> : loadError ? '—' : d.words.length ? <BookMarked size={16} /> : d.evaluation ? <Check size={16} /> : <Coffee size={16} />}</span>}
           </div>
         ))}
       </div>
-      {picked && (
+      {picked && !loading && !loadError && (
         <div className="review-selected-day">
           <div><b>{picked.label} · {picked.date.toLocaleDateString('vi-VN')}</b><span>{picked.evaluation ? `${picked.evaluation.rating} · ${picked.evaluation.correctCount}/${picked.evaluation.totalCount} từ đúng — ${picked.evaluation.feedback}` : picked.words.length ? `${picked.words.length} từ đang chờ bạn ôn lại` : 'Ngày nghỉ — không có từ nào cần ôn'}</span></div>
           {selected === 0 && picked.words.length > 0 && <span className="review-current-note">Bấm “Ôn ngay” ở ô Hôm nay để bắt đầu</span>}

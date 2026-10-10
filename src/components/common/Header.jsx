@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Flame, Bell, Hexagon, Star, BookOpen, Users, Settings, Trophy, ChevronLeft } from 'lucide-react';
+import { Flame, Bell, Hexagon, Star, BookOpen, Users, Settings, Trophy, ChevronLeft, Sprout } from 'lucide-react';
+import { DiamondIcon } from '../../data/fallbackData';
 import { Avatar } from './Mascots';
 import { Bar } from './ProgressBar';
 import { usePreferences } from '../../contexts/PreferencesContext';
@@ -22,7 +23,7 @@ const MOBILE_PAGE_DETAILS = {
   'Xếp hạng': { icon: Trophy, subtitle: 'Cùng nhau tiến bộ mỗi ngày' },
 };
 
-export default function Header({ profile, stats, onOpenNotif, pageTitle, pageSubtitle, onToggleLeaderboard, leaderboardOpen = false, onMobileBack, mobileBackLabel = 'Về Bài học' }) {
+export default function Header({ profile, stats, onOpenNotif, pageTitle, pageSubtitle, onToggleLeaderboard, leaderboardOpen = false, onMobileBack, mobileBackLabel = 'Về Bài học', onOpenShop, gems = 0 }) {
   const { t } = usePreferences();
   const [hasNotif, setHasNotif] = useState(false);
 
@@ -126,6 +127,10 @@ export default function Header({ profile, stats, onOpenNotif, pageTitle, pageSub
         </div>
         <Bar pct={xpPct} color="#8B7BE8" h={9} />
         <div className="level-sub">Học viên chăm chỉ</div>
+        {onOpenShop && <button className="mobile-level-shop" onClick={onOpenShop} aria-label={`${t('Shop cây')}, ${gems} kim cương`}>
+          <span><Sprout size={16} />{t('Shop cây')}</span>
+          <span><DiamondIcon size={14} />{gems.toLocaleString('vi-VN')}</span>
+        </button>}
       </div>
     </section>
   );

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  MessageCircle, MessageSquare, Compass, ChevronLeft, Plus, Sparkles,
+  MessageCircle, MessageSquare, Compass, ChevronLeft, Plus,
   Heart, MessageCircle as MessageCircleIcon, Flag, Trash2, CheckCircle2, Lock
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -10,6 +10,7 @@ import CommentSection from './CommentSection';
 import ReportPostModal from './ReportPostModal';
 import { CustomLessonHub } from './CustomLessons';
 import { useAppDialog } from '../../components/common/AppDialog';
+import CommunitySkeleton from './CommunitySkeleton';
 
 export default function CommunityView({ profile, onBack, onStudyCustomLesson, hideHeader, initialTab = 'feed' }) {
   const dialog = useAppDialog();
@@ -219,7 +220,7 @@ export default function CommunityView({ profile, onBack, onStudyCustomLesson, hi
           )}
 
           {posts === null ? (
-            <div className="cg-loading"><Sparkles size={18} color="#7C6FE4" /> Đang tải bảng tin...</div>
+            <CommunitySkeleton />
           ) : posts.length === 0 ? (
             <div className="cg-empty">
               <SwBunnyEmpty />

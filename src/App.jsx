@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Sparkles, BookOpen, Headphones, Mic, Target, Settings, NotebookPen, CalendarDays, Sprout, ChevronRight
+  Sparkles, BookOpen, Headphones, Mic, Target, Settings, NotebookPen, CalendarDays, ChevronRight
 } from 'lucide-react';
 
 import './styles/dashboard.css';
@@ -622,8 +622,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
             )}
             {view === 'home' && (
               <div className="dashboard-grid">
-                <Header profile={profile} stats={userStats} onOpenNotif={openNotif} />
-                <button className="mobile-shop-entry" onClick={() => { setActive('cuahang'); setView('cuahang'); refreshShop(); }}><span className="mobile-shop-icon"><Sprout size={23} /></span><span><b>{t('Shop cây')}</b><small>{t('Đổi kim cương lấy cây cho góc học tập')}</small></span><span className="mobile-shop-balance"><DiamondIcon size={17} />{shop.balance.toLocaleString('vi-VN')}</span><ChevronRight size={18} /></button>
+                <Header profile={profile} stats={userStats} onOpenNotif={openNotif} gems={shop.balance} onOpenShop={() => { setActive('cuahang'); setView('cuahang'); refreshShop(); }} />
                 <ReminderBanner userId={profile.id} onGoStudy={() => openLesson(primaryLesson, 'home')} />
                 <div className="dashboard-overview">
                   <ContinueLearning

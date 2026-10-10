@@ -12,6 +12,7 @@ import { playCorrectSound, playIncorrectSound } from '../../services/audioServic
 import { renderKo, shuffleArr } from '../../utils/textUtils';
 import { SwBunnyEmpty } from '../../components/common/Mascots';
 import { useAppDialog } from '../../components/common/AppDialog';
+import CommunitySkeleton from './CommunitySkeleton';
 
 const DEFAULT_CUSTOM_QUIZ_TYPES = ['meaning'];
 
@@ -468,10 +469,10 @@ export function CustomLessonHub({ profile, onStudy, onBack, mode = 'library' }) 
         </div>
 
         <div className="cl-section-title"><div><BookOpen size={17} /><b>Bộ từ vựng của tôi</b></div><span>Các bộ do chính bạn tạo.</span></div>
-        {lessons === null ? <div className="cg-loading"><Sparkles size={18} /> Đang tải...</div> : ownLessons.length ? <div className="cl-list">{ownLessons.map((lesson) => renderCommunitySet(lesson, true))}</div> : <div className="cg-empty compact"><p>Bạn chưa tạo bộ từ vựng nào.</p></div>}
+        {lessons === null ? <CommunitySkeleton variant="lessons" label="Đang tải bộ từ vựng của tôi..." /> : ownLessons.length ? <div className="cl-list">{ownLessons.map((lesson) => renderCommunitySet(lesson, true))}</div> : <div className="cg-empty compact"><p>Bạn chưa tạo bộ từ vựng nào.</p></div>}
 
         <div className="cl-section-title"><div><BookMarked size={17} /><b>Bộ từ vựng khác</b></div><span>Các bộ của học viên khác mà bạn đã thêm bằng mã.</span></div>
-        {savedLessons === null ? <div className="cg-loading"><Sparkles size={18} /> Đang tải...</div> : otherLessons.length ? <div className="cl-list">{otherLessons.map((lesson) => renderCommunitySet(lesson, false))}</div> : <div className="cg-empty compact"><p>Chưa có bộ nào được thêm bằng mã.</p></div>}
+        {savedLessons === null ? <CommunitySkeleton variant="lessons" label="Đang tải bộ từ vựng khác..." /> : otherLessons.length ? <div className="cl-list">{otherLessons.map((lesson) => renderCommunitySet(lesson, false))}</div> : <div className="cg-empty compact"><p>Chưa có bộ nào được thêm bằng mã.</p></div>}
         {statsLesson && <CustomLessonStatsModal lesson={statsLesson} onClose={() => setStatsLesson(null)} />}
       </div>
     );
@@ -501,7 +502,7 @@ export function CustomLessonHub({ profile, onStudy, onBack, mode = 'library' }) 
           </div>
 
           {lessons === null ? (
-            <div className="cg-loading"><Sparkles size={18} color="#7C6FE4" /> Đang tải...</div>
+            <CommunitySkeleton variant="lessons" label="Đang tải bộ từ vựng của tôi..." />
           ) : lessons.length === 0 ? (
             <div className="cg-empty"><SwBunnyEmpty /><p>Bạn chưa tự tạo bộ từ vựng nào.</p><button className="cg-post-btn" onClick={() => setSubTab('create')}>Tạo bộ từ vựng</button></div>
           ) : (
