@@ -314,8 +314,9 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     const lastActivity = Object.entries(activities).sort((a, b) => b[1] - a[1])[0]?.[0] || 'lesson';
     setLearningCatalog((current) => {
       if (!current) return current;
-      const updatedLessons = current.lessons.map((item) => item.id === lesson.id ? { ...item, progressPercent: lessonProgress } : item);
-      const updatedContinueLesson = current.continueLesson?.id === lesson.id ? { ...current.continueLesson, progressPercent: lessonProgress } : current.continueLesson;
+      const updateLesson = (item) => ({ ...item, progressPercent: lessonProgress, status: lessonProgress >= 100 ? 'done' : item.contentStatus === 'published' || item.status === 'done' ? 'current' : item.status });
+      const updatedLessons = current.lessons.map((item) => item.id === lesson.id ? updateLesson(item) : item);
+      const updatedContinueLesson = current.continueLesson?.id === lesson.id ? updateLesson(current.continueLesson) : current.continueLesson;
       return { ...current, hasStarted: true, lessons: updatedLessons, continueLesson: updatedContinueLesson };
     });
     try {
@@ -415,6 +416,10 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
           .map((activity) => markRemoteActivityCompleted(item.textbookId, item.id, activity.id))
       ));
       localStorage.setItem(legacySyncKey, 'true');
+      if (alive) {
+        catalog = await loadLearningCatalog();
+        if (alive && catalog) setLearningCatalog(prepareLearningCatalog(catalog));
+      }
     })();
     return () => { alive = false; };
   }, [profile?.id]);

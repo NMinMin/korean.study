@@ -60,8 +60,15 @@ export function LessonDetailView({ lesson, userId, textbookTitle, onBack, onStar
     loadLessonActivityProgress(lesson, userId).then((p) => {
       if (!alive) return;
       setPcts(p);
+      const overall = Math.round(ACTIVITIES.reduce((sum, activity) =>
+        sum + Math.max(0, Math.min(100, Number(p[activity.id]) || 0)), 0) / ACTIVITIES.length);
+      if (overall > (Number(lesson?.progressPercent) || 0)) {
+        onProgressChange?.(overall, p);
+      }
     });
     return () => { alive = false; };
+    // Reconcile the aggregate once when opening the lesson; the callback updates catalog state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson?.id, lesson?.textbookId, userId]);
 
   const handleActivityClick = (actId) => {
