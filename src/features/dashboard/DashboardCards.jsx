@@ -124,7 +124,7 @@ export function DailyGoalRing({ userId, onChangeGoal }) {
               className="goal-ring-progress" strokeDasharray={`${c} ${c}`} strokeDashoffset={c - dash} opacity={pct > 0 ? 1 : 0} transform="rotate(-90 50 50)"
             />
             <text x="50" y="47" textAnchor="middle" fontSize="20" fontWeight="800" fill="#2E2A4A">{pct}%</text>
-            <text x="50" y="64" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#8B85AB">{loading ? 'Đang tải' : `${Math.round(goal.todayMinutes)}/${goal.targetMinutes} phút`}</text>
+            <text x="50" y="64" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#8B85AB">{loading ? 'Đang tải' : `${Number(goal.todayMinutes.toFixed(1)).toLocaleString('vi-VN')}/${goal.targetMinutes} phút`}</text>
           </svg>
           <div className="goal-msg">
             {loading ? <span>Đang cập nhật mục tiêu hôm nay...</span> : done

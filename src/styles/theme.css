@@ -1,4 +1,14 @@
 @import './theme-palette.css';
+
+[data-theme="dark"] .vocab-review-page {
+  --vqr-surface: #2b263a;
+  --vqr-border: #49415c;
+  --vqr-text: #d5cbea;
+  --vqr-success-bg: #19372d;
+  --vqr-error-bg: #3b2530;
+  --vqr-success: #8cddb0;
+  --vqr-error: #ffaaaa;
+}
 :root[data-theme="light"] { color-scheme: light; --bg: #fff; --text: #6b6375; --text-h: #08060d; }
 :root[data-theme="dark"] { color-scheme: dark; --bg: #14131e; --text: #d5d1e6; --text-h: #f4f1ff; --border: #393447; --code-bg: #292537; }
 .settings-appearance-card { margin-bottom: 20px; }

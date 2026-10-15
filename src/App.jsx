@@ -477,10 +477,10 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
       activeStartedAt = continueTracking ? now : null;
     };
 
-    const flush = (continueTracking = document.visibilityState === 'visible') => {
+    const flush = (continueTracking = document.visibilityState === 'visible', force = false) => {
       captureActiveTime(continueTracking);
       // Bỏ qua những lần chỉ lướt qua màn học vài giây để tránh request vụn.
-      if (accumulatedMs < 15_000) return;
+      if (accumulatedMs <= 0 || (!force && accumulatedMs < 15_000)) return;
       const minutes = accumulatedMs / 60_000;
       accumulatedMs = 0;
       saveChain = saveChain.then(() => recordStudyMinutes(minutes, userId)).catch(() => undefined);
@@ -491,12 +491,16 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
       else flush(false);
     };
 
+    const onStudyCompleted = () => flush(document.visibilityState === 'visible', true);
+
     // Gộp thời gian học thành một lần ghi tối đa mỗi 5 phút.
     const intervalId = window.setInterval(() => flush(true), 5 * 60_000);
     document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('kstudy:study-session-completed', onStudyCompleted);
     return () => {
       window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('kstudy:study-session-completed', onStudyCompleted);
       flush(false);
     };
   }, [profile?.id, view]);
