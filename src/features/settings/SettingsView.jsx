@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, Settings, Target, CalendarDays, Lightbulb, CheckCircle2,
-  Bell, XCircle
+  Bell, XCircle, LogOut
 } from 'lucide-react';
 import { todayStr } from '../../utils/streakUtils';
 import { usePreferences } from '../../contexts/PreferencesContext';
@@ -86,7 +86,7 @@ function TargetDatePicker({ value, onChange }) {
   );
 }
 
-export default function SettingsView({ onBack, userId, lesson, vocabulary, textbookTitle, computeHomeProgress }) {
+export default function SettingsView({ onBack, userId, lesson, vocabulary, textbookTitle, computeHomeProgress, onSignOut, planOnly = false }) {
   const { theme, language, setTheme, setLanguage, t } = usePreferences();
   const [goal, setGoal] = useState(() => getCachedDailyGoal(userId));
   const [plan, setPlan] = useState(() => getCachedStudyPlan(userId));
@@ -152,23 +152,23 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
   };
 
   return (
-    <section className="cg-page wide-page settings-wide-page">
+    <section className={`cg-page wide-page settings-wide-page ${planOnly ? 'study-plan-view' : 'account-settings-view'}`}>
       <div className="fc2-topbar">
         <div className="fc2-top-left">
-          <button className="fc2-back" onClick={onBack} aria-label={t('Về trang chủ')}><ChevronLeft size={20} /></button>
-          <span className="fc2-title"><Settings size={18} color="#8B85AB" /> {t('Cài đặt')}</span>
+          <button className="fc2-back" onClick={onBack} aria-label={t(planOnly ? 'Về Bài học' : 'Về trang chủ')}><ChevronLeft size={20} /></button>
+          <span className="fc2-title"><Settings size={18} color="#8B85AB" /> {t(planOnly ? 'Kế hoạch học tập' : 'Cài đặt')}</span>
         </div>
       </div>
 
-      <div className="settings-card settings-appearance-card">
+      {!planOnly && <div className="settings-card settings-appearance-card">
         <div className="settings-card-title"><span><Settings size={20} /></span><div>{t('Giao diện & Ngôn ngữ')}<small>{t('Tùy chỉnh trải nghiệm của bạn')}</small></div></div>
         <div className="settings-row"><div className="settings-row-label"><b>{t('Giao diện')}</b></div><div className="settings-theme-options" role="group" aria-label={t('Giao diện')}>
           {[['light', 'Sáng'], ['dark', 'Tối'], ['system', 'Theo hệ thống']].map(([value, label]) => <button type="button" key={value} aria-pressed={theme === value} onClick={() => setTheme(value)}>{t(label)}</button>)}
         </div></div>
         <div className="settings-row"><label className="settings-row-label" htmlFor="interface-language"><b>{t('Ngôn ngữ')}</b></label><select id="interface-language" className="settings-language-select" value={language} onChange={(event) => setLanguage(event.target.value)}><option value="vi">Tiếng Việt</option><option value="en">English</option><option value="ko">한국어</option></select></div>
         <p className="settings-hint">{t('Áp dụng ngay và tự lưu trên trình duyệt này')}</p>
-      </div>
-      <div className="settings-card">
+      </div>}
+      <div className="settings-card settings-learning-card">
         {syncing && <div className="settings-sync-note" role="status">{t('Đang đồng bộ cài đặt…')}</div>}
         <div className="settings-card-title"><span><Target size={20} /></span><div>{t('Kế hoạch học tập')}<small>{t('Tạo nhịp học phù hợp với bạn')}</small></div></div>
         <p className="settings-hint">{t('Đặt mục tiêu và lịch học để duy trì động lực lâu dài — tất cả đều dựa trên tiến độ thật của bạn.')}</p>
@@ -272,6 +272,7 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
           {saved ? <><CheckCircle2 size={15} /> {t('Đã lưu!')}</> : t('Lưu kế hoạch học tập')}
         </button>
       </div>
+      {!planOnly && <div className="settings-card settings-account-card"><button className="settings-signout" onClick={onSignOut}><LogOut size={18} />{t('Đăng xuất')}</button></div>}
     </section>
   );
 }

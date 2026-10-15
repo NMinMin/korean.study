@@ -4,28 +4,31 @@ import {
 } from 'lucide-react';
 import AppCombobox from '../../components/common/AppCombobox';
 import { computeLeaderboard } from './leaderboardApi';
+import LeaderboardSkeleton from './LeaderboardSkeleton';
 
 export default function LeaderboardView({ profile, onBack, hideHeader, textbooks = [] }) {
   const [selectedTextbookId, setSelectedTextbookId] = useState('');
   const [page, setPage] = useState(1);
   const [lb, setLb] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const pageSize = 10;
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const res = await computeLeaderboard(profile, selectedTextbookId || null, page, pageSize);
-      setLb(res);
-    } catch (e) {
-      setLb({ rows: [], myRank: null, total: 0 });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    let alive = true;
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const res = await computeLeaderboard(profile, selectedTextbookId || null, page, pageSize);
+        if (alive) setLb(res);
+      } catch (e) {
+        if (alive) setLb({ rows: [], myRank: null, total: 0 });
+      } finally {
+        if (alive) setLoading(false);
+      }
+    };
+
     loadData();
+    return () => { alive = false; };
   }, [profile, selectedTextbookId, page]);
 
   const totalPages = Math.max(1, Math.ceil((lb?.total || 0) / pageSize));
@@ -56,10 +59,10 @@ export default function LeaderboardView({ profile, onBack, hideHeader, textbooks
           <AppCombobox
             value={selectedTextbookId}
             options={textbookOptions}
-            onChange={(val) => { setSelectedTextbookId(val); setPage(1); }}
+            onChange={(val) => { if (val !== selectedTextbookId) { setLoading(true); setSelectedTextbookId(val); setPage(1); } }}
           />
         </div>
-        {lb && (
+        {lb && !loading && (
           <div className="lb-summary-count">
             Tổng cộng <b>{lb.total || 0}</b> học viên có XP
           </div>
@@ -71,7 +74,7 @@ export default function LeaderboardView({ profile, onBack, hideHeader, textbooks
       </p>
 
       {/* My Rank Highlight if available */}
-      {lb?.myRank && (
+      {!loading && lb?.myRank && (
         <div className="lb-my-rank-card">
           <div className="lb-my-rank-badge">
             <Trophy size={18} color="#F0912E" />
@@ -80,8 +83,8 @@ export default function LeaderboardView({ profile, onBack, hideHeader, textbooks
         </div>
       )}
 
-      {loading && !lb ? (
-        <div className="cg-loading"><Sparkles size={18} color="#7C6FE4" /> Đang tải bảng xếp hạng...</div>
+      {loading ? (
+        <LeaderboardSkeleton />
       ) : !lb || lb.rows.length === 0 ? (
         <div className="cg-empty">
           <Trophy size={36} color="#C9BCF2" />
@@ -133,7 +136,7 @@ export default function LeaderboardView({ profile, onBack, hideHeader, textbooks
               <button
                 className="lb-page-btn nav"
                 disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                onClick={() => { setLoading(true); setPage((p) => Math.max(1, p - 1)); }}
               >
                 <ChevronLeft size={16} /> Trang trước
               </button>
@@ -148,7 +151,7 @@ export default function LeaderboardView({ profile, onBack, hideHeader, textbooks
                         {prev && pageNum - prev > 1 && <span className="lb-page-dots">...</span>}
                         <button
                           className={`lb-page-btn num ${page === pageNum ? 'active' : ''}`}
-                          onClick={() => setPage(pageNum)}
+                          onClick={() => { if (pageNum !== page) { setLoading(true); setPage(pageNum); } }}
                         >
                           {pageNum}
                         </button>
@@ -160,7 +163,7 @@ export default function LeaderboardView({ profile, onBack, hideHeader, textbooks
               <button
                 className="lb-page-btn nav"
                 disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() => { setLoading(true); setPage((p) => Math.min(totalPages, p + 1)); }}
               >
                 Trang sau <ChevronRight size={16} />
               </button>

@@ -1,0 +1,49 @@
+.community-skeleton-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.community-skeleton-block {
+  display: block;
+  flex-shrink: 0;
+  max-width: 100%;
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg,
+    var(--ks-surface-ede9fa, #ede9fa) 25%,
+    var(--ks-surface-fbfaff, #fbfaff) 50%,
+    var(--ks-surface-ede9fa, #ede9fa) 75%);
+  background-size: 200% 100%;
+  animation: community-skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+.community-skeleton-copy { min-width: 0; gap: 10px; }
+.community-skeleton-avatar { width: 40px; height: 40px; border-radius: 50%; }
+.community-skeleton-name { width: 130px; height: 14px; }
+.community-skeleton-meta { width: 80px; height: 10px; }
+.community-skeleton-body { display: flex; flex-direction: column; margin: 16px 0; }
+.community-skeleton-line { width: 100%; }
+.community-skeleton-short { width: 60%; }
+.community-skeleton-title { width: 220px; height: 16px; }
+.community-skeleton-actions { display: flex; gap: 18px; padding-top: 12px; }
+.community-skeleton-action { width: 64px; height: 16px; }
+.community-skeleton-button { width: 90px; height: 34px; border-radius: 11px; }
+.community-skeleton .community-skeleton-card:hover { transform: none; }
+.review-count-skeleton { width: 38px; height: 10px; }
+.leaderboard-skeleton-rank { width: 28px; height: 24px; }
+.leaderboard-skeleton-xp { min-width: 80px; min-height: 32px; }
+
+@keyframes community-skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .community-skeleton-block { animation: none; }
+}

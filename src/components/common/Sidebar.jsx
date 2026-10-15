@@ -16,7 +16,7 @@ export const NAV_TILES = [
   { id: 'caidat', label: 'Cài đặt', mobileLabel: 'Cài đặt', icon: Settings, color: '#8B85AB', bg: '#F3F1FC' },
 ];
 
-export default function Sidebar({ active, setActive, setView, goHome, onSignOut, isAdmin, gems = 0, onOpenShop, collapsed = false }) {
+export default function Sidebar({ active, setActive, setView, goHome, onSignOut, isAdmin, gems = 0, onOpenShop, collapsed = false, view }) {
   const { t: translate } = usePreferences();
   const handleTileClick = (id) => {
     setActive(id);
@@ -37,6 +37,14 @@ export default function Sidebar({ active, setActive, setView, goHome, onSignOut,
         <Sparkles size={16} color="#C9BCF2" />
       </button>
 
+      <nav className="mobile-primary-nav" aria-label={translate('Menu chính')}>
+        {[
+          { label: 'Trang chủ', icon: Home, selected: ['home', 'cuahang'].includes(view), action: goHome },
+          { label: 'Bài học', icon: BookOpen, selected: !['home', 'cuahang', 'congdong', 'xephang', 'caidat'].includes(view) && !(active === 'congdong' && ['study-custom-lesson', 'test-custom-lesson'].includes(view)), action: () => { setActive('giaotrinh'); setView('learning-hub'); } },
+          { label: 'Cộng đồng', icon: MessageCircle, selected: ['congdong', 'xephang'].includes(view) || (active === 'congdong' && ['study-custom-lesson', 'test-custom-lesson'].includes(view)), action: () => handleTileClick('congdong') },
+          { label: 'Cài đặt', icon: Settings, selected: view === 'caidat', action: () => handleTileClick('caidat') },
+        ].map(({ label, icon: Icon, selected, action }) => <button key={label} className={selected ? 'active' : ''} aria-current={selected ? 'page' : undefined} onClick={action}><Icon size={22} /><span>{translate(label)}</span></button>)}
+      </nav>
       <button className={`home-pill ${active === 'home' ? 'active' : ''}`} onClick={goHome} title="Trang chủ">
         <span className="home-pill-ico"><Home size={22} strokeWidth={2.2} /></span><span className="home-pill-label">{translate('Trang chủ')}</span>
       </button>

@@ -481,7 +481,7 @@ export function ReviewLessonSelectView({ onBack, onNext, lessons = FALLBACK_LESS
 }
 
 
-export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, dictationLines = SHADOW_LINES, shadowingLines = SHADOW_LINES, hasExamTextbook = true, onOpenCurriculum, onBack, onStart }) {
+export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, dictationLines = SHADOW_LINES, shadowingLines = SHADOW_LINES, hasExamTextbook = true, onOpenCurriculum, onBack, onStart, mobileHeaderProvided = false }) {
   const [stars, setStars] = useState(3);
   const [hasStandard, setHasStandard] = useState(null); // random mode: null=đang kiểm tra, false=lần đầu (đề chuẩn), true=đã làm rồi (đề mới)
   const poolSize = useMemo(() => buildReviewPool(vocabulary, grammar, dictationLines).length, [vocabulary, grammar, dictationLines]);
@@ -514,7 +514,7 @@ export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabul
 
   if (!hasExamTextbook || poolSize === 0) {
     return (
-      <section className="rv-page rv-review-setup">
+      <section className={`rv-page rv-review-setup ${mobileHeaderProvided ? 'mobile-header-provided' : ''}`}>
         <button className="fc2-back" onClick={onBack} aria-label="Về trang chủ"><ChevronLeft size={20} /></button>
         <div className="cg-empty" role="status">
           <BookOpen size={36} color="#7C6FE4" />
@@ -529,7 +529,7 @@ export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabul
   }
 
   return (
-    <section className="rv-page rv-review-setup">
+    <section className={`rv-page rv-review-setup ${mobileHeaderProvided ? 'mobile-header-provided' : ''}`}>
       <div className="rv-hero">
         <button className="fc2-back" onClick={onBack} aria-label="Quay lại"><ChevronLeft size={20} /></button>
         <div className="rv-hero-body">

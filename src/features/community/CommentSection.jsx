@@ -217,7 +217,7 @@ export default function CommentSection({ post, currentUserId, currentUserDisplay
   }
 
   return (
-    <div className="fb-comments-container">
+    <div className="fb-comments-container" id={`post-comments-${post.key}`}>
       {/* List of comments */}
       {loading ? (
         <div className="fb-comments-loading">Đang tải bình luận...</div>
