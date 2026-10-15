@@ -360,7 +360,6 @@ export function PersonalProgressSection({ profile, lesson, vocabulary, computeRa
 
 export function ReviewSchedule({ userId, onReview }) {
 
-  const [schedule, setSchedule] = useState([]);
   const [showWords, setShowWords] = useState(false);
 
   const [schedule, setSchedule] = useState(() => Array.from({ length: 14 }, (_, index) => {
@@ -376,10 +375,7 @@ export function ReviewSchedule({ userId, onReview }) {
   }));
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [selected, setSelected] = useState(0);
   const detailDialog = useRef(null);
-  3cc7f6f0197d3a9539b494e71f9bf3371102e032
-
   useEffect(() => {
     let alive = true;
     setShowWords(false);
@@ -422,7 +418,7 @@ export function ReviewSchedule({ userId, onReview }) {
       </div>
       {(loading || loadError) && <span className={loading ? 'community-skeleton-status' : 'settings-hint'} role="status">{loading ? 'Đang tải lịch ôn từ vựng...' : 'Chưa tải được lịch ôn. Vui lòng thử lại sau.'}</span>}
       <div className="mobile-review-days">
-        {schedule.map((day, index) => <button key={day.dateKey} disabled={loading || loadError} className={`mobile-review-day ${index === 0 ? 'today' : ''}`} onClick={() => { setSelected(index); detailDialog.current?.showModal(); }} aria-haspopup="dialog" aria-label={`Xem chi tiết ${day.label}, ${day.date.toLocaleDateString('vi-VN')}`}>
+        {schedule.map((day, index) => <button key={day.dateKey} disabled={loading || loadError || index > 0 || !day.words.length} className={`mobile-review-day ${index === 0 ? 'today' : ''}`} onClick={() => { if (index === 0 && day.words.length) detailDialog.current?.showModal(); }} aria-haspopup="dialog" aria-label={index === 0 ? `Xem từ ôn hôm nay, ${day.date.toLocaleDateString('vi-VN')}` : `${day.label}, danh sách từ sẽ mở vào đúng ngày ôn`}>
           <span><b>{day.label}</b><small>{day.date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</small></span>
           <span className="mobile-review-count">{loading ? <span className="community-skeleton-block review-count-skeleton" aria-hidden="true" /> : loadError ? '—' : day.evaluation ? `${day.evaluation.score}%` : day.words.length ? `${day.words.length} từ` : 'Nghỉ'}</span><ChevronRight size={16} />
         </button>)}
@@ -434,8 +430,7 @@ export function ReviewSchedule({ userId, onReview }) {
           {picked && <>
             <p>{picked.evaluation ? `${picked.evaluation.rating} · ${picked.evaluation.correctCount}/${picked.evaluation.totalCount} từ đúng — ${picked.evaluation.feedback}` : picked.words.length ? `${picked.words.length} từ đang chờ bạn ôn lại` : 'Ngày nghỉ — không có từ nào cần ôn'}</p>
             {picked.words.length > 0 && <ul className="review-dialog-words">{picked.words.map((word) => <li key={word.id}><b>{word.word}</b><span>{word.meaningVi}</span></li>)}</ul>}
-            {selected === 0 && picked.words.length > 0 && <button className="primary-btn" onClick={() => { detailDialog.current?.close(); onReview(picked.words, picked.dateKey); }}>Ôn ngay</button>}
-            {selected > 0 && picked.words.length > 0 && <p className="settings-hint">Các từ này sẽ đến lịch ôn vào ngày đã chọn.</p>}
+            {picked.words.length > 0 && <button className="primary-btn" onClick={() => { detailDialog.current?.close(); onReview(picked.words, picked.dateKey); }}>Ôn ngay</button>}
           </>}
         </div>
       </dialog>
@@ -444,8 +439,6 @@ export function ReviewSchedule({ userId, onReview }) {
 
           <div key={d.date.toISOString()} className={`day ${index === 0 ? 'today selected' : 'preview-locked'} ${d.date.getDay() === 6 ? 'saturday' : ''} ${d.date.getDay() === 0 ? 'sunday' : ''} ${d.words.length ? 'has-review' : d.evaluation ? 'reviewed-day' : 'rest-day'}`} role={index === 0 && d.words.length ? 'button' : undefined} tabIndex={index === 0 && d.words.length ? 0 : undefined} aria-expanded={index === 0 && d.words.length ? showWords : undefined} aria-controls={index === 0 && d.words.length ? 'review-today-words' : undefined} title={index > 0 ? 'Danh sách từ sẽ mở vào đúng ngày ôn' : undefined} onClick={() => { if (index === 0 && d.words.length) setShowWords((visible) => !visible); }} onKeyDown={(event) => { if (event.target === event.currentTarget && index === 0 && d.words.length && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setShowWords((visible) => !visible); } }}>
 
-            <div key={d.date.toISOString()} className={`day ${index === 0 ? 'today' : ''} ${d.date.getDay() === 6 ? 'saturday' : ''} ${d.date.getDay() === 0 ? 'sunday' : ''} ${selected === index ? 'selected' : ''} ${d.words.length ? 'has-review' : d.evaluation ? 'reviewed-day' : 'rest-day'}`} role="button" aria-disabled={loading || loadError} tabIndex={loading || loadError ? -1 : 0} onClick={() => { if (!loading && !loadError) setSelected(index); }} onKeyDown={(event) => { if (!loading && !loadError && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setSelected(index); } }}>
-              3cc7f6f0197d3a9539b494e71f9bf3371102e032
               {d.words.length > 0 && <PurpleMugunghwaIcon className="day-review-flower" />}
               <span className="day-name">{d.label}</span>
               <span className="day-date">{d.date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</span>
