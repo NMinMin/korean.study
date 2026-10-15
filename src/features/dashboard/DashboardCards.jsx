@@ -340,10 +340,11 @@ export function PersonalProgressSection({ profile, lesson, vocabulary, computeRa
 
 export function ReviewSchedule({ userId, onReview }) {
   const [schedule, setSchedule] = useState([]);
-  const [selected, setSelected] = useState(0);
+  const [showWords, setShowWords] = useState(false);
 
   useEffect(() => {
     let alive = true;
+    setShowWords(false);
     const refresh = async () => {
       const result = await loadVocabularyReviewSchedule(userId, 14);
       const days = result.map((item, index) => {
@@ -368,16 +369,16 @@ export function ReviewSchedule({ userId, onReview }) {
     };
   }, [userId]);
 
-  const picked = schedule[selected];
+  const picked = schedule[0];
   return (
     <section className="card review">
       <div className="card-title-row">
         <div className="card-title"><CalendarDays size={19} color="#7C6FE4" /> Lịch ôn từ vựng</div>
-        <span className="review-cycle" title="Phương pháp lặp lại ngắt quãng">Lặp lại ngắt quãng · 1–3–7 ngày</span>
+        <span className="review-cycle" title="Ôn hết danh sách rồi bắt đầu vòng mới">Ôn luân phiên · tối đa 10 từ/ngày</span>
       </div>
       <div className="days">
         {schedule.map((d, index) => (
-          <div key={d.date.toISOString()} className={`day ${index === 0 ? 'today' : ''} ${d.date.getDay() === 6 ? 'saturday' : ''} ${d.date.getDay() === 0 ? 'sunday' : ''} ${selected === index ? 'selected' : ''} ${d.words.length ? 'has-review' : d.evaluation ? 'reviewed-day' : 'rest-day'}`} role="button" tabIndex={0} onClick={() => setSelected(index)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(index); } }}>
+          <div key={d.date.toISOString()} className={`day ${index === 0 ? 'today selected' : 'preview-locked'} ${d.date.getDay() === 6 ? 'saturday' : ''} ${d.date.getDay() === 0 ? 'sunday' : ''} ${d.words.length ? 'has-review' : d.evaluation ? 'reviewed-day' : 'rest-day'}`} role={index === 0 && d.words.length ? 'button' : undefined} tabIndex={index === 0 && d.words.length ? 0 : undefined} aria-expanded={index === 0 && d.words.length ? showWords : undefined} aria-controls={index === 0 && d.words.length ? 'review-today-words' : undefined} title={index > 0 ? 'Danh sách từ sẽ mở vào đúng ngày ôn' : undefined} onClick={() => { if (index === 0 && d.words.length) setShowWords((visible) => !visible); }} onKeyDown={(event) => { if (event.target === event.currentTarget && index === 0 && d.words.length && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setShowWords((visible) => !visible); } }}>
             {d.words.length > 0 && <PurpleMugunghwaIcon className="day-review-flower" />}
             <span className="day-name">{d.label}</span>
             <span className="day-date">{d.date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</span>
@@ -397,13 +398,24 @@ export function ReviewSchedule({ userId, onReview }) {
       {picked && (
         <div className="review-selected-day">
           <div><b>{picked.label} · {picked.date.toLocaleDateString('vi-VN')}</b><span>{picked.evaluation ? `${picked.evaluation.rating} · ${picked.evaluation.correctCount}/${picked.evaluation.totalCount} từ đúng — ${picked.evaluation.feedback}` : picked.words.length ? `${picked.words.length} từ đang chờ bạn ôn lại` : 'Ngày nghỉ — không có từ nào cần ôn'}</span></div>
-          {selected === 0 && picked.words.length > 0 && <span className="review-current-note">Bấm “Ôn ngay” ở ô Hôm nay để bắt đầu</span>}
+          {picked.words.length > 0 && <span className="review-current-note">Bấm ô Hôm nay để xem từ · Bấm “Ôn ngay” để bắt đầu</span>}
+        </div>
+      )}
+      {showWords && picked?.words.length > 0 && (
+        <div id="review-today-words" className="review-word-list" aria-label="Từ vựng ôn hôm nay">
+          {picked.words.map((word) => (
+            <div className="review-word-item" key={word.id}>
+              <strong lang="ko">{word.word}</strong>
+              {word.pron && <small>[{word.pron}]</small>}
+              <span>{word.meaningVi}</span>
+            </div>
+          ))}
         </div>
       )}
       <div className="tip">
         <Lightbulb size={17} color="#E8A93D" fill="#F7D98B" />
         <b>Mẹo học tập</b>
-        <span>Ôn theo phương pháp lặp lại ngắt quãng vào ngày thứ 1, thứ 3 và thứ 7 tính từ lần học đầu tiên.</span>
+        <span>Mỗi ngày ôn tối đa 10 từ. Ôn hết danh sách rồi mới lặp lại từ đầu.</span>
         <ChevronRight size={16} color="#9A8FE0" />
       </div>
     </section>

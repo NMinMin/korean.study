@@ -1372,6 +1372,38 @@ h1,
   padding: 6px 10px
 }
 
+.day.preview-locked {
+  cursor: default;
+}
+
+.review-word-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.review-word-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--ks-border-e7e1f7, #E7E1F7);
+  border-radius: 12px;
+  color: var(--ks-text-373151, #373151);
+  overflow-wrap: anywhere;
+}
+
+.review-word-item small {
+  color: var(--ks-text-8b85ab, #8B85AB);
+}
+
+.review-word-item span {
+  flex-basis: 100%;
+  font-size: 13px;
+}
+
 .review-selected-day {
   margin-top: 12px;
   display: flex;

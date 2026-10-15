@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { buildReviewRotation } from './reviewRotation.js'
 
 export type ReviewWord = {
   id: string
@@ -31,6 +32,7 @@ export type VocabularyReviewEvaluation = {
 
 const DAY_MS = 86_400_000
 const DAILY_LIMIT = 10
+const ROTATION_KEY = 'progress:vocabulary-review-rotation'
 const RESULT_KEY_PREFIX = 'progress:vocabulary-review-result:'
 
 function localDateKey(date = new Date()) {
@@ -43,26 +45,6 @@ function localDateKey(date = new Date()) {
 function shiftDateKey(key: string, days: number) {
   const [year, month, day] = key.split('-').map(Number)
   return localDateKey(new Date(year, month - 1, day + days))
-}
-
-function daysBetween(from: string, to: string) {
-  const parse = (key: string) => {
-    const [year, month, day] = key.split('-').map(Number)
-    return new Date(year, month - 1, day).getTime()
-  }
-  return Math.round((parse(to) - parse(from)) / DAY_MS)
-}
-
-// Stable daily shuffle: the same learner sees a consistent list during the
-// day, while words are still randomly distributed instead of following the
-// vocabulary sort order.
-function randomRank(seed: string) {
-  let hash = 2166136261
-  for (let index = 0; index < seed.length; index += 1) {
-    hash ^= seed.charCodeAt(index)
-    hash = Math.imul(hash, 16777619)
-  }
-  return hash >>> 0
 }
 
 export async function loadVocabularyReviewSchedule(userId: string, numberOfDays = 14): Promise<VocabularyReviewDay[]> {
@@ -82,8 +64,9 @@ export async function loadVocabularyReviewSchedule(userId: string, numberOfDays 
       .from('user_progress_states')
       .select('state_key, state_value')
       .eq('user_id', userId)
-      .in('state_key', resultKeys),
+      .in('state_key', [...resultKeys, ROTATION_KEY]),
   ])
+  if (evaluationResult.error) throw evaluationResult.error
   for (const row of evaluationResult.data ?? []) {
     const dateKey = row.state_key.slice(RESULT_KEY_PREFIX.length)
     const day = emptyDays.find((item) => item.dateKey === dateKey)
@@ -126,100 +109,24 @@ export async function loadVocabularyReviewSchedule(userId: string, numberOfDays 
       sort_order: item.sort_order,
     }
   })
-  const vocabularyIds = vocabulary.map((item) => item.id)
-  const progressResult = await supabase
-    .from('vocabulary_progress')
-    .select('vocabulary_id, mastery, correct_count, incorrect_count, last_rating, next_review_at, times_reviewed, updated_at')
-    .eq('user_id', userId)
-    .in('vocabulary_id', vocabularyIds)
-  if (progressResult.error) return emptyDays
-
   const lessonMeta = new Map(completedResult.data.map((item) => [item.lesson_id, item]))
-  const progressByWord = new Map((progressResult.data ?? []).map((item) => [item.vocabulary_id, item]))
-  const candidates = vocabulary.map((item) => {
-    const progress = progressByWord.get(item.id)
-    const lesson = lessonMeta.get(item.lesson_id)
-    const completedKey = localDateKey(new Date(lesson?.updated_at || Date.now()))
-    const progressUpdatedKey = progress?.updated_at ? localDateKey(new Date(progress.updated_at)) : null
-    // Dữ liệu được tạo lúc học bài (cùng ngày bài đạt 100%) là lần học đầu,
-    // chưa phải một lượt ôn. Một số bản cũ đã ghi nhầm hạn +3 ngày ở đây;
-    // luôn đưa lượt ôn đầu tiên về ngày kế tiếp. Sau lượt ôn thật sự,
-    // updated_at khác ngày hoàn thành bài và next_review_at tiếp tục điều
-    // khiển các mốc +3 rồi +7 ngày.
-    const isInitialLearning = !progress || progressUpdatedKey === completedKey
-    const nextReviewKey = isInitialLearning
-      ? shiftDateKey(completedKey, 1)
-      : progress?.next_review_at
-        ? localDateKey(new Date(progress.next_review_at))
-        : shiftDateKey(progressUpdatedKey || completedKey, 1)
-    const desiredKey = nextReviewKey < todayKey ? todayKey : nextReviewKey
-    const priority =
-      (progress?.last_rating === 'forgot' ? 120 : progress?.last_rating === 'vague' ? 75 : 0)
-      + Number(progress?.incorrect_count || 0) * 12
-      - Number(progress?.correct_count || 0) * 2
-      + (5 - Number(progress?.mastery || 0)) * 9
-      + (!progress ? 55 : 0)
-    return {
-      desiredKey,
-      priority,
-      randomOrder: randomRank(`${todayKey}:${desiredKey}:${item.id}`),
-      // Hiển thị trước toàn bộ các mốc còn lại để lịch không tạo một
-      // khoảng nghỉ dài giả. Mốc 1–3–7 được tính từ lần học đầu tiên:
-      // từ ngày 1 tới ngày 3 là +2 ngày, tới ngày 7 là thêm +4 ngày.
-      projectedOffsets: isInitialLearning || Number(progress?.mastery || 0) <= 1
-        ? [0, 2, 6]
-        : Number(progress?.mastery || 0) === 2
-          ? [0, 4]
-          : [0],
-      word: {
-        id: item.id,
-        lessonId: item.lesson_id,
-        textbookId: lesson?.textbook_id || '',
-        word: item.word_ko,
-        meaningVi: item.meaning_vi,
-        type: item.part_of_speech,
-        pron: item.pronunciation,
-        mnemonic: item.mnemonic,
-        img: item.image_url,
-        audio: item.audio_url,
-        sortOrder: item.sort_order,
-      } satisfies ReviewWord,
-    }
-  }).sort((a, b) => a.desiredKey.localeCompare(b.desiredKey) || b.priority - a.priority || a.randomOrder - b.randomOrder)
-
-  const scheduledIds = emptyDays.map(() => new Set<string>())
-  const placeWord = (word: ReviewWord, desiredIndex: number) => {
-    // Lịch 1–3–7 là các mốc cố định, không phải hàng đợi công việc.
-    // Nếu một mốc đã đủ 10 từ thì không đẩy phần dư sang ngày kế tiếp,
-    // vì làm vậy sẽ biến lịch ngắt quãng thành lịch ôn liên tục.
-    const index = Math.max(0, desiredIndex)
-    if (
-      index >= numberOfDays
-      || emptyDays[index].words.length >= DAILY_LIMIT
-      || scheduledIds[index].has(word.id)
-    ) return -1
-
-    emptyDays[index].words.push(word)
-    scheduledIds[index].add(word.id)
-    return index
+  const words: ReviewWord[] = vocabulary.map((item) => ({
+    id: item.id, lessonId: item.lesson_id,
+    textbookId: lessonMeta.get(item.lesson_id)?.textbook_id || '',
+    word: item.word_ko, meaningVi: item.meaning_vi, type: item.part_of_speech,
+    pron: item.pronunciation, mnemonic: item.mnemonic, img: item.image_url,
+    audio: item.audio_url, sortOrder: item.sort_order,
+  })).filter((word) => word.word && word.meaningVi)
+  const rotationRow = (evaluationResult.data ?? []).find((row) => row.state_key === ROTATION_KEY)
+  const rotation = rotationRow ? JSON.parse(rotationRow.state_value) : {}
+  const completedToday = emptyDays[0]?.evaluation && rotation.dateKey === todayKey
+  const startIndex = completedToday ? 1 : 0
+  if (completedToday) {
+    const completedIds = new Set(rotation.wordIds || [])
+    emptyDays[0].words = words.filter((word) => completedIds.has(word.id))
   }
-
-  // Xếp lượt đầu của toàn bộ từ trước để từ chưa được ôn không bị một lượt
-  // lặp dự kiến chiếm mất chỗ (giới hạn 10 từ/ngày).
-  const placedCandidates = candidates.map((candidate) => ({
-    candidate,
-    firstIndex: placeWord(candidate.word, daysBetween(todayKey, candidate.desiredKey)),
-  }))
-
-  for (const { candidate, firstIndex } of placedCandidates) {
-    if (firstIndex < 0) continue
-    // Các lượt sau là dự kiến. Khi người học ôn thật, next_review_at được
-    // cập nhật và lần tải lịch kế tiếp sẽ tính lại theo kết quả Đã nhớ /
-    // Chưa nhớ của chính người dùng.
-    for (const offset of candidate.projectedOffsets.slice(1)) {
-      placeWord(candidate.word, firstIndex + offset)
-    }
-  }
+  const batches = buildReviewRotation(words, rotation.counts || {}, numberOfDays - startIndex, DAILY_LIMIT)
+  batches.forEach((batch: ReviewWord[], index: number) => { emptyDays[index + startIndex].words = batch })
 
   return emptyDays
 }
@@ -232,6 +139,19 @@ export async function saveVocabularyReviewResult(
   evaluation: VocabularyReviewEvaluation,
 ) {
   if (!supabase || !userId || !words.length) return false
+  const rotationResult = await supabase.from('user_progress_states')
+    .select('state_value').eq('user_id', userId).eq('state_key', ROTATION_KEY).maybeSingle()
+  if (rotationResult.error) throw rotationResult.error
+  const rotation = rotationResult.data ? JSON.parse(rotationResult.data.state_value) : {}
+  const counts = { ...(rotation.counts || {}) }
+  const answeredIds = new Set(answers.map((answer) => answer.sourceId))
+  const reviewedWords = words.filter((word) => answeredIds.has(word.id))
+  if (rotation.completedAt !== evaluation.completedAt) {
+    const alreadyReviewed = new Set(rotation.dateKey === dateKey ? rotation.wordIds || [] : [])
+    reviewedWords.forEach((word) => {
+      if (!alreadyReviewed.has(word.id)) counts[word.id] = (Number(counts[word.id]) || 0) + 1
+    })
+  }
   const ids = words.map((word) => word.id)
   const currentResult = await supabase
     .from('vocabulary_progress')
@@ -263,7 +183,7 @@ export async function saveVocabularyReviewResult(
       updated_at: now.toISOString(),
     }
   })
-  const [progressWrite, resultWrite] = await Promise.all([
+  const [progressWrite, resultWrite, rotationWrite] = await Promise.all([
     supabase.from('vocabulary_progress').upsert(rows, { onConflict: 'user_id,vocabulary_id' }),
     supabase.from('user_progress_states').upsert({
       user_id: userId,
@@ -271,7 +191,13 @@ export async function saveVocabularyReviewResult(
       state_value: JSON.stringify(evaluation),
       updated_at: now.toISOString(),
     }, { onConflict: 'user_id,state_key' }),
+    supabase.from('user_progress_states').upsert({
+      user_id: userId, state_key: ROTATION_KEY,
+      state_value: JSON.stringify({ counts, dateKey, wordIds: reviewedWords.map((word) => word.id), completedAt: evaluation.completedAt }),
+      updated_at: now.toISOString(),
+    }, { onConflict: 'user_id,state_key' }),
   ])
+  if (rotationWrite.error) throw rotationWrite.error
   if (progressWrite.error) throw progressWrite.error
   if (resultWrite.error) throw resultWrite.error
   window.dispatchEvent(new CustomEvent('kstudy:vocabulary-review-updated'))

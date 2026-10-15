@@ -646,7 +646,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 <div className="mid-row">
                   <ReviewSchedule
                     userId={profile.id}
-                    onReview={(words) => { setReviewDeck(words); setView('vocab-schedule-quiz'); }}
+                    onReview={(words, dateKey) => { setReviewDeck(words); setVocabularyReviewDate(dateKey); setView('vocab-schedule-quiz'); }}
                   />
                   <MyTextbooks
                     books={learningCatalog?.myTextbooks || []}
@@ -941,7 +941,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
               />
             )}
             {view === 'vocab-schedule-quiz' && reviewDeck && (
-              <VocabReviewQuizView
+              <VocabReviewQuizView userId={profile.id} reviewDateKey={vocabularyReviewDate}
                 words={reviewDeck}
                 catalogVocabulary={catalogVocabulary}
                 onBack={goHome}

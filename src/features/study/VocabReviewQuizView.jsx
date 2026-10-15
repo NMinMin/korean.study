@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -207,6 +207,8 @@ export default function VocabReviewQuizView({
   onFinish,
 }) {
   const [selectedWords] = useState(() => shuffle(words).slice(0, 10));
+  const [sessionVocabulary] = useState(() => catalogVocabulary);
+  const initialQuestionsPromise = useRef(null);
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -223,13 +225,18 @@ export default function VocabReviewQuizView({
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    buildAIQuizQuestions(selectedWords, catalogVocabulary).then((result) => {
+    // Keep one complete batch per session, including effect replays in StrictMode.
+    // Parent vocabulary updates must not regenerate questions during the quiz.
+    if (!initialQuestionsPromise.current) {
+      initialQuestionsPromise.current = buildAIQuizQuestions(selectedWords, sessionVocabulary);
+    }
+    initialQuestionsPromise.current.then((result) => {
       if (alive) setQuestions(result);
     }).finally(() => {
       if (alive) setLoading(false);
     });
     return () => { alive = false; };
-  }, [selectedWords, catalogVocabulary]);
+  }, [selectedWords, sessionVocabulary]);
 
   // Phát âm từ hiện tại
   const playWordAudio = (word, audioUrl) => {
@@ -320,7 +327,7 @@ export default function VocabReviewQuizView({
   // Làm lại bài kiểm tra
   const handleRestart = async () => {
     setLoading(true);
-    setQuestions(await buildAIQuizQuestions(selectedWords, catalogVocabulary));
+    setQuestions(await buildAIQuizQuestions(selectedWords, sessionVocabulary));
     setLoading(false);
     setCurrentIndex(0);
     setSelectedOption(null);
@@ -331,7 +338,7 @@ export default function VocabReviewQuizView({
   };
 
   if (loading) {
-    return <section className="rv-page"><div className="rv-loading"><Sparkles size={22} color="#7C6FE4" /> AI đang tạo bài kiểm tra từ {selectedWords.length} từ đến lịch ôn...</div></section>;
+    return <section className="rv-page"><div className="rv-loading"><Sparkles size={22} color="#7C6FE4" /> AI đang tạo sẵn toàn bộ {selectedWords.length} câu hỏi cho lượt ôn...</div></section>;
   }
 
   if (!questions.length) {
@@ -346,7 +353,7 @@ export default function VocabReviewQuizView({
         <div className="cg-empty" style={{ textAlign: 'center', padding: '60px 20px' }}>
           <BookOpen size={48} color="#7C6FE4" style={{ marginBottom: 16 }} />
           <h3>Không có từ vựng nào để ôn</h3>
-          <p>Hôm nay bạn chưa có từ nào đến lịch ôn ngắt quãng.</p>
+          <p>Hôm nay bạn chưa có từ nào trong lịch ôn.</p>
           <button className="fc-nav-btn primary" onClick={onBack} style={{ marginTop: 20 }}>
             Về trang chủ
           </button>
@@ -458,7 +465,7 @@ export default function VocabReviewQuizView({
               Kiểm tra ôn từ vựng
             </span>
             <small style={{ display: 'block', color: '#8881A2', fontSize: 12 }}>
-              Lặp lại ngắt quãng · Không ảnh hưởng bài học
+              Ôn hết danh sách rồi lặp lại · Tối đa 10 từ
             </small>
           </div>
         </div>
