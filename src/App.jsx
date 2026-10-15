@@ -501,7 +501,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
       window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('kstudy:study-session-completed', onStudyCompleted);
-      flush(false);
+      flush(false, true);
     };
   }, [profile?.id, view]);
 

@@ -3035,7 +3035,7 @@ h1,
 
 .fc2-progress-bar>div {
   height: 100%;
-  background: var(--ks-surface-8b7be8, #8B7BE8);
+  background: linear-gradient(90deg, #7C6FE4, #9E8CFC);
   border-radius: 99px;
   transition: width .4s ease
 }
@@ -15117,3 +15117,9 @@ textarea.fc2-note {
 @media (min-width: 861px) and (max-width: 1100px) {
   .dashboard-overview > .quick-access-card { min-height: 200px; }
 }
+
+.quiz-preparation-loader { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; min-height: 280px; padding: 32px 20px; text-align: center; color: var(--ks-text-423b60, #423b60); }
+.quiz-preparation-loader span { color: var(--ks-text-8b85ab, #8B85AB); font-size: 13px; }
+.quiz-preparation-spinner { color: #9384f5; animation: quiz-preparation-turn 1s linear infinite; }
+@keyframes quiz-preparation-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .quiz-preparation-spinner { animation: none; } }

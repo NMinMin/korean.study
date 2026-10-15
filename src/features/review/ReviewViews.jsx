@@ -1,4 +1,5 @@
 import { calculateReviewComposite } from './reviewScoring';
+import QuizPreparationLoader from '../../components/common/QuizPreparationLoader';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, BookOpen, Sparkles, Target, RotateCcw, CheckCircle2,
@@ -677,7 +678,7 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
   if (!pool) {
     return (
       <section className="rv-page">
-        <div className="rv-loading"><Sparkles size={22} color="#7C6FE4" /> Đang chọn câu hỏi phù hợp với bạn...</div>
+        <QuizPreparationLoader message="Đang chuẩn bị đề thi thử..." />
       </section>
     );
   }
@@ -728,6 +729,7 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
           console.error("Không thể lưu kết quả ôn tập", error);
         }
     }
+    window.dispatchEvent(new CustomEvent('kstudy:study-session-completed'));
     onFinish(finalAnswers, finalWriting, elapsedMs, finalReflex || []);
   };
 

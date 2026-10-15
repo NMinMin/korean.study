@@ -1,3 +1,4 @@
+import QuizPreparationLoader from '../../components/common/QuizPreparationLoader';
 import { useEffect, useRef, useState } from 'react';
 import { BookOpen, CheckCircle2, ChevronLeft, ChevronRight, NotebookPen, RotateCcw, Sparkles, XCircle } from 'lucide-react';
 import { requestAIJson } from '../../services/aiService';
@@ -299,7 +300,7 @@ export default function AIQuizView({ lesson, vocabulary = [], grammar = [], onBa
       <p className="cg-sub ai-quiz-scope"><Sparkles size={15} /> {reviewingMistakes ? `Luyện lại ${questions.length} câu sai của lượt trước. Điểm được tính riêng cho lượt ôn này.` : `Mỗi lượt gồm 20 câu ngẫu nhiên từ ${vocabulary.length} từ vựng và ${grammar.length} điểm ngữ pháp của bài này. Bài ít nội dung sẽ có nhiều dạng câu hỏi cho cùng kiến thức.`}</p>
 
       {loading ? (
-        <div className="rv-loading"><Sparkles size={22} color="#7C6FE4" /> AI đang tạo bộ câu hỏi mới theo nội dung bài...</div>
+        <QuizPreparationLoader message="AI đang tạo bộ câu hỏi theo nội dung bài..." />
       ) : errMsg ? (
         <div className="rv-quiz-card ai-quiz-error">
           <div className="rv-unsupported-note">{errMsg}</div>

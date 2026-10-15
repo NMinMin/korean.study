@@ -21,6 +21,7 @@ import {
   playCelebrationSound,
 } from '../../services/audioService';
 import { requestAIJson } from '../../services/aiService';
+import QuizPreparationLoader from '../../components/common/QuizPreparationLoader';
 import { saveVocabularyReviewResult } from '../../lib/reviewSchedule';
 
 function shuffle(array) {
@@ -157,7 +158,7 @@ Dữ liệu: ${JSON.stringify(sources)}`;
         mnemonic: source.mnemonic || '',
         pos: source.type || '',
         correct: options[correctIndex],
-        options,
+        options: shuffle(options),
       });
     }
     return shuffle(fallback.map((question) => aiBySource.get(question.sourceId) || question));
@@ -339,7 +340,7 @@ export default function VocabReviewQuizView({
   };
 
   if (loading) {
-    return <section className="rv-page vocab-review-page"><div className="rv-loading"><Sparkles size={22} color="var(--ks-text-7c6fe4, #7C6FE4)" /> AI đang tạo sẵn toàn bộ {selectedWords.length} câu hỏi cho lượt ôn...</div></section>;
+    return <section className="rv-page vocab-review-page"><QuizPreparationLoader message={`AI đang tạo sẵn ${selectedWords.length} câu hỏi cho lượt ôn...`} /></section>;
   }
 
   if (!questions.length) {
@@ -476,12 +477,12 @@ export default function VocabReviewQuizView({
       </div>
 
       {/* Progress bar */}
-      <div className="fc2-progress-bar" style={{ height: 6, borderRadius: 3, marginBottom: 24, background: 'var(--vqr-surface, #EAE6F8)', overflow: 'hidden' }}>
+      <div className="fc2-progress-bar" role="progressbar" aria-label="Tiến độ lượt ôn từ vựng" aria-valuemin={0} aria-valuemax={questions.length} aria-valuenow={currentIndex + 1} style={{ height: 6, borderRadius: 3, marginBottom: 24, background: 'var(--vqr-surface, #EAE6F8)', overflow: 'hidden' }}>
         <div
           style={{
             height: '100%',
             width: `${((currentIndex + 1) / questions.length) * 100}%`,
-            background: 'linear-gradient(90deg, var(--vqr-surface, #7C6FE4), var(--vqr-surface, #9E8CFC))',
+            background: 'linear-gradient(90deg, #7C6FE4, #9E8CFC)',
             borderRadius: 3,
             transition: 'width 0.3s ease',
           }}
