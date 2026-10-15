@@ -1619,9 +1619,9 @@
   }
 }
 
-/* ==========================================================================
+/*           ====
    Admin Mock Exam (Thi thử chuẩn 5 mức sao) - Modern UI/UX Redesign
-   ========================================================================== */
+             ==== */
 
 .admin-exercise-modal.is-review {
   width: min(1080px, calc(100vw - 48px));
@@ -2541,9 +2541,9 @@
   }
 }
 
-/* ==========================================================================
+/*           ====
    Admin User Management & Community Overhaul
-   ========================================================================== */
+             ==== */
 
 /* --- User Management KPI Stats --- */
 .admin-user-summary-grid {
@@ -3185,9 +3185,9 @@
 .admin-modal-action-btn.role:hover { color: #fff; background: #7c3aed; border-color: var(--ks-border-7c3aed, #7c3aed); }
 
 
-/* ==========================================================================
+/*           ====
    Admin Community Management Overhaul
-   ========================================================================== */
+             ==== */
 
 .admin-community-workspace {
   display: flex;

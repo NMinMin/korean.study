@@ -117,20 +117,20 @@ export function DailyGoalRing({ userId, onChangeGoal }) {
             <div><b>Nay là ngày nghỉ</b><span>Nghỉ ngơi để mai học thật tốt nhé.</span></div>
           </div>
         ) : <>
-        <svg viewBox="0 0 100 100" width="88" height="88">
-          <circle cx="50" cy="50" r={r} fill="none" stroke="#EEEBF8" strokeWidth="9" />
-          <circle
-            cx="50" cy="50" r={r} fill="none" stroke={done ? '#3FA95C' : '#7C6FE4'} strokeWidth="9" strokeLinecap="round"
-            className="goal-ring-progress" strokeDasharray={`${c} ${c}`} strokeDashoffset={c - dash} opacity={pct > 0 ? 1 : 0} transform="rotate(-90 50 50)"
-          />
-          <text x="50" y="47" textAnchor="middle" fontSize="20" fontWeight="800" fill="#2E2A4A">{pct}%</text>
-          <text x="50" y="64" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#8B85AB">{loading ? 'Đang tải' : `${Math.round(goal.todayMinutes)}/${goal.targetMinutes} phút`}</text>
-        </svg>
-        <div className="goal-msg">
-          {loading ? <span>Đang cập nhật mục tiêu hôm nay...</span> : done
-            ? <span>🎉 Chúc mừng, bạn đã đạt mục tiêu học hôm nay!</span>
-            : <span>Còn khoảng {Math.max(0, Math.round(goal.targetMinutes - goal.todayMinutes))} phút nữa là đạt mục tiêu hôm nay!</span>}
-        </div>
+          <svg viewBox="0 0 100 100" width="88" height="88">
+            <circle cx="50" cy="50" r={r} fill="none" stroke="#EEEBF8" strokeWidth="9" />
+            <circle
+              cx="50" cy="50" r={r} fill="none" stroke={done ? '#3FA95C' : '#7C6FE4'} strokeWidth="9" strokeLinecap="round"
+              className="goal-ring-progress" strokeDasharray={`${c} ${c}`} strokeDashoffset={c - dash} opacity={pct > 0 ? 1 : 0} transform="rotate(-90 50 50)"
+            />
+            <text x="50" y="47" textAnchor="middle" fontSize="20" fontWeight="800" fill="#2E2A4A">{pct}%</text>
+            <text x="50" y="64" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#8B85AB">{loading ? 'Đang tải' : `${Math.round(goal.todayMinutes)}/${goal.targetMinutes} phút`}</text>
+          </svg>
+          <div className="goal-msg">
+            {loading ? <span>Đang cập nhật mục tiêu hôm nay...</span> : done
+              ? <span>🎉 Chúc mừng, bạn đã đạt mục tiêu học hôm nay!</span>
+              : <span>Còn khoảng {Math.max(0, Math.round(goal.targetMinutes - goal.todayMinutes))} phút nữa là đạt mục tiêu hôm nay!</span>}
+          </div>
         </>}
       </div>
     </section>
@@ -359,10 +359,10 @@ export function PersonalProgressSection({ profile, lesson, vocabulary, computeRa
 }
 
 export function ReviewSchedule({ userId, onReview }) {
-<<<<<<< HEAD
+
   const [schedule, setSchedule] = useState([]);
   const [showWords, setShowWords] = useState(false);
-=======
+
   const [schedule, setSchedule] = useState(() => Array.from({ length: 14 }, (_, index) => {
     const date = new Date();
     date.setHours(0, 0, 0, 0);
@@ -378,7 +378,7 @@ export function ReviewSchedule({ userId, onReview }) {
   const [loadError, setLoadError] = useState(false);
   const [selected, setSelected] = useState(0);
   const detailDialog = useRef(null);
->>>>>>> 3cc7f6f0197d3a9539b494e71f9bf3371102e032
+  3cc7f6f0197d3a9539b494e71f9bf3371102e032
 
   useEffect(() => {
     let alive = true;
@@ -441,50 +441,50 @@ export function ReviewSchedule({ userId, onReview }) {
       </dialog>
       <div className="days">
         {schedule.map((d, index) => (
-<<<<<<< HEAD
+
           <div key={d.date.toISOString()} className={`day ${index === 0 ? 'today selected' : 'preview-locked'} ${d.date.getDay() === 6 ? 'saturday' : ''} ${d.date.getDay() === 0 ? 'sunday' : ''} ${d.words.length ? 'has-review' : d.evaluation ? 'reviewed-day' : 'rest-day'}`} role={index === 0 && d.words.length ? 'button' : undefined} tabIndex={index === 0 && d.words.length ? 0 : undefined} aria-expanded={index === 0 && d.words.length ? showWords : undefined} aria-controls={index === 0 && d.words.length ? 'review-today-words' : undefined} title={index > 0 ? 'Danh sách từ sẽ mở vào đúng ngày ôn' : undefined} onClick={() => { if (index === 0 && d.words.length) setShowWords((visible) => !visible); }} onKeyDown={(event) => { if (event.target === event.currentTarget && index === 0 && d.words.length && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setShowWords((visible) => !visible); } }}>
-=======
-          <div key={d.date.toISOString()} className={`day ${index === 0 ? 'today' : ''} ${d.date.getDay() === 6 ? 'saturday' : ''} ${d.date.getDay() === 0 ? 'sunday' : ''} ${selected === index ? 'selected' : ''} ${d.words.length ? 'has-review' : d.evaluation ? 'reviewed-day' : 'rest-day'}`} role="button" aria-disabled={loading || loadError} tabIndex={loading || loadError ? -1 : 0} onClick={() => { if (!loading && !loadError) setSelected(index); }} onKeyDown={(event) => { if (!loading && !loadError && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setSelected(index); } }}>
->>>>>>> 3cc7f6f0197d3a9539b494e71f9bf3371102e032
-            {d.words.length > 0 && <PurpleMugunghwaIcon className="day-review-flower" />}
-            <span className="day-name">{d.label}</span>
-            <span className="day-date">{d.date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</span>
-            <span className="day-words">{loading ? <span className="community-skeleton-block review-count-skeleton" aria-hidden="true" /> : loadError ? '—' : d.evaluation ? `${d.evaluation.score}%` : d.words.length ? `${d.words.length} từ` : 'Nghỉ ngơi'}</span>
-            {d.evaluation && <span className={`review-rating ${d.evaluation.rating.toLowerCase()}`}>{d.evaluation.rating}</span>}
-            {index === 0 && d.words.length ? (
-              <button
-                className="on-ngay"
-                onClick={(event) => { event.stopPropagation(); if (d.words.length) onReview(d.words, d.dateKey); }}
-              >
-                Ôn ngay
-              </button>
-            ) : <span className={`day-ico ${d.words.length || d.evaluation ? '' : 'rest'}`}>{loading ? <span className="community-skeleton-block review-count-skeleton" aria-hidden="true" /> : loadError ? '—' : d.words.length ? <BookMarked size={16} /> : d.evaluation ? <Check size={16} /> : <Coffee size={16} />}</span>}
-          </div>
-        ))}
-      </div>
-      {picked && !loading && !loadError && (
-        <div className="review-selected-day">
-          <div><b>{picked.label} · {picked.date.toLocaleDateString('vi-VN')}</b><span>{picked.evaluation ? `${picked.evaluation.rating} · ${picked.evaluation.correctCount}/${picked.evaluation.totalCount} từ đúng — ${picked.evaluation.feedback}` : picked.words.length ? `${picked.words.length} từ đang chờ bạn ôn lại` : 'Ngày nghỉ — không có từ nào cần ôn'}</span></div>
-          {picked.words.length > 0 && <span className="review-current-note">Bấm ô Hôm nay để xem từ · Bấm “Ôn ngay” để bắt đầu</span>}
-        </div>
-      )}
-      {showWords && picked?.words.length > 0 && (
-        <div id="review-today-words" className="review-word-list" aria-label="Từ vựng ôn hôm nay">
-          {picked.words.map((word) => (
-            <div className="review-word-item" key={word.id}>
-              <strong lang="ko">{word.word}</strong>
-              {word.pron && <small>[{word.pron}]</small>}
-              <span>{word.meaningVi}</span>
+
+            <div key={d.date.toISOString()} className={`day ${index === 0 ? 'today' : ''} ${d.date.getDay() === 6 ? 'saturday' : ''} ${d.date.getDay() === 0 ? 'sunday' : ''} ${selected === index ? 'selected' : ''} ${d.words.length ? 'has-review' : d.evaluation ? 'reviewed-day' : 'rest-day'}`} role="button" aria-disabled={loading || loadError} tabIndex={loading || loadError ? -1 : 0} onClick={() => { if (!loading && !loadError) setSelected(index); }} onKeyDown={(event) => { if (!loading && !loadError && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setSelected(index); } }}>
+              3cc7f6f0197d3a9539b494e71f9bf3371102e032
+              {d.words.length > 0 && <PurpleMugunghwaIcon className="day-review-flower" />}
+              <span className="day-name">{d.label}</span>
+              <span className="day-date">{d.date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</span>
+              <span className="day-words">{loading ? <span className="community-skeleton-block review-count-skeleton" aria-hidden="true" /> : loadError ? '—' : d.evaluation ? `${d.evaluation.score}%` : d.words.length ? `${d.words.length} từ` : 'Nghỉ ngơi'}</span>
+              {d.evaluation && <span className={`review-rating ${d.evaluation.rating.toLowerCase()}`}>{d.evaluation.rating}</span>}
+              {index === 0 && d.words.length ? (
+                <button
+                  className="on-ngay"
+                  onClick={(event) => { event.stopPropagation(); if (d.words.length) onReview(d.words, d.dateKey); }}
+                >
+                  Ôn ngay
+                </button>
+              ) : <span className={`day-ico ${d.words.length || d.evaluation ? '' : 'rest'}`}>{loading ? <span className="community-skeleton-block review-count-skeleton" aria-hidden="true" /> : loadError ? '—' : d.words.length ? <BookMarked size={16} /> : d.evaluation ? <Check size={16} /> : <Coffee size={16} />}</span>}
             </div>
-          ))}
+        ))}
+          </div>
+      { picked && !loading && !loadError && (
+            <div className="review-selected-day">
+              <div><b>{picked.label} · {picked.date.toLocaleDateString('vi-VN')}</b><span>{picked.evaluation ? `${picked.evaluation.rating} · ${picked.evaluation.correctCount}/${picked.evaluation.totalCount} từ đúng — ${picked.evaluation.feedback}` : picked.words.length ? `${picked.words.length} từ đang chờ bạn ôn lại` : 'Ngày nghỉ — không có từ nào cần ôn'}</span></div>
+              {picked.words.length > 0 && <span className="review-current-note">Bấm ô Hôm nay để xem từ · Bấm “Ôn ngay” để bắt đầu</span>}
+            </div>
+          )}
+        {showWords && picked?.words.length > 0 && (
+          <div id="review-today-words" className="review-word-list" aria-label="Từ vựng ôn hôm nay">
+            {picked.words.map((word) => (
+              <div className="review-word-item" key={word.id}>
+                <strong lang="ko">{word.word}</strong>
+                {word.pron && <small>[{word.pron}]</small>}
+                <span>{word.meaningVi}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="tip">
+          <Lightbulb size={17} color="#E8A93D" fill="#F7D98B" />
+          <b>Mẹo học tập</b>
+          <span>Mỗi ngày ôn tối đa 10 từ. Ôn hết danh sách rồi mới lặp lại từ đầu.</span>
+          <ChevronRight size={16} color="#9A8FE0" />
         </div>
-      )}
-      <div className="tip">
-        <Lightbulb size={17} color="#E8A93D" fill="#F7D98B" />
-        <b>Mẹo học tập</b>
-        <span>Mỗi ngày ôn tối đa 10 từ. Ôn hết danh sách rồi mới lặp lại từ đầu.</span>
-        <ChevronRight size={16} color="#9A8FE0" />
-      </div>
     </section>
   );
 }

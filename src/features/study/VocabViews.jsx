@@ -1229,7 +1229,7 @@ export function FlashcardView({ lesson, userId, onBack, onFinish, onProgress, in
             onPointerLeave={onDragEnd}
           >
             <div className={`fc2-flip-inner ${flipped ? "is-flipped" : ""}`}>
-              {/* ================= MẶT TRƯỚC ================= */}
+              {/*   === MẶT TRƯỚC   === */}
               <div className="fc2-face front" onClick={() => setFlipped(true)}>
                 <button
                   className={`fc2-star ${starred ? "on" : ""}`}
@@ -1276,7 +1276,7 @@ export function FlashcardView({ lesson, userId, onBack, onFinish, onProgress, in
                 </button>
               </div>
 
-              {/* ================= MẶT SAU ================= */}
+              {/*   === MẶT SAU   === */}
               <div
                 className="fc2-face back"
                 onClick={(e) => {

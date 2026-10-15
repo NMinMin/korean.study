@@ -14183,9 +14183,9 @@ textarea.fc2-note {
 .ai-quiz-scope{display:flex;align-items:center;gap:7px}.ai-quiz-scope svg{flex:none;color:var(--ks-text-7c6fe4, #7c6fe4)}.ai-quiz-session .rv-quiz-tags{align-items:center;flex-wrap:wrap}.ai-quiz-session .rv-quiz-tags .rv-tag-type{display:inline-flex;align-items:center;gap:5px}.ai-quiz-result{text-align:center}.ai-quiz-result-icon{display:grid;place-items:center;width:62px;height:62px;margin:0 auto 12px;border-radius:20px;color:#fff;background:linear-gradient(145deg,var(--ks-surface-8d7df0, #8d7df0),#6b5bd8);box-shadow:0 10px 24px rgba(108,91,216,.25)}.ai-quiz-result h2{margin:14px 0 5px;color:var(--ks-text-2f294a, #2f294a);font-size:28px}.ai-quiz-result>p{color:var(--ks-text-81799a, #81799a)}.ai-quiz-result-actions,.ai-quiz-error-actions{display:flex;justify-content:center;gap:10px;margin-top:20px}.ai-quiz-result-actions .rv-start-btn,.ai-quiz-error-actions .rv-start-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;width:auto;margin:0}.ai-quiz-error-actions .fc-nav-btn,.ai-quiz-result-actions .fc-nav-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px}@media(max-width:600px){.ai-quiz-result-actions,.ai-quiz-error-actions{display:grid;grid-template-columns:1fr}.ai-quiz-result-actions>button,.ai-quiz-error-actions>button{width:100%!important}}
 .ai-quiz-auto-next{margin-left:auto;color:var(--ks-text-378759, #378759);font-size:11.5px;font-weight:700}
 
-/* ==================================================================== */
+/*          ===== */
 /*  THI THỬ & ÔN TẬP THEO BÀI - GIAO DIỆN NÂNG CẤP                       */
-/* ==================================================================== */
+/*          ===== */
 
 /* Lesson Selector Controls & Badges */
 .rv-lesson-select-controls {
