@@ -614,6 +614,7 @@ export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabul
 export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, dictationLines = SHADOW_LINES, shadowingLines = SHADOW_LINES, isRecheck = false, onBack, onFinish, onProgress, onChangeSet }) {
   const [history, setHistory] = useState(null);
   const [pool, setPool] = useState(null);
+  const [preparationError, setPreparationError] = useState(false);
   const [idx, setIdx] = useState(0);
   const [picked, setPicked] = useState(null);
   const [answers, setAnswers] = useState([]); // { correct, category, key, label }
@@ -650,6 +651,8 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
       const selected = buildCoverageSelection(difficulty, fullPool, h, seed, vocabulary);
       setHistory(h);
       setPool(selected);
+    }).catch(() => {
+      if (alive) setPreparationError(true);
     });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -678,7 +681,12 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
   if (!pool) {
     return (
       <section className="rv-page">
-        <QuizPreparationLoader message="Đang chuẩn bị đề thi thử..." />
+        {preparationError ? (
+          <div className="rv-quiz-card" role="alert">
+            <p>Chưa chuẩn bị được đề thi. Vui lòng quay lại và thử lại.</p>
+            <button className="fc-nav-btn" onClick={onBack}><ChevronLeft size={18} /> Quay lại</button>
+          </div>
+        ) : <QuizPreparationLoader message="Đang chuẩn bị đề thi thử..." />}
       </section>
     );
   }

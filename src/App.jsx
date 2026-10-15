@@ -488,7 +488,10 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
       if (accumulatedMs <= 0 || (!force && accumulatedMs < 15_000)) return;
       const minutes = accumulatedMs / 60_000;
       accumulatedMs = 0;
-      saveChain = saveChain.then(() => recordStudyMinutes(minutes, userId)).catch(() => undefined);
+      saveChain = saveChain.then(async () => {
+        const result = await recordStudyMinutes(minutes, userId);
+        if (!result) accumulatedMs += minutes * 60_000;
+      }).catch(() => { accumulatedMs += minutes * 60_000; });
     };
 
     const onVisibilityChange = () => {
@@ -757,6 +760,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 }}
                 onBack={goHome}
                 onStart={(diff, useSeed, examOpts) => {
+                  setLesson(lesson || primaryLesson);
                   setReviewMode('mock-exam');
                   setReviewIntroBackView('mock-exam');
                   setReviewDifficulty(diff);
@@ -852,9 +856,9 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
                 }}
               />
             )}
-            {view === 'review-quiz' && lesson && reviewDifficulty && (
+            {view === 'review-quiz' && reviewDifficulty && (
               <ReviewQuizView
-                lesson={lesson}
+                lesson={lesson || primaryLesson}
                 userId={profile.id}
                 vocabulary={reviewVocabulary}
                 grammar={reviewGrammar}

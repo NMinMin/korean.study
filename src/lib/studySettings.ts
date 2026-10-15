@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { todayStr } from '../utils/streakUtils'
 
 export type DailyGoalData = {
   targetMinutes: number
@@ -67,13 +68,14 @@ export async function recordRemoteStudyMinutes(minutes: number): Promise<DailyGo
     window.dispatchEvent(new CustomEvent('kstudy:auth-expired'))
     return null
   }
-  const { data, error } = await supabase.rpc('record_study_minutes', { p_minutes: minutes })
+  const { data, error } = await supabase.rpc('record_study_minutes', { p_minutes: minutes, p_study_date: todayStr() })
   if (error) {
     const message = String(error.message || '').toLowerCase()
     if (error.code === 'PGRST301' || error.code === '42501' || message.includes('jwt') || message.includes('unauthorized') || message.includes('authentication required')) {
       window.dispatchEvent(new CustomEvent('kstudy:auth-expired'))
     }
-    return null
+    console.error('Không thể ghi thời gian học vào mục tiêu ngày', { code: error.code, message: error.message })
+    throw error
   }
   if (!data) return null
   const row = Array.isArray(data) ? data[0] : data

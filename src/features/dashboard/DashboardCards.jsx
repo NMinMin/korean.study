@@ -58,16 +58,27 @@ export function DailyGoalRing({ userId, onChangeGoal }) {
   const [plan, setPlan] = useState(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const celebratedRef = useRef(false);
+  const goalRevision = useRef(0);
 
-  const refresh = () => Promise.all([getDailyGoal(userId), getStudyPlan(userId)]).then(([g, p]) => {
-    setGoal(g);
+  const refresh = () => {
+    const revision = ++goalRevision.current;
+    return Promise.all([getDailyGoal(userId), getStudyPlan(userId)]).then(([g, p]) => {
     setPlan(p);
+    if (revision !== goalRevision.current) return;
+    setGoal(g);
   }).catch(() => {
+    if (revision !== goalRevision.current) return;
     setGoal(getCachedDailyGoal(userId));
     setPlan(getCachedStudyPlan(userId));
   });
+  };
   useEffect(() => {
-    const syncImmediately = (event) => event.detail ? setGoal(event.detail) : refresh();
+    const syncImmediately = (event) => {
+      if (event.detail) {
+        goalRevision.current += 1;
+        setGoal(event.detail);
+      } else refresh();
+    };
     refresh();
     const refreshWhenVisible = () => {
       if (document.visibilityState === 'visible') refresh();
