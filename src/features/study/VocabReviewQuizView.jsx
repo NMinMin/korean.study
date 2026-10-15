@@ -467,7 +467,7 @@ export default function VocabReviewQuizView({
               Kiểm tra ôn từ vựng
             </span>
             <small style={{ display: 'block', color: 'var(--vqr-text, #8881A2)', fontSize: 12 }}>
-              Ôn hết danh sách rồi lặp lại · Tối đa 10 từ
+              Chu kỳ 1–3–5–7 · Tối đa 10 từ
             </small>
           </div>
         </div>

@@ -119,14 +119,34 @@ export async function loadVocabularyReviewSchedule(userId: string, numberOfDays 
   })).filter((word) => word.word && word.meaningVi)
   const rotationRow = (evaluationResult.data ?? []).find((row) => row.state_key === ROTATION_KEY)
   const rotation = rotationRow ? JSON.parse(rotationRow.state_value) : {}
-  const completedToday = emptyDays[0]?.evaluation && rotation.dateKey === todayKey
-  const startIndex = completedToday ? 1 : 0
-  if (completedToday) {
+  if (!rotation.cycleAnchor) {
+    rotation.cycleAnchor = todayKey
+    rotation.cycleWordIds = words.map((word) => word.id)
+    const { error } = await supabase.from('user_progress_states').upsert({
+      user_id: userId, state_key: ROTATION_KEY,
+      state_value: JSON.stringify(rotation), updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,state_key' })
+    if (error) throw error
+  }
+  // Keep group membership stable when new vocabulary is added.
+  const byId = new Map(words.map((word) => [word.id, word]))
+  const previousIds: string[] = rotation.cycleWordIds || []
+  const previousSet = new Set(previousIds)
+  const orderedWords = [
+    ...previousIds.map((id) => byId.get(id)).filter((word): word is ReviewWord => Boolean(word)),
+    ...words.filter((word) => !previousSet.has(word.id)),
+  ]
+  const utcDay = (key: string) => {
+    const [year, month, day] = key.split('-').map(Number)
+    return Date.UTC(year, month - 1, day)
+  }
+  const elapsedDays = Math.max(0, Math.round((utcDay(todayKey) - utcDay(rotation.cycleAnchor)) / DAY_MS))
+  const batches = buildReviewRotation(orderedWords, numberOfDays, DAILY_LIMIT, elapsedDays)
+  batches.forEach((batch: ReviewWord[], index: number) => { emptyDays[index].words = batch })
+  if (emptyDays[0]?.evaluation && rotation.dateKey === todayKey) {
     const completedIds = new Set(rotation.wordIds || [])
     emptyDays[0].words = words.filter((word) => completedIds.has(word.id))
   }
-  const batches = buildReviewRotation(words, rotation.counts || {}, numberOfDays - startIndex, DAILY_LIMIT)
-  batches.forEach((batch: ReviewWord[], index: number) => { emptyDays[index + startIndex].words = batch })
 
   return emptyDays
 }
@@ -193,7 +213,7 @@ export async function saveVocabularyReviewResult(
     }, { onConflict: 'user_id,state_key' }),
     supabase.from('user_progress_states').upsert({
       user_id: userId, state_key: ROTATION_KEY,
-      state_value: JSON.stringify({ counts, dateKey, wordIds: reviewedWords.map((word) => word.id), completedAt: evaluation.completedAt }),
+      state_value: JSON.stringify({ ...rotation, counts, dateKey, wordIds: reviewedWords.map((word) => word.id), completedAt: evaluation.completedAt }),
       updated_at: now.toISOString(),
     }, { onConflict: 'user_id,state_key' }),
   ])

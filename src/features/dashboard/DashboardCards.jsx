@@ -425,7 +425,7 @@ export function ReviewSchedule({ userId, onReview }) {
     <section className="card review" aria-busy={loading}>
       <div className="card-title-row">
         <div className="card-title"><CalendarDays size={19} color="#7C6FE4" /> Lịch ôn từ vựng</div>
-        <span className="review-cycle" title="Ôn hết danh sách rồi bắt đầu vòng mới">Ôn luân phiên · tối đa 10 từ/ngày</span>
+        <span className="review-cycle" title="Mỗi nhóm ôn vào ngày 1, 3, 5 và 7">Chu kỳ 1–3–5–7 · tối đa 10 từ</span>
       </div>
       {(loading || loadError) && <span className={loading ? 'community-skeleton-status' : 'settings-hint'} role="status">{loading ? 'Đang tải lịch ôn từ vựng...' : 'Chưa tải được lịch ôn. Vui lòng thử lại sau.'}</span>}
       <div className="mobile-review-days">
@@ -486,7 +486,7 @@ export function ReviewSchedule({ userId, onReview }) {
         <div className="tip">
           <Lightbulb size={17} color="#E8A93D" fill="#F7D98B" />
           <b>Mẹo học tập</b>
-          <span>Mỗi ngày ôn tối đa 10 từ. Ôn hết danh sách rồi mới lặp lại từ đầu.</span>
+          <span>Mỗi nhóm tối đa 10 từ, ôn vào ngày 1–3–5–7. Sau đó chuyển nhóm tiếp theo; hết danh sách thì bắt đầu lại.</span>
           <ChevronRight size={16} color="#9A8FE0" />
         </div>
     </section>
