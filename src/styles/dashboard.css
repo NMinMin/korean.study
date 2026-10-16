@@ -1403,13 +1403,13 @@ h1,
 }
 
 .review-word-item small {
-  color: #7b6cad;
+  color: #737373;
   font-size: 11px;
 }
 
 .review-word-item strong,
 .review-dialog-words b {
-  color: #7565bd;
+  color: #1f1f1f;
   font-size: 13px;
   font-weight: 650;
   line-height: 1.5;
@@ -1422,13 +1422,13 @@ h1,
 
 .review-word-item > span:not(.review-word-result),
 .review-dialog-words li > span:not(.review-word-result) {
-  color: #7b6cad;
+  color: #737373;
   font-size: 12px;
   line-height: 1.6;
 }
 
-html[data-theme="dark"] :is(.review-word-item strong, .review-dialog-words b) { color: #c1b2f2; }
-html[data-theme="dark"] :is(.review-word-item small, .review-word-item > span:not(.review-word-result), .review-dialog-words li > span:not(.review-word-result)) { color: #b5a5df; }
+html[data-theme="dark"] :is(.review-word-item strong, .review-dialog-words b) { color: #f1f1f1; }
+html[data-theme="dark"] :is(.review-word-item small, .review-word-item > span:not(.review-word-result), .review-dialog-words li > span:not(.review-word-result)) { color: #b3b3b3; }
 
 .review-selected-day {
   margin-top: 12px;
