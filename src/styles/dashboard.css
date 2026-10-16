@@ -14926,7 +14926,7 @@ textarea.fc2-note {
 .review-dialog-content p { line-height: 1.6; }
 .review-dialog-close { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--ks-surface-f3f0ff, #f3f0ff); color: inherit; cursor: pointer; }
 .review-dialog-words { list-style: none; padding: 0; margin: 16px 0; }
-.review-dialog-words li { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--ks-border-ece9f7, #ece9f7); }
+.review-dialog-words li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) 26px; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--ks-border-ece9f7, #ece9f7); overflow-wrap: anywhere; }
 .review-dialog-words span { text-align: right; }
 @media (max-width: 860px) {
   .sidebar.sidebar > :not(.mobile-primary-nav), .sidebar.sidebar.collapsed > :not(.mobile-primary-nav) { display: none; }

@@ -15,6 +15,7 @@ import {
 } from '../../services/audioService';
 import { computeLeaderboard } from '../leaderboard/leaderboardApi';
 import { loadVocabularyReviewSchedule } from '../../lib/reviewSchedule';
+import { getReviewWordResult } from '../../utils/reviewWordResult';
 import '../community/community-skeleton.css';
 
 function PurpleMugunghwaIcon({ className = '' }) {
@@ -371,8 +372,8 @@ export function PersonalProgressSection({ profile, lesson, vocabulary, computeRa
   );
 }
 
-function ReviewWordResult({ evaluation, wordId }) {
-  const correct = evaluation?.wordResults?.[wordId];
+function ReviewWordResult({ evaluation, wordId, wordCount }) {
+  const correct = getReviewWordResult(evaluation, wordId, wordCount);
   if (typeof correct !== 'boolean') return null;
   return <span className={`review-word-result ${correct ? 'correct' : 'incorrect'}`} role="img" aria-label={correct ? 'Trả lời đúng' : 'Trả lời sai'} title={correct ? 'Trả lời đúng' : 'Trả lời sai'}>
     {correct ? <Check size={17} aria-hidden="true" /> : <X size={17} aria-hidden="true" />}
@@ -450,7 +451,7 @@ export function ReviewSchedule({ userId, onReview }) {
           <h2 id="review-day-title">{picked?.label} · {picked?.date.toLocaleDateString('vi-VN')}</h2>
           {picked && <>
             <p>{picked.evaluation ? `${picked.evaluation.rating} · ${picked.evaluation.correctCount}/${picked.evaluation.totalCount} từ đúng — ${picked.evaluation.feedback}` : picked.words.length ? `${picked.words.length} từ đang chờ bạn ôn lại` : 'Ngày nghỉ — không có từ nào cần ôn'}</p>
-            {picked.words.length > 0 && <ul className="review-dialog-words">{picked.words.map((word) => <li key={word.id}><b>{word.word}</b><span>{word.meaningVi}</span><ReviewWordResult evaluation={picked.evaluation} wordId={word.id} /></li>)}</ul>}
+            {picked.words.length > 0 && <ul className="review-dialog-words">{picked.words.map((word) => <li key={word.id}><b>{word.word}</b><span>{word.meaningVi}</span><ReviewWordResult evaluation={picked.evaluation} wordId={word.id} wordCount={picked.words.length} /></li>)}</ul>}
             {picked.words.length > 0 && <button className="primary-btn" onClick={() => { detailDialog.current?.close(); onReview(picked.words, picked.dateKey); }}>Ôn ngay</button>}
           </>}
         </div>
@@ -488,7 +489,7 @@ export function ReviewSchedule({ userId, onReview }) {
                 <strong lang="ko">{word.word}</strong>
                 {word.pron && <small>[{word.pron}]</small>}
                 <span>{word.meaningVi}</span>
-                <ReviewWordResult evaluation={picked.evaluation} wordId={word.id} />
+                <ReviewWordResult evaluation={picked.evaluation} wordId={word.id} wordCount={picked.words.length} />
               </div>
             ))}
           </div>
