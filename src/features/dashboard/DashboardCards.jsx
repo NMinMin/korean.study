@@ -431,7 +431,7 @@ export function ReviewSchedule({ userId, onReview }) {
       </div>
       {(loading || loadError) && <span className={loading ? 'community-skeleton-status' : 'settings-hint'} role="status">{loading ? 'Đang tải lịch ôn từ vựng...' : 'Chưa tải được lịch ôn. Vui lòng thử lại sau.'}</span>}
       <div className="mobile-review-days">
-        {schedule.map((day, index) => <button key={day.dateKey} disabled={loading || loadError || index > 0 || !day.words.length} className={`mobile-review-day ${index === 0 ? 'today' : ''}`} onClick={() => { if (index === 0 && day.words.length) detailDialog.current?.showModal(); }} aria-haspopup="dialog" aria-label={index === 0 ? `Xem từ ôn hôm nay, ${day.date.toLocaleDateString('vi-VN')}` : `${day.label}, danh sách từ sẽ mở vào đúng ngày ôn`}>
+        {schedule.map((day, index) => <button key={day.dateKey} disabled={loading || loadError || index > 0 || !day.words.length} className={`mobile-review-day ${day.evaluation ? `review-result-${day.evaluation.rating.toLowerCase()}` : ''} ${index === 0 ? 'today' : ''}`} onClick={() => { if (index === 0 && day.words.length) detailDialog.current?.showModal(); }} aria-haspopup="dialog" aria-label={index === 0 ? `Xem từ ôn hôm nay, ${day.date.toLocaleDateString('vi-VN')}` : `${day.label}, danh sách từ sẽ mở vào đúng ngày ôn`}>
           <span><b>{day.label}</b><small>{day.date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</small></span>
           <span className="mobile-review-count">{loading ? <span className="community-skeleton-block review-count-skeleton" aria-hidden="true" /> : loadError ? '—' : day.evaluation ? `${day.evaluation.score}%` : day.words.length ? `${day.words.length} từ` : 'Nghỉ'}</span><ChevronRight size={16} />
         </button>)}
@@ -450,13 +450,12 @@ export function ReviewSchedule({ userId, onReview }) {
       <div className="days">
         {schedule.map((d, index) => (
 
-          <div key={d.date.toISOString()} className={`day ${index === 0 ? 'today selected' : 'preview-locked'} ${d.date.getDay() === 6 ? 'saturday' : ''} ${d.date.getDay() === 0 ? 'sunday' : ''} ${d.words.length ? 'has-review' : d.evaluation ? 'reviewed-day' : 'rest-day'}`} role={index === 0 && d.words.length ? 'button' : undefined} tabIndex={index === 0 && d.words.length ? 0 : undefined} aria-expanded={index === 0 && d.words.length ? showWords : undefined} aria-controls={index === 0 && d.words.length ? 'review-today-words' : undefined} title={index > 0 ? 'Danh sách từ sẽ mở vào đúng ngày ôn' : undefined} onClick={() => { if (index === 0 && d.words.length) setShowWords((visible) => !visible); }} onKeyDown={(event) => { if (event.target === event.currentTarget && index === 0 && d.words.length && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setShowWords((visible) => !visible); } }}>
+          <div key={d.date.toISOString()} className={`day ${d.evaluation ? `review-result-${d.evaluation.rating.toLowerCase()}` : ''} ${index === 0 ? 'today selected' : 'preview-locked'} ${d.date.getDay() === 6 ? 'saturday' : ''} ${d.date.getDay() === 0 ? 'sunday' : ''} ${d.words.length ? 'has-review' : d.evaluation ? 'reviewed-day' : 'rest-day'}`} role={index === 0 && d.words.length ? 'button' : undefined} tabIndex={index === 0 && d.words.length ? 0 : undefined} aria-expanded={index === 0 && d.words.length ? showWords : undefined} aria-controls={index === 0 && d.words.length ? 'review-today-words' : undefined} title={index > 0 ? 'Danh sách từ sẽ mở vào đúng ngày ôn' : undefined} onClick={() => { if (index === 0 && d.words.length) setShowWords((visible) => !visible); }} onKeyDown={(event) => { if (event.target === event.currentTarget && index === 0 && d.words.length && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setShowWords((visible) => !visible); } }}>
 
               {d.words.length > 0 && <PurpleMugunghwaIcon className="day-review-flower" />}
               <span className="day-name">{d.label}</span>
               <span className="day-date">{d.date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</span>
               <span className="day-words">{loading ? <span className="community-skeleton-block review-count-skeleton" aria-hidden="true" /> : loadError ? '—' : d.evaluation ? `${d.evaluation.score}%` : d.words.length ? `${d.words.length} từ` : 'Nghỉ ngơi'}</span>
-              {d.evaluation && <span className={`review-rating ${d.evaluation.rating.toLowerCase()}`}>{d.evaluation.rating}</span>}
               {index === 0 && d.words.length ? (
                 <button
                   className="on-ngay"

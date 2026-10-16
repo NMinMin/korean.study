@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { ArrowLeft, Check, Eye, EyeOff, LockKeyhole, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, Check, Eye, EyeOff, LockKeyhole, ShieldCheck, Moon, Sun } from 'lucide-react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { BlockingLoader, useAppDialog } from '../components/common/AppDialog'
@@ -16,6 +16,8 @@ export default function ResetPasswordPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [dark, setDark] = useState(() => localStorage.getItem('kstudy:theme') === 'dark')
   const [busy, setBusy] = useState(false)
   const checks = useMemo(() => [
     { label: 'Ít nhất 8 ký tự', valid: password.length >= 8 },
@@ -54,9 +56,13 @@ export default function ResetPasswordPage() {
     }
   }
 
-  return <main className="reset-password-screen">
+  return <main className={`auth-screen reset-password-screen ${dark ? 'theme-dark' : 'theme-light'}`}>
     <BlockingLoader show={busy} label="Đang cập nhật mật khẩu…" />
-    <section className="reset-password-shell">
+    <button className="theme-button" type="button" aria-label={dark ? 'Bật giao diện sáng' : 'Bật giao diện tối'} onClick={() => {
+      setDark(!dark)
+      localStorage.setItem('kstudy:theme', dark ? 'light' : 'dark')
+    }}>{dark ? <Sun /> : <Moon />}</button>
+    <section className="auth-shell reset-password-shell" aria-labelledby="reset-password-title">
       <aside className="reset-password-visual">
         <div className="brand"><span className="brand-mark">한</span><span>Korean <b>Study</b></span></div>
         <img src={loginBackground} alt="" />
@@ -65,12 +71,13 @@ export default function ResetPasswordPage() {
       <div className="reset-password-panel">
         <button type="button" className="reset-back-button" onClick={() => navigate('/auth', { replace: true })}><ArrowLeft size={17} /> Quay lại đăng nhập</button>
         <span className="reset-lock-icon"><LockKeyhole size={27} /></span>
-        <h1>Tạo mật khẩu mới</h1>
+        <h1 id="reset-password-title">Tạo mật khẩu mới</h1>
         <p>Chọn một mật khẩu mạnh và khác với mật khẩu bạn đã dùng trước đây.</p>
         <form onSubmit={submit} noValidate>
-          <label className="reset-field"><span>Mật khẩu mới</span><div><input type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Nhập mật khẩu mới" autoFocus /><button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}>{showPassword ? <EyeOff size={19} /> : <Eye size={19} />}</button></div></label>
-          <div className="reset-password-rules" aria-label="Yêu cầu mật khẩu">{checks.map((check) => <span className={check.valid ? 'is-valid' : ''} key={check.label}><Check size={13} />{check.label}</span>)}</div>
-          <label className="reset-field"><span>Xác nhận mật khẩu</span><div><input type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Nhập lại mật khẩu mới" /></div></label>
+          <label className="reset-field"><span>Mật khẩu mới</span><div><input type={showPassword ? 'text' : 'password'} autoComplete="new-password" aria-describedby="reset-password-rules" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Nhập mật khẩu mới" required autoFocus /><button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'} aria-pressed={showPassword}>{showPassword ? <EyeOff size={19} /> : <Eye size={19} />}</button></div></label>
+          <div id="reset-password-rules" className="reset-password-rules" aria-label="Yêu cầu mật khẩu">{checks.map((check) => <span className={check.valid ? 'is-valid' : ''} key={check.label}><Check size={13} aria-hidden="true" /><span className="reset-rule-status">{check.valid ? 'Đã đạt: ' : 'Cần: '}</span>{check.label}</span>)}</div>
+          <label className="reset-field"><span>Xác nhận mật khẩu</span><div><input type={showConfirmPassword ? 'text' : 'password'} autoComplete="new-password" aria-describedby={confirmPassword ? 'reset-password-match' : undefined} aria-invalid={Boolean(confirmPassword && confirmPassword !== password)} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Nhập lại mật khẩu mới" required /><button type="button" onClick={() => setShowConfirmPassword((value) => !value)} aria-label={showConfirmPassword ? 'Ẩn mật khẩu xác nhận' : 'Hiện mật khẩu xác nhận'} aria-pressed={showConfirmPassword}>{showConfirmPassword ? <EyeOff size={19} /> : <Eye size={19} />}</button></div></label>
+          {confirmPassword && <p id="reset-password-match" className={`reset-match ${confirmPassword === password ? 'is-valid' : ''}`} aria-live="polite">{confirmPassword === password ? 'Mật khẩu xác nhận đã khớp.' : 'Mật khẩu xác nhận chưa khớp.'}</p>}
           <button className="reset-submit-button" disabled={busy} type="submit">{busy ? 'Đang cập nhật…' : 'Cập nhật mật khẩu'}</button>
         </form>
       </div>
