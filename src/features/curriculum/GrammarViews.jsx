@@ -59,6 +59,7 @@ export function GrammarHubView({
       item?.meaningVi,
       item?.pronunciation,
       item?.partOfSpeech,
+      vocabState[item.word]?.note,
       item?.lessonNo ? `bai ${item.lessonNo}` : '',
       book?.title || book?.titleKo || book?.titleVi,
     ].filter(Boolean).join(' '));
@@ -175,11 +176,18 @@ export function GrammarHubView({
             <div className="vl-list content-library-list">
               {visibleVocabulary.length ? visibleVocabulary.map((item, index) => {
                 const starred = Boolean(vocabState[item.word]?.starred);
+                const note = vocabState[item.word]?.note?.trim();
                 return (
                   <div className="vl-row" key={item.id || `${item.word}-${index}`}>
                     <div className="vl-main">
                       <span className="vl-ko" lang="ko">{item.word}</span>
                       <span className="vl-vi">{item.meaningVi}</span>
+                      {note && (
+                        <div className="content-library-word-note">
+                          <b><NotebookPen size={13} /> Ghi chú của bạn</b>
+                          <p>{note}</p>
+                        </div>
+                      )}
                     </div>
                     <button className="vl-audio" onClick={() => playVocabularyAudio(item)} aria-label={`Nghe phát âm ${item.word}`}><Volume2 size={15} /></button>
                     <button className={`vl-star ${starred ? 'on' : ''}`} onClick={() => toggleStar(item)} aria-label={starred ? 'Bỏ đánh dấu từ khó' : 'Đánh dấu từ khó'}>

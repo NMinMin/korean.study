@@ -3251,6 +3251,32 @@ h1,
   animation: content-library-enter .22s ease both;
 }
 
+.content-library-list .vl-main {
+  flex-wrap: wrap;
+}
+
+.content-library-word-note {
+  flex-basis: 100%;
+  min-width: 0;
+  padding-top: 4px;
+  color: var(--ks-text-8b85ab, #8B85AB);
+  font-size: 13px;
+}
+
+.content-library-word-note b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.content-library-word-note p {
+  margin: 5px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+
 .content-library-grammar-card {
   cursor: default;
 }
