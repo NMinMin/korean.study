@@ -491,18 +491,22 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
       saveChain = saveChain.then(async () => {
         const result = await recordStudyMinutes(minutes, userId);
         if (!result) accumulatedMs += minutes * 60_000;
+        else if (result.targetMinutes > 0 && result.todayMinutes >= result.targetMinutes) {
+          await refreshUserStats();
+        }
       }).catch(() => { accumulatedMs += minutes * 60_000; });
     };
 
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') activeStartedAt = Date.now();
-      else flush(false);
+      else flush(false, true);
     };
 
     const onStudyCompleted = () => flush(document.visibilityState === 'visible', true);
 
-    // Gộp thời gian học thành một lần ghi tối đa mỗi 5 phút.
-    const intervalId = window.setInterval(() => flush(true), 5 * 60_000);
+    // Persist frequently so the last seconds of a daily goal do not wait five minutes.
+    // Hidden tabs must never restart the active clock from this timer.
+    const intervalId = window.setInterval(() => flush(document.visibilityState === 'visible'), 15_000);
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('kstudy:study-session-completed', onStudyCompleted);
     return () => {
