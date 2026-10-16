@@ -1390,11 +1390,12 @@ h1,
 }
 
 .review-word-item {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 8px;
-  padding: 12px 14px;
+  padding: 12px 46px 12px 14px;
   border: 1px solid var(--ks-border-e7e1f7, #E7E1F7);
   border-radius: 12px;
   color: var(--ks-text-373151, #373151);
@@ -1402,13 +1403,32 @@ h1,
 }
 
 .review-word-item small {
-  color: var(--ks-text-8b85ab, #8B85AB);
+  color: #7b6cad;
+  font-size: 11px;
+}
+
+.review-word-item strong,
+.review-dialog-words b {
+  color: #7565bd;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.5;
 }
 
 .review-word-item span {
   flex-basis: 100%;
-  font-size: 13px;
+  font-size: 12px;
 }
+
+.review-word-item > span:not(.review-word-result),
+.review-dialog-words li > span:not(.review-word-result) {
+  color: #7b6cad;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+html[data-theme="dark"] :is(.review-word-item strong, .review-dialog-words b) { color: #c1b2f2; }
+html[data-theme="dark"] :is(.review-word-item small, .review-word-item > span:not(.review-word-result), .review-dialog-words li > span:not(.review-word-result)) { color: #b5a5df; }
 
 .review-selected-day {
   margin-top: 12px;
@@ -3250,6 +3270,22 @@ h1,
 .content-library-list {
   animation: content-library-enter .22s ease both;
 }
+
+.review-word-item .review-word-result,
+.review-dialog-words .review-word-result {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+.review-word-item .review-word-result { position: absolute; top: 10px; right: 12px; }
+.review-word-result.correct { color: #20804a; background: #e5f8ed; }
+.review-word-result.incorrect { color: #b73535; background: #fdeaea; }
+html[data-theme="dark"] .review-word-result.correct { color: #8cddb0; background: #203c31; }
+html[data-theme="dark"] .review-word-result.incorrect { color: #ffaaaa; background: #442a33; }
 
 .content-library-list .vl-main {
   flex-wrap: wrap;

@@ -28,6 +28,7 @@ export type VocabularyReviewEvaluation = {
   totalCount: number
   feedback: string
   completedAt: string
+  wordResults?: Record<string, boolean>
 }
 
 const DAY_MS = 86_400_000
@@ -208,7 +209,10 @@ export async function saveVocabularyReviewResult(
     supabase.from('user_progress_states').upsert({
       user_id: userId,
       state_key: `${RESULT_KEY_PREFIX}${dateKey}`,
-      state_value: JSON.stringify(evaluation),
+      state_value: JSON.stringify({
+        ...evaluation,
+        wordResults: Object.fromEntries(reviewedWords.map((word) => [word.id, answerById.get(word.id) === true])),
+      }),
       updated_at: now.toISOString(),
     }, { onConflict: 'user_id,state_key' }),
     supabase.from('user_progress_states').upsert({
