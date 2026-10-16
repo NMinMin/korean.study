@@ -278,7 +278,10 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
   // `markLessonStarted` records last_activity = "lesson" whenever the learner
   // deliberately opens a lesson. Honour that explicit choice even at 0%, so a
   // reload/dashboard visit never jumps back to an older lesson.
-  const explicitlySelectedLesson = latestProgress?.last_activity === 'lesson'
+  // Opening the detail screen can immediately sync an activity at 0%, replacing
+  // last_activity = 'lesson'. The latest zero-percent row is still a started
+  // lesson and must not lose priority to an older partially completed lesson.
+  const explicitlySelectedLesson = latestProgress && (latestProgress.last_activity === 'lesson' || Number(latestProgress.progress_percent) === 0)
     ? lessons.find((lesson) => lesson.id === latestProgress.lesson_id && lesson.status === 'current' && lesson.progressPercent < 100)
     : undefined
   const latestInProgress = lessons.find((lesson) => lesson.id === latestProgress?.lesson_id && lesson.progressPercent > 0 && lesson.progressPercent < 100)
