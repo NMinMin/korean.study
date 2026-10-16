@@ -1,6 +1,6 @@
 import QuizPreparationLoader from '../../components/common/QuizPreparationLoader';
 import { useEffect, useRef, useState } from 'react';
-import { BookOpen, CheckCircle2, ChevronLeft, ChevronRight, NotebookPen, RotateCcw, Sparkles, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, RotateCcw, Sparkles, XCircle } from 'lucide-react';
 import { requestAIJson } from '../../services/aiService';
 import { playCorrectSound, playIncorrectSound } from '../../services/audioService';
 import { renderKo } from '../../utils/textUtils';
@@ -318,7 +318,6 @@ export default function AIQuizView({ lesson, vocabulary = [], grammar = [], onBa
         <div className="rv-quiz-card">
           <div className="rv-quiz-tags">
             <span className="rv-tag-type ai">✨ {currentQuestion.questionType}</span>
-            <span className="rv-tag-type">{currentQuestion.sourceType === 'vocabulary' ? <BookOpen size={13} /> : <NotebookPen size={13} />} {currentQuestion.sourceLabel}</span>
           </div>
           <p className="rv-quiz-question">{renderKo(currentQuestion.question)}</p>
           <div className="rv-opt-list">
