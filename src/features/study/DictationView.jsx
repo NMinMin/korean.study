@@ -309,6 +309,8 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
   const [retryRound, setRetryRound] = useState(0);
   const [retryNotice, setRetryNotice] = useState("");
   const [showCompletion, setShowCompletion] = useState(false);
+  const [completionResult, setCompletionResult] = useState(null);
+  const progressSaveRef = useRef(Promise.resolve());
   const audioRef = useRef(null);
   const autoAdvanceRef = useRef(null);
   const progressLoadRevision = useRef(0);
@@ -459,7 +461,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
       const testHasSkippedQuestion = mode === "test" && Object.values(newStatus).includes("skipped");
       // completedItems lưu cả hai tuyến để màn chọn chế độ biết Luyện tập đã đủ 100%.
       // completedCount chỉ tính câu đúng của Kiểm tra vào phần trăm hoạt động.
-      saveRemoteActivityProgress(
+      progressSaveRef.current = progressSaveRef.current.catch(() => {}).then(() => saveRemoteActivityProgress(
         lesson.textbookId,
         lesson.id,
         "nghechep",
@@ -468,7 +470,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
         100,
         mode === "test" && !testHasSkippedQuestion ? DICTATION_PASS_PERCENT : 101,
         Object.keys(testResults).length,
-      )
+      ))
         .then((percent) => { if (mode === "test") onProgress?.("nghechep", percent); })
         .catch(() => { });
     }
@@ -510,6 +512,25 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
   };
 
   const goto = (i) => setIdx(i);
+  const finishAttempt = (statusSnapshot, verifiedSnapshot) => {
+    const correctCount = orderedLines.filter((item, questionIndex) => verifiedSnapshot[progressKey(mode, item, questionIndex)] === "correct").length;
+    const skippedCount = Object.values(statusSnapshot).filter((value) => value === "skipped").length;
+    setCompletionResult({ correctCount, skippedCount });
+    if (mode === "test" && skippedCount === 0 && correctCount * 100 < total * DICTATION_PASS_PERCENT) {
+      // Explicit tombstones override older remote answers when progress is merged.
+      // Keep practice intact so the entire test remains available immediately.
+      const reset = Object.fromEntries(Object.entries(verifiedSnapshot).map(([key, value]) => [
+        key, key.startsWith("test:") || /^\d+$/.test(key) ? "forgot" : value,
+      ]));
+      orderedLines.forEach((item, questionIndex) => { reset[progressKey("test", item, questionIndex)] = "forgot"; });
+      setVerified(reset);
+      window.storage.set(storageKey, JSON.stringify(reset)).catch(() => {});
+      progressSaveRef.current = progressSaveRef.current.catch(() => {}).then(() => saveRemoteActivityProgress(
+        lesson.textbookId, lesson.id, "nghechep", reset, total, 100, 101, 0,
+      )).then((percent) => onProgress?.("nghechep", percent)).catch(() => {});
+    }
+    setShowCompletion(true);
+  };
   const goNext = (statusSnapshot = status, verifiedSnapshot = verified) => {
     const currentDone = statusSnapshot[idx] === "correct" || statusSnapshot[idx] === "failed" || statusSnapshot[idx] === "skipped";
     if (!currentDone) return;
@@ -530,7 +551,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
       if (mode === "test") {
         if (retryRound >= 1) {
           setRetryNotice(`Đã kết thúc lượt làm lại. ${pending.length} câu chưa đúng không được cộng vào tiến trình.`);
-          setShowCompletion(true);
+          finishAttempt(statusSnapshot, verifiedSnapshot);
           return;
         }
         setRetryRound((round) => round + 1);
@@ -591,7 +612,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
       goto(pending[0]);
       return;
     }
-    setShowCompletion(true);
+    finishAttempt(statusSnapshot, verifiedSnapshot);
   };
 
   const clearCurrentAnswer = () => {
@@ -624,7 +645,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
     const testResults = correctDictationResults(nextVerified);
     setVerified(nextVerified);
     window.storage.set(storageKey, JSON.stringify(nextVerified)).catch(() => { });
-    saveRemoteActivityProgress(
+    progressSaveRef.current = progressSaveRef.current.catch(() => {}).then(() => saveRemoteActivityProgress(
       lesson.textbookId,
       lesson.id,
       "nghechep",
@@ -633,7 +654,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
       100,
       101,
       Object.keys(testResults).length,
-    ).then((percent) => onProgress?.("nghechep", percent)).catch(() => { });
+    )).then((percent) => onProgress?.("nghechep", percent)).catch(() => { });
     window.setTimeout(() => goNext(nextStatus, nextVerified), 250);
   };
 
@@ -643,6 +664,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
     clearTimeout(autoAdvanceRef.current);
     setVerified((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${mode}:`))));
     setShowCompletion(false);
+    setCompletionResult(null);
     setIdx(0);
     setInputs({});
     setStatus({});
@@ -660,8 +682,8 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
   };
 
   if (showCompletion) {
-    const correctCount = orderedLines.filter((item, questionIndex) => verified[progressKey(mode, item, questionIndex)] === "correct").length;
-    const skippedCount = orderedLines.filter((_, questionIndex) => status[questionIndex] === "skipped").length;
+    const correctCount = completionResult?.correctCount ?? orderedLines.filter((item, questionIndex) => verified[progressKey(mode, item, questionIndex)] === "correct").length;
+    const skippedCount = completionResult?.skippedCount ?? orderedLines.filter((_, questionIndex) => status[questionIndex] === "skipped").length;
     const routePercent = total ? Math.round((correctCount / total) * 100) : 0;
     const mustPracticeAgain = mode === "test" && skippedCount > 0;
     const passed = mode === "test" && !mustPracticeAgain && routePercent >= DICTATION_PASS_PERCENT;
@@ -675,7 +697,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
             ? `Bạn đã bỏ qua ${skippedCount} câu nên Kiểm tra tạm khóa. Hãy luyện đúng 100% các câu trong Luyện tập để mở lại Kiểm tra.`
             : passed
             ? `Bạn trả lời đúng ${correctCount}/${total} câu (${routePercent}%)${skippedCount ? `; ${skippedCount} câu bỏ qua được tính là không thuộc` : ""}. Tiến trình Nghe chép chính tả được tính 100%.`
-            : `Bạn trả lời đúng ${correctCount}/${total} câu (${routePercent}%)${skippedCount ? `; ${skippedCount} câu bỏ qua được tính là không thuộc` : ""}. Cần đạt ít nhất ${DICTATION_PASS_PERCENT}% để hoàn thành và được tính 100% tiến trình.`
+            : `Bạn trả lời đúng ${correctCount}/${total} câu (${routePercent}%). Chưa đạt ${DICTATION_PASS_PERCENT}% nên tiến trình Kiểm tra đã được đặt lại. Bấm Kiểm tra lại để làm lại toàn bộ ${total} câu.`
           : "Luyện tập đã hoàn thành và tuyến Kiểm tra đã được mở."}
         retryLabel={mustPracticeAgain ? "Về luyện tập" : mode === "test" ? "Kiểm tra lại" : "Luyện lại"}
         onBack={passed ? (onFinish || onBack) : onBack}

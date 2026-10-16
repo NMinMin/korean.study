@@ -6,6 +6,40 @@ const source = readFileSync(new URL('../src/features/study/DictationView.jsx', i
 const effectStart = source.indexOf('    let alive = true;', source.indexOf('export default function DictationView'));
 const effectEnd = source.indexOf('    // eslint-disable-next-line', effectStart);
 
+test('failed final attempt clears all test answers while preserving practice and its summary', async () => {
+  const start = source.indexOf('  const finishAttempt = (statusSnapshot, verifiedSnapshot) => {') + '  const finishAttempt = (statusSnapshot, verifiedSnapshot) => {'.length;
+  const end = source.indexOf('\n  };', start);
+  for (const correctCount of [0, 4, 5]) {
+    const lines = Array.from({ length: 6 }, (_, no) => ({ no }));
+    const verified = { 'practice:0': 'correct' };
+    const status = {};
+    lines.forEach((item, index) => {
+      verified[`test:${item.no}`] = index < correctCount ? 'correct' : 'forgot';
+      status[index] = index < correctCount ? 'correct' : 'failed';
+    });
+    const state = {};
+    const saves = [];
+    const writes = { current: Promise.resolve() };
+    const finish = new Function('statusSnapshot', 'verifiedSnapshot', 'orderedLines', 'progressKey', 'mode', 'total', 'DICTATION_PASS_PERCENT', 'setCompletionResult', 'setVerified', 'window', 'storageKey', 'progressSaveRef', 'saveRemoteActivityProgress', 'lesson', 'onProgress', 'setShowCompletion', source.slice(start, end));
+    finish(status, verified, lines, (mode, item) => `${mode}:${item.no}`, 'test', 6, 80,
+      (value) => { state.summary = value; }, (value) => { state.verified = value; },
+      { storage: { set: async () => {} } }, 'key', writes,
+      async (...args) => { saves.push(args); return 0; }, { id: 'lesson', textbookId: 'book' },
+      () => {}, (value) => { state.completed = value; });
+    await writes.current;
+    assert.deepEqual(state.summary, { correctCount, skippedCount: 0 });
+    assert.equal(state.completed, true);
+    if (correctCount < 5) {
+      assert.equal(state.verified['practice:0'], 'correct');
+      assert.ok(lines.every((item) => state.verified[`test:${item.no}`] === 'forgot'));
+      assert.equal(saves[0][7], 0);
+    } else {
+      assert.equal(state.verified, undefined);
+      assert.equal(saves.length, 0);
+    }
+  }
+});
+
 test('retry invalidates an in-flight load of the old completed attempt', async () => {
   let finishLoad;
   const pending = new Promise((resolve) => { finishLoad = resolve; });
