@@ -51,7 +51,7 @@ export function GrammarHubView({
   );
   const visibleVocabulary = useMemo(() => scopedVocabulary.filter((item) => {
     if (!matchesTextbook(item)) return false;
-    if (starredOnly && !vocabState[item.word]?.starred) return false;
+    if (starredOnly && !vocabState[item.id || item.word]?.starred) return false;
     if (!normalizedQuery) return true;
     const book = item?.textbookId ? textbookById.get(item.textbookId) : null;
     const haystack = normalizeSearchText([
@@ -59,14 +59,14 @@ export function GrammarHubView({
       item?.meaningVi,
       item?.pronunciation,
       item?.partOfSpeech,
-      vocabState[item.word]?.note,
+      vocabState[item.id || item.word]?.note,
       item?.lessonNo ? `bai ${item.lessonNo}` : '',
       book?.title || book?.titleKo || book?.titleVi,
     ].filter(Boolean).join(' '));
     return haystack.includes(normalizedQuery);
   }), [scopedVocabulary, textbookFilter, normalizedQuery, textbookById, vocabulary.length, grammar.length, starredOnly, vocabState]);
   const starredCount = useMemo(
-    () => scopedVocabulary.filter((item) => vocabState[item.word]?.starred).length,
+    () => scopedVocabulary.filter((item) => vocabState[item.id || item.word]?.starred).length,
     [scopedVocabulary, vocabState],
   );
   const visibleGrammar = useMemo(() => scopedGrammar.filter((item) => {
@@ -87,21 +87,21 @@ export function GrammarHubView({
   useEffect(() => {
     let alive = true;
     if (!userId || !identifiedWords.length) return undefined;
-    loadRemoteVocabularyStateForWords(identifiedWords, userId).then((state) => {
+    loadRemoteVocabularyStateForWords(identifiedWords, userId, true).then((state) => {
       if (alive && state) setVocabState(state);
     }).catch(() => {});
     return () => { alive = false; };
   }, [userId, identifiedWords]);
 
   const toggleStar = async (item) => {
-    const current = vocabState[item.word] || {};
+    const current = vocabState[item.id || item.word] || {};
     const updatedItem = { ...current, starred: !current.starred };
-    setVocabState((state) => ({ ...state, [item.word]: updatedItem }));
+    setVocabState((state) => ({ ...state, [item.id || item.word]: updatedItem }));
     if (item.id && item.lessonId && item.textbookId) {
       await saveRemoteVocabularyStateForWords(
         [{ id: item.id, word: item.word, lessonId: item.lessonId, textbookId: item.textbookId }],
         userId,
-        { [item.word]: updatedItem },
+        { [item.id || item.word]: updatedItem },
       );
     }
   };
@@ -175,8 +175,8 @@ export function GrammarHubView({
           {tab === 'vocab' ? (
             <div className="vl-list content-library-list">
               {visibleVocabulary.length ? visibleVocabulary.map((item, index) => {
-                const starred = Boolean(vocabState[item.word]?.starred);
-                const note = vocabState[item.word]?.note?.trim();
+                const starred = Boolean(vocabState[item.id || item.word]?.starred);
+                const note = vocabState[item.id || item.word]?.note?.trim();
                 return (
                   <div className="vl-row" key={item.id || `${item.word}-${index}`}>
                     <div className="vl-main">

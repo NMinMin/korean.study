@@ -224,7 +224,7 @@ export function saveRemoteVocabularyState(lesson: LessonIdentity, userId: string
 const IS_UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const isUuid = (id?: string | null): boolean => Boolean(id && IS_UUID_REGEX.test(id))
 
-async function loadRemoteVocabularyStateForWordsUncached(words: IdentifiedVocabulary[], userId?: string | null): Promise<LocalVocabularyState | null> {
+async function loadRemoteVocabularyStateForWordsUncached(words: IdentifiedVocabulary[], userId?: string | null, keyById = false): Promise<LocalVocabularyState | null> {
   if (!supabase || !userId || !words.length) return null
   const ownerId = await authenticatedUserId(userId)
   if (!ownerId) return null
@@ -240,7 +240,7 @@ async function loadRemoteVocabularyStateForWordsUncached(words: IdentifiedVocabu
   const byId = new Map(validWords.map((word) => [word.id, word]))
   const state: LocalVocabularyState = {}
   for (const item of progress.data ?? []) {
-    const word = byId.get(item.vocabulary_id)?.word
+    const word = keyById ? item.vocabulary_id : byId.get(item.vocabulary_id)?.word
     if (word) state[word] = {
       box: item.mastery || 1,
       lastRating: item.last_rating ?? undefined,
@@ -249,23 +249,23 @@ async function loadRemoteVocabularyStateForWordsUncached(words: IdentifiedVocabu
     }
   }
   for (const item of bookmarks.data ?? []) {
-    const word = byId.get(item.vocabulary_id)?.word
+    const word = keyById ? item.vocabulary_id : byId.get(item.vocabulary_id)?.word
     if (word) state[word] = { ...state[word], starred: true }
   }
   for (const item of notes.data ?? []) {
-    const word = byId.get(item.vocabulary_id)?.word
+    const word = keyById ? item.vocabulary_id : byId.get(item.vocabulary_id)?.word
     if (word) state[word] = { ...state[word], note: item.note }
   }
   return state
 }
 
-export async function loadRemoteVocabularyStateForWords(words: IdentifiedVocabulary[], userId?: string | null): Promise<LocalVocabularyState | null> {
+export async function loadRemoteVocabularyStateForWords(words: IdentifiedVocabulary[], userId?: string | null, keyById = false): Promise<LocalVocabularyState | null> {
   const ids = words.map((word) => word.id).sort().join(',')
-  const key = `words:${userId || 'anonymous'}:${ids}`
-  await waitForVocabularyWrite(key)
+  const key = `${keyById ? 'word-ids' : 'words'}:${userId || 'anonymous'}:${ids}`
+  await waitForVocabularyWrite(`words:${userId || 'anonymous'}:${ids}`)
   const cached = vocabularyStateRequests.get(key)
   if (cached && cached.expiresAt > Date.now()) return cached.promise
-  const promise = loadRemoteVocabularyStateForWordsUncached(words, userId).catch((error) => {
+  const promise = loadRemoteVocabularyStateForWordsUncached(words, userId, keyById).catch((error) => {
     vocabularyStateRequests.delete(key)
     throw error
   })
@@ -281,7 +281,7 @@ async function saveRemoteVocabularyStateForWordsNow(words: IdentifiedVocabulary[
   if (!validWords.length) return false
   const operations: PromiseLike<unknown>[] = []
   for (const word of validWords) {
-    const item = state[word.word]
+    const item = state[word.id] ?? state[word.word]
     if (!item) continue
     if (item.box || item.lastRating || item.dueAt || item.timesReviewed) {
       operations.push(supabase.from('vocabulary_progress').upsert({
@@ -313,6 +313,7 @@ async function saveRemoteVocabularyStateForWordsNow(words: IdentifiedVocabulary[
   if (operations.length > 0) window.dispatchEvent(new CustomEvent('kstudy:vocabulary-review-updated'))
   const ids = words.map((word) => word.id).sort().join(',')
   vocabularyStateRequests.delete(`words:${userId || 'anonymous'}:${ids}`)
+  vocabularyStateRequests.delete(`word-ids:${userId || 'anonymous'}:${ids}`)
   return operations.length > 0
 }
 
@@ -320,6 +321,7 @@ export function saveRemoteVocabularyStateForWords(words: IdentifiedVocabulary[],
   const ids = words.map((word) => word.id).sort().join(',')
   const key = `words:${userId || 'anonymous'}:${ids}`
   vocabularyStateRequests.delete(key)
+  vocabularyStateRequests.delete(`word-ids:${userId || 'anonymous'}:${ids}`)
   const previous = vocabularyStateWrites.get(key) ?? Promise.resolve(true)
   const write = previous.catch(() => false).then(() => saveRemoteVocabularyStateForWordsNow(words, userId, state))
   vocabularyStateWrites.set(key, write)
