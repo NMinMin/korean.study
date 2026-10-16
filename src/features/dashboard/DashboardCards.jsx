@@ -109,10 +109,12 @@ export function DailyGoalRing({ userId, onChangeGoal }) {
   const loading = !goal || !plan;
   const weekdayKey = WEEK_DAYS[(new Date().getDay() + 6) % 7]?.key;
   const isRestDay = !loading && plan.weeklySchedule?.[weekdayKey] === false;
-  const pct = loading ? 0 : Math.min(100, Math.round((goal.todayMinutes / Math.max(1, goal.targetMinutes)) * 100));
+  const done = !loading && goal.targetMinutes > 0 && goal.todayMinutes >= goal.targetMinutes;
+  // Reserve 100% for the same exact threshold used by the server streak.
+  const pct = loading ? 0 : done ? 100 : Math.min(99, Math.floor((goal.todayMinutes / Math.max(1, goal.targetMinutes)) * 100));
   const r = 40, c = 2 * Math.PI * r;
   const dash = c * (pct / 100);
-  const done = pct >= 100;
+  const remainingSeconds = loading ? 0 : Math.max(0, Math.ceil((goal.targetMinutes - goal.todayMinutes) * 60));
 
   return (
     <section className="card goal-card" aria-busy={loading}>
@@ -140,7 +142,7 @@ export function DailyGoalRing({ userId, onChangeGoal }) {
           <div className="goal-msg">
             {loading ? <span>Đang cập nhật mục tiêu hôm nay...</span> : done
               ? <span>🎉 Chúc mừng, bạn đã đạt mục tiêu học hôm nay!</span>
-              : <span>Còn khoảng {Math.max(0, Math.round(goal.targetMinutes - goal.todayMinutes))} phút nữa là đạt mục tiêu hôm nay!</span>}
+              : <span>Còn khoảng {remainingSeconds < 60 ? `${remainingSeconds} giây` : `${Math.ceil(remainingSeconds / 60)} phút`} nữa là đạt mục tiêu hôm nay!</span>}
           </div>
         </>}
       </div>
