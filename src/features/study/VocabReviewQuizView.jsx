@@ -23,6 +23,7 @@ import {
 import { requestAIJson } from '../../services/aiService';
 import QuizPreparationLoader from '../../components/common/QuizPreparationLoader';
 import { saveVocabularyReviewResult } from '../../lib/reviewSchedule';
+import { saveStudySessionTime } from '../../services/studySession';
 
 function shuffle(array) {
   const arr = [...array];
@@ -313,13 +314,13 @@ export default function VocabReviewQuizView({
       try {
         setEvaluating(true);
         setSaveError('');
+        await saveStudySessionTime();
         const result = await buildAIEvaluation(answersHistory);
         await saveVocabularyReviewResult(userId, reviewDateKey || new Date().toISOString().slice(0, 10), selectedWords, answersHistory, result);
-        window.dispatchEvent(new CustomEvent('kstudy:study-session-completed'));
         setEvaluation(result);
         setIsDone(true);
       } catch {
-        setSaveError('Chưa lưu được đánh giá vào lịch. Vui lòng thử lại.');
+        setSaveError('Chưa lưu được thời gian học hoặc đánh giá vào lịch. Vui lòng kiểm tra kết nối và thử lại.');
       } finally {
         setEvaluating(false);
       }

@@ -485,35 +485,51 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
     const flush = (continueTracking = document.visibilityState === 'visible', force = false) => {
       captureActiveTime(continueTracking);
       // Bỏ qua những lần chỉ lướt qua màn học vài giây để tránh request vụn.
-      if (accumulatedMs <= 0 || (!force && accumulatedMs < 15_000)) return;
+      if (accumulatedMs <= 0 || (!force && accumulatedMs < 15_000)) return saveChain;
       const minutes = accumulatedMs / 60_000;
       accumulatedMs = 0;
-      saveChain = saveChain.then(async () => {
-        const result = await recordStudyMinutes(minutes, userId);
-        if (!result) accumulatedMs += minutes * 60_000;
-        else if (result.targetMinutes > 0 && result.todayMinutes >= result.targetMinutes) {
+      const write = saveChain.then(async () => {
+        let result;
+        try {
+          result = await recordStudyMinutes(minutes, userId);
+          if (!result) throw new Error('Chưa lưu được thời gian học.');
+        } catch (error) {
+          accumulatedMs += minutes * 60_000;
+          throw error;
+        }
+        if (result.targetMinutes > 0 && result.todayMinutes >= result.targetMinutes) {
           await refreshUserStats();
         }
-      }).catch(() => { accumulatedMs += minutes * 60_000; });
+        return result;
+      });
+      // Keep periodic retries alive while allowing explicit completion to report errors.
+      saveChain = write.catch(() => {});
+      return write;
     };
 
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') activeStartedAt = Date.now();
-      else flush(false, true);
+      else void flush(false, true).catch(() => {});
     };
 
-    const onStudyCompleted = () => flush(document.visibilityState === 'visible', true);
+    const onStudyCompleted = (event) => {
+      event?.preventDefault();
+      const saved = flush(document.visibilityState === 'visible', true);
+      if (event?.detail?.resolve) {
+        Promise.resolve(saved).then(event.detail.resolve, event.detail.reject);
+      } else void Promise.resolve(saved).catch(() => {});
+    };
 
     // Persist frequently so the last seconds of a daily goal do not wait five minutes.
     // Hidden tabs must never restart the active clock from this timer.
-    const intervalId = window.setInterval(() => flush(document.visibilityState === 'visible'), 15_000);
+    const intervalId = window.setInterval(() => { void flush(document.visibilityState === 'visible').catch(() => {}); }, 15_000);
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('kstudy:study-session-completed', onStudyCompleted);
     return () => {
       window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('kstudy:study-session-completed', onStudyCompleted);
-      flush(false, true);
+      void flush(false, true).catch(() => {});
     };
   }, [profile?.id, view]);
 

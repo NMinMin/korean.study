@@ -50,5 +50,20 @@ test('persists the final seconds, refreshes streak and excludes hidden time', as
   tick();
   await settle();
   assert.equal(saves.length, 2);
+
+  document.visibilityState = 'visible';
+  listeners.get('visibilitychange')();
+  now += 1_000;
+  let acknowledged = false;
+  const completed = new Promise((resolve, reject) => {
+    listeners.get('kstudy:study-session-completed')({
+      preventDefault: () => { acknowledged = true; },
+      detail: { resolve, reject },
+    });
+  });
+  const result = await completed;
+  assert.equal(acknowledged, true);
+  assert.equal(saves[2], 1 / 60);
+  assert.equal(result.todayMinutes, 15.24);
   cleanup();
 });

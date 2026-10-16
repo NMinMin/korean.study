@@ -311,6 +311,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
   const [showCompletion, setShowCompletion] = useState(false);
   const audioRef = useRef(null);
   const autoAdvanceRef = useRef(null);
+  const progressLoadRevision = useRef(0);
 
   const total = orderedLines.length;
   const line = orderedLines[idx];
@@ -328,11 +329,12 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
 
   useEffect(() => {
     let alive = true;
+    const revision = ++progressLoadRevision.current;
     Promise.all([
       readScopedProgress(storageKey, legacyDictationProgressKey(lesson), userId),
       loadRemoteActivityProgress(lesson?.id),
     ]).then(([res, remoteRows]) => {
-      if (!alive) return;
+      if (!alive || revision !== progressLoadRevision.current) return;
       const localRaw = res?.value ? JSON.parse(res.value) : {};
       const remoteSaved = remoteRows.find((row) => row.activityType === "nghechep")?.completedItems || {};
       // Trạng thái cục bộ mới hơn (đặc biệt là "forgot" sau khi bỏ qua)
@@ -374,7 +376,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
     }).catch(() => { });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, storageKey, total, lesson, userId, orderedLines]);
+  }, [mode, storageKey, total, lesson?.id, userId, orderedLines]);
 
   useEffect(() => {
     clearTimeout(autoAdvanceRef.current);
@@ -636,6 +638,10 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
   };
 
   const retryDictation = () => {
+    // An outstanding load must not restore the previous completed attempt.
+    progressLoadRevision.current += 1;
+    clearTimeout(autoAdvanceRef.current);
+    setVerified((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${mode}:`))));
     setShowCompletion(false);
     setIdx(0);
     setInputs({});
@@ -644,6 +650,8 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
     setAttempted({});
     setHintUses({});
     setHintTexts({});
+    setReveal({});
+    setShowTrans({});
     setRetryQueue([]);
     setListensLeft({});
     setWrongAttempts({});
