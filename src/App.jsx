@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { preferSelectedLesson } from './utils/continueLesson';
 import {
   Sparkles, BookOpen, Headphones, Mic, Target, Settings, NotebookPen, CalendarDays, ChevronRight
 } from 'lucide-react';
@@ -150,6 +151,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   const [reviewHubBackView, setReviewHubBackView] = useState('home');
   const [reviewIntroBackView, setReviewIntroBackView] = useState('home');
   const [learningCatalog, setLearningCatalog] = useState(null);
+  const latestLessonChoice = useRef(null);
   const [addingTextbookId, setAddingTextbookId] = useState(null);
   const [catalogNotice, setCatalogNotice] = useState(null);
   const [lessonCelebration, setLessonCelebration] = useState(false);
@@ -216,9 +218,12 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
   };
 
   const openLesson = (l, backView = 'tuvung-bai') => {
+    if (l?.textbookId && l?.id) {
+      latestLessonChoice.current = { userId: profile?.id, textbookId: l.textbookId, lessonId: l.id };
+    }
     if (l?.textbookId && l?.id) markLessonStarted(l.textbookId, l.id).catch(() => { });
     if (l?.textbookId === learningCatalog?.activeTextbook?.id) {
-      setLearningCatalog((current) => current ? { ...current, hasStarted: true, continueLesson: l } : current);
+      setLearningCatalog((current) => preferSelectedLesson(current, latestLessonChoice.current, profile?.id));
     }
     setLesson(l);
     setLessonDetailBackView(backView);
@@ -275,7 +280,7 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
       return { ...fallback, ...remoteWord, img: remoteWord.img || fallback.img, audio: remoteWord.audio || fallback.audio };
     });
     const grammar = (catalog.grammar || []).map(mapDatabaseGrammar);
-    return { ...catalog, vocabulary, grammar, exercises: catalog.exercises || [] };
+    return preferSelectedLesson({ ...catalog, vocabulary, grammar, exercises: catalog.exercises || [] }, latestLessonChoice.current, profile?.id);
   };
 
   const openLearningBook = async (book, backView = 'curriculum-hub') => {
