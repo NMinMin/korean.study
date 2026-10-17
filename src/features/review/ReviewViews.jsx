@@ -16,6 +16,7 @@ import {
   lessonProgressKey,
   legacyTextbookProgressKey,
   reviewHistoryKey,
+  reflexHistoryKey,
   vocabProgressKey,
   legacyVocabProgressKey,
   shadowProgressKey,
@@ -127,7 +128,6 @@ async function saveReviewHistory(lesson, userId, history) {
 /* Lưu lại kết quả Shadowing phản xạ (từ Ôn tập) LÂU DÀI — trước đây kết quả
    này chỉ tồn tại trong phiên làm bài rồi mất, không có cách nào để tính
    chỉ số "Phản xạ" tổng hợp cho Tiến độ cá nhân. */
-const reflexHistoryKey = (lesson, userId) => lessonProgressKey("reflex", lesson, userId);
 async function saveReflexAttempts(lesson, userId, reflexResults) {
   const valid = (reflexResults || []).filter((r) => !r.timedOut);
   if (valid.length === 0) return;
@@ -138,14 +138,6 @@ async function saveReflexAttempts(lesson, userId, reflexResults) {
   } catch (e) { }
   valid.forEach((r) => { cur.count += 1; cur.timeLeftSum += r.timeLeftAtDone; cur.scoreSum += r.score; });
   try { await window.storage.set(reflexHistoryKey(lesson, userId), JSON.stringify(cur)); } catch (e) { }
-}
-async function loadReflexStats(lesson, userId) {
-  try {
-    const r = await readScopedProgress(reflexHistoryKey(lesson, userId), legacyTextbookProgressKey("reflex-history"), userId);
-    const cur = JSON.parse(r.value);
-    if (!cur.count) return null;
-    return { count: cur.count, avgTimeLeft: Math.round((cur.timeLeftSum / cur.count) * 10) / 10, avgScore: Math.round(cur.scoreSum / cur.count) };
-  } catch (e) { return null; }
 }
 
 /* --- chọn câu hỏi theo trọng số: 70% sai nhiều, 20% chưa gặp, 10% đã thuộc --- */
