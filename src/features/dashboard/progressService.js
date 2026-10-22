@@ -8,10 +8,35 @@ import {
   shadowProgressKey,
   legacyShadowProgressKey,
   reviewHistoryKey,
+  reflexHistoryKey,
+  legacyTextbookProgressKey,
   legacyLessonProgressKey,
   readScopedProgress,
 } from '../../services/storageShim';
 import { loadRemoteActivityProgress } from '../../lib/activityProgress';
+import { loadRemoteVocabularyState, loadRemoteVocabularyStateForWords } from '../../lib/vocabularyProgress';
+
+async function loadDashboardVocabularyState(lesson, userId, vocabulary) {
+  // Use the same canonical records as Flashcards, including catalog decks
+  // containing words from more than one lesson. Scoped storage is a fallback.
+  try {
+    const identified = vocabulary.length > 0 && vocabulary.every((word) => word.id && word.lessonId && word.textbookId);
+    const remote = identified
+      ? await loadRemoteVocabularyStateForWords(vocabulary, userId)
+      : await loadRemoteVocabularyState(lesson, userId);
+    if (remote !== null) return remote;
+  } catch (e) { }
+  try {
+    const saved = await readScopedProgress(vocabProgressKey(lesson, userId), legacyVocabProgressKey(lesson), userId);
+    return saved?.value ? JSON.parse(saved.value) : {};
+  } catch (e) { return {}; }
+}
+
+function studiedVocabulary(vocabulary, state) {
+  return vocabulary.map((word) => state[word.word]).filter((item) =>
+    item && (item.lastRating || item.timesReviewed > 0 || item.box > 0)
+  );
+}
 
 export const DICTATION_PASS_PERCENT = 80;
 
@@ -87,7 +112,7 @@ export async function computeAndSyncUserStats(profile, lesson) {
   return stats;
 }
 
-export async function computeHomeProgress(lesson, userId, vocabulary = VOCAB_SAMPLE) {
+export async function computeHomeProgress(lesson, userId, vocabulary = VOCAB_SAMPLE, vocabularyState) {
   if (!lesson) return [];
   const out = [
     { key: 'tuvung', label: 'Từ vựng & Ngữ pháp', pct: 0, detail: `0 / ${vocabulary.length} từ`, color: '#4A90E2', bg: '#EEF4FD', icon: 'book' },
@@ -96,12 +121,10 @@ export async function computeHomeProgress(lesson, userId, vocabulary = VOCAB_SAM
     { key: 'ungdung', label: 'Ôn tập', pct: 0, detail: 'Chưa ôn tập', color: '#F0912E', bg: '#FDF3E7', icon: 'chat' },
   ];
   try {
-    const v = await readScopedProgress(vocabProgressKey(lesson, userId), legacyVocabProgressKey(lesson), userId);
-    if (v?.value) {
-      const n = Object.values(JSON.parse(v.value)).filter((item) => item?.lastRating === 'good').length;
-      out[0].pct = Math.round((n / vocabulary.length) * 100);
-      out[0].detail = `${n} / ${vocabulary.length} từ`;
-    }
+    const state = vocabularyState ?? await loadDashboardVocabularyState(lesson, userId, vocabulary);
+    const n = studiedVocabulary(vocabulary, state).filter((item) => item.lastRating === 'good').length;
+    out[0].pct = vocabulary.length ? Math.round((n / vocabulary.length) * 100) : 0;
+    out[0].detail = `${n} / ${vocabulary.length} từ`;
   } catch (e) { }
   try {
     const d = await readScopedProgress(dictationProgressKey(lesson, userId), legacyDictationProgressKey(lesson), userId);
@@ -143,7 +166,8 @@ export async function computeHomeProgress(lesson, userId, vocabulary = VOCAB_SAM
 
 export async function computeRadarStats(lesson, profile, vocabulary = VOCAB_SAMPLE) {
   const userId = profile?.id;
-  const progress = await computeHomeProgress(lesson, userId, vocabulary);
+  const vocabularyState = await loadDashboardVocabularyState(lesson, userId, vocabulary);
+  const progress = await computeHomeProgress(lesson, userId, vocabulary, vocabularyState);
   const vocabPct = progress.find((p) => p.key === 'tuvung')?.pct || 0;
   const nghePct = progress.find((p) => p.key === 'nghe')?.pct || 0;
   const shadowPct = progress.find((p) => p.key === 'shadowing')?.pct || 0;
@@ -170,13 +194,19 @@ export async function computeRadarStats(lesson, profile, vocabulary = VOCAB_SAMP
     { key: 'chuyencan', label: 'Chuyên cần', pct: streakPct },
   ];
 
-  let vocabLearned = 0, vocabRetained = 0;
+  const entries = studiedVocabulary(vocabulary, vocabularyState);
+  const vocabLearned = entries.length;
+  const vocabRetained = entries.filter((word) => (word.box || 0) >= 4).length;
+  let reflex = null;
   try {
-    const v = await readScopedProgress(vocabProgressKey(lesson, userId), legacyVocabProgressKey(lesson), userId);
-    if (v?.value) {
-      const entries = Object.values(JSON.parse(v.value));
-      vocabLearned = entries.length;
-      vocabRetained = entries.filter((w) => (w.box || 0) >= 4).length;
+    const saved = await readScopedProgress(reflexHistoryKey(lesson, userId), legacyTextbookProgressKey('reflex-history'), userId);
+    const history = saved?.value ? JSON.parse(saved.value) : null;
+    if (history?.count > 0 && Number.isFinite(history.timeLeftSum) && Number.isFinite(history.scoreSum)) {
+      reflex = {
+        count: history.count,
+        avgTimeLeft: Math.round((history.timeLeftSum / history.count) * 10) / 10,
+        avgScore: Math.round(history.scoreSum / history.count),
+      };
     }
   } catch (e) { }
 
@@ -196,7 +226,7 @@ export async function computeRadarStats(lesson, profile, vocabulary = VOCAB_SAMP
     vocab: { count: vocabLearned, total: vocabulary.length },
     listening: { count: dictationDone, total: SHADOW_LINES.length },
     pronunciation: { count: shadowDone, total: SHADOW_LINES.length },
-    reflex: null,
+    reflex,
     retained: { count: vocabRetained, total: vocabLearned },
   };
 

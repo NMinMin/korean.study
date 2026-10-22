@@ -325,16 +325,25 @@ export function PersonalProgressSection({ profile, lesson, vocabulary, computeRa
 
   useEffect(() => {
     let alive = true;
+    let request = 0;
     if (!profile || !computeRadarStats) return;
-    computeRadarStats(lesson, profile, vocabulary).then((d) => {
-      if (!alive) return;
-      setAxes(d.axes);
-      setDetail(d.detail);
-      setLoadError(false);
-    }).catch(() => {
-      if (alive) setLoadError(true);
-    });
-    return () => { alive = false; };
+    const refresh = () => {
+      const currentRequest = ++request;
+      computeRadarStats(lesson, profile, vocabulary).then((d) => {
+        if (!alive || currentRequest !== request) return;
+        setAxes(d.axes);
+        setDetail(d.detail);
+        setLoadError(false);
+      }).catch(() => {
+        if (alive && currentRequest === request) setLoadError(true);
+      });
+    };
+    refresh();
+    window.addEventListener('kstudy:vocabulary-review-updated', refresh);
+    return () => {
+      alive = false;
+      window.removeEventListener('kstudy:vocabulary-review-updated', refresh);
+    };
   }, [profile, lesson, vocabulary, computeRadarStats]);
 
   const loading = !axes && !loadError;

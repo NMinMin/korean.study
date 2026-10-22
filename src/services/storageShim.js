@@ -129,6 +129,7 @@ export const dictationProgressKey = (lesson, userId) => lessonProgressKey('dicta
 export const legacyDictationProgressKey = (lesson) => legacyLessonProgressKey('dictation-progress', lesson?.no || lesson);
 
 export const reviewHistoryKey = (lesson, userId) => lessonProgressKey('review-history', lesson, userId);
+export const reflexHistoryKey = (lesson, userId) => lessonProgressKey('reflex', lesson, userId);
 
 export async function readScopedProgress(key, legacyKey, userId) {
   if (typeof window === 'undefined' || !window.storage) return null;
