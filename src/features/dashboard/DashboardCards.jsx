@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useId } from 'react';
 import {
   Target, Edit2, Sparkles, Headphones, Mic, Trophy, ChevronRight,
   TrendingUp, BookOpen, Plus, Play, CalendarDays, Coffee, BookMarked,
-  Lightbulb, Type, Flame, Check, X
+  Lightbulb, Type, Flame, Check, X, ChevronDown
 } from 'lucide-react';
 import { Bar } from '../../components/common/ProgressBar';
 import { Plant } from '../../components/common/Mascots';
@@ -381,6 +381,8 @@ function ReviewWordResult({ evaluation, wordId, wordCount }) {
 }
 
 export function ReviewSchedule({ userId, onReview }) {
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const calendarId = useId();
 
   const [showWords, setShowWords] = useState(false);
 
@@ -434,6 +436,17 @@ export function ReviewSchedule({ userId, onReview }) {
   const picked = schedule[0];
   return (
     <section className="card review" aria-busy={loading}>
+      <button
+        type="button"
+        className="review-mobile-toggle"
+        aria-expanded={calendarOpen}
+        aria-controls={calendarId}
+        onClick={() => setCalendarOpen((open) => !open)}
+      >
+        <span className="card-title"><CalendarDays size={19} color="#7C6FE4" aria-hidden="true" /> Lịch ôn từ vựng</span>
+        <ChevronDown size={20} aria-hidden="true" className={calendarOpen ? 'is-open' : ''} />
+      </button>
+      <div id={calendarId} className={`review-calendar-content${calendarOpen ? ' is-open' : ''}`}>
       <div className="card-title-row">
         <div className="card-title"><CalendarDays size={19} color="#7C6FE4" /> Lịch ôn từ vựng</div>
         <span className="review-cycle" title="Mỗi nhóm ôn vào ngày 1, 3, 5 và 7">Chu kỳ 1–3–5–7 · tối đa 10 từ</span>
@@ -500,6 +513,7 @@ export function ReviewSchedule({ userId, onReview }) {
           <span>Mỗi nhóm tối đa 10 từ, ôn vào ngày 1–3–5–7. Sau đó chuyển nhóm tiếp theo; hết danh sách thì bắt đầu lại.</span>
           <ChevronRight size={16} color="#9A8FE0" />
         </div>
+      </div>
     </section>
   );
 }

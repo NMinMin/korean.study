@@ -14923,6 +14923,30 @@ textarea.fc2-note {
 .review-day-dialog::backdrop { background: rgba(25, 20, 45, .5); }
 .review-dialog-content { position: relative; padding: 24px; }
 .review-dialog-content h2 { margin: 0 28px 14px 0; font-size: 18px; }
+.review-mobile-toggle { display: none; }
+@media (max-width: 860px) {
+  .review-mobile-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--ks-text-7c6fe4, #7c6fe4);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .review-mobile-toggle > svg { flex-shrink: 0; }
+  .review-mobile-toggle > svg.is-open { transform: rotate(180deg); }
+  .review-mobile-toggle:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; border-radius: 4px; }
+  .review-calendar-content { display: none; }
+  .review-calendar-content.is-open { display: block; margin-top: 12px; }
+  .review-calendar-content > .card-title-row { display: none; }
+}
 .review-dialog-content p { line-height: 1.6; }
 .review-dialog-close { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--ks-surface-f3f0ff, #f3f0ff); color: inherit; cursor: pointer; }
 .review-dialog-words { list-style: none; padding: 0; margin: 16px 0; }
