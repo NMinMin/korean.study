@@ -41,5 +41,16 @@ test('duplicate Korean words keep bookmarks and notes on their own vocabulary ID
   await api.saveRemoteVocabularyStateForWords(words, 'learner', { [second]: { starred: true } });
   assert.equal(writes.length, 1);
   assert.equal(writes[0].row.vocabulary_id, second);
+  const queriedTables = [];
+  globalThis.__vocabIdentityDb.from = (table) => {
+    queriedTables.push(table);
+    return { select() { return this; }, eq() { return this; }, in: async () => ({ data: [] }) };
+  };
+  const fallbackLesson = { id: 'fallback-lesson-1', textbookId: 'fallback-sejong-workbook' };
+  assert.equal(await api.loadRemoteVocabularyState(fallbackLesson, 'learner'), null);
+  assert.equal(await api.saveRemoteVocabularyState(fallbackLesson, 'learner', {}), false);
+  assert.deepEqual(queriedTables, [], 'sample lessons must never query UUID database columns');
+  assert.equal(await api.loadRemoteVocabularyState({ id: first, textbookId: second }, 'learner'), null);
+  assert.deepEqual(queriedTables, ['lesson_exercises'], 'real lessons still query their vocabulary');
   delete globalThis.__vocabIdentityDb;
 });

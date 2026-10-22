@@ -94,7 +94,7 @@ export async function saveRemoteFlashcardSession(stateKey: string, userId: strin
 }
 
 async function vocabularyRows(lesson: LessonIdentity): Promise<VocabularyRow[]> {
-  if (!supabase || !lesson.id || !lesson.textbookId) return []
+  if (!supabase || !isUuid(lesson.id) || !isUuid(lesson.textbookId)) return []
   const { data, error } = await supabase
     .from('lesson_exercises')
     .select('id, prompt_ko, lesson_id')
