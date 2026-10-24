@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { todayStr } from '../../utils/streakUtils';
 import { usePreferences } from '../../contexts/PreferencesContext';
+import { useAppDialog } from '../../components/common/AppDialog';
 import {
   isCelebrationSoundEnabled,
   getSoundVolume,
@@ -87,6 +88,7 @@ function TargetDatePicker({ value, onChange }) {
 }
 
 export default function SettingsView({ onBack, userId, lesson, vocabulary, textbookTitle, computeHomeProgress, onSignOut, planOnly = false }) {
+  const dialog = useAppDialog();
   const { theme, language, setTheme, setLanguage, t } = usePreferences();
   const [goal, setGoal] = useState(() => getCachedDailyGoal(userId));
   const [plan, setPlan] = useState(() => getCachedStudyPlan(userId));
@@ -151,10 +153,20 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
         setNotifPermNote('');
       }
       setSaved(true);
-      window.alert('Đã lưu kế hoạch học tập. Thay đổi mục tiêu và lịch học sẽ được áp dụng từ thứ Hai tuần sau. Streak và lịch ôn từ vựng sẽ đồng bộ theo kế hoạch mới; tuần này tiếp tục dùng kế hoạch hiện tại. Ngày nghỉ không làm mất streak.');
+      await dialog.alert({
+        title: 'Đã lưu kế hoạch học tập',
+        message: 'Kế hoạch mới sẽ được áp dụng từ thứ Hai tuần sau.\n\nTuần này, streak và lịch ôn từ vựng vẫn theo kế hoạch hiện tại. Từ tuần sau, cả hai sẽ đồng bộ với lịch mới.\n\nNgày nghỉ theo lịch học không làm mất streak.',
+        variant: 'success',
+        confirmLabel: 'Đã hiểu',
+      });
       setTimeout(() => setSaved(false), 1800);
     } catch (error) {
-      window.alert(error.message || 'Không thể lưu kế hoạch. Vui lòng thử lại.');
+      await dialog.alert({
+        title: 'Chưa lưu được kế hoạch',
+        message: error.message || 'Không thể lưu kế hoạch. Vui lòng thử lại.',
+        variant: 'error',
+        confirmLabel: 'Đóng',
+      });
     } finally {
       setSaving(false);
     }
