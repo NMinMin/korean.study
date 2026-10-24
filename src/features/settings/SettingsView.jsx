@@ -15,11 +15,11 @@ import {
 import {
   WEEK_DAYS,
   getDailyGoal,
-  saveDailyGoal,
   getStudyPlan,
   saveStudyPlan,
   getCachedDailyGoal,
   getCachedStudyPlan,
+  studyPlanKey,
 } from './studyPlanService';
 
 const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -93,6 +93,7 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
   const [overallPct, setOverallPct] = useState(0);
   const [syncing, setSyncing] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [notifPermNote, setNotifPermNote] = useState('');
   const [celebrationSound, setCelebrationSound] = useState(isCelebrationSoundEnabled);
   const [soundVolume, setSoundVolume] = useState(getSoundVolume);
@@ -104,7 +105,7 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
     let alive = true;
     const compute = computeHomeProgress ? computeHomeProgress(lesson, userId, vocabulary) : Promise.resolve([]);
     setSyncing(true);
-    Promise.all([getDailyGoal(userId), getStudyPlan(userId), compute])
+    Promise.all([getDailyGoal(userId, true), getStudyPlan(userId, true), compute])
       .then(([g, p, prog]) => {
         if (!alive) return;
         if (!goalDirtyRef.current) setGoal(g);
@@ -130,25 +131,33 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
   const toggleDay = (key) => update({ weeklySchedule: { ...plan.weeklySchedule, [key]: !plan.weeklySchedule[key] } });
 
   const save = async () => {
-    const clampedGoal = { ...goal, targetMinutes: Math.max(5, Math.min(180, parseInt(goal.targetMinutes, 10) || 15)) };
-    setGoal(clampedGoal);
-    await saveDailyGoal(clampedGoal, userId);
-    await saveStudyPlan(plan, celebrationSound, userId);
-    goalDirtyRef.current = false;
-    planDirtyRef.current = false;
-    soundDirtyRef.current = false;
-    localStorage.setItem(SOUND_VOLUME_KEY, String(soundVolume));
-    if (plan.reminderEnabled && typeof window !== 'undefined' && 'Notification' in window) {
-      try {
-        const perm = await Notification.requestPermission();
-        if (perm !== 'granted') setNotifPermNote('Trình duyệt/khung xem trước chưa cấp quyền thông báo — nhắc nhở vẫn hiện dưới dạng banner ngay trong app khi bạn mở Trang chủ.');
-        else setNotifPermNote('');
-      } catch (e) { setNotifPermNote(''); }
-    } else {
-      setNotifPermNote('');
+    if (saving || syncing) return;
+    setSaving(true);
+    try {
+      const clampedGoal = { ...goal, targetMinutes: Math.max(5, Math.min(180, parseInt(goal.targetMinutes, 10) || 15)) };
+      setGoal(clampedGoal);
+      await saveStudyPlan(plan, celebrationSound, userId, clampedGoal.targetMinutes);
+      goalDirtyRef.current = false;
+      planDirtyRef.current = false;
+      soundDirtyRef.current = false;
+      localStorage.setItem(SOUND_VOLUME_KEY, String(soundVolume));
+      if (plan.reminderEnabled && typeof window !== 'undefined' && 'Notification' in window) {
+        try {
+          const perm = await Notification.requestPermission();
+          if (perm !== 'granted') setNotifPermNote('Trình duyệt/khung xem trước chưa cấp quyền thông báo — nhắc nhở vẫn hiện dưới dạng banner ngay trong app khi bạn mở Trang chủ.');
+          else setNotifPermNote('');
+        } catch (e) { setNotifPermNote(''); }
+      } else {
+        setNotifPermNote('');
+      }
+      setSaved(true);
+      window.alert('Đã lưu kế hoạch học tập. Thay đổi mục tiêu và lịch học sẽ được áp dụng từ thứ Hai tuần sau. Streak và lịch ôn từ vựng sẽ đồng bộ theo kế hoạch mới; tuần này tiếp tục dùng kế hoạch hiện tại. Ngày nghỉ không làm mất streak.');
+      setTimeout(() => setSaved(false), 1800);
+    } catch (error) {
+      window.alert(error.message || 'Không thể lưu kế hoạch. Vui lòng thử lại.');
+    } finally {
+      setSaving(false);
     }
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1800);
   };
 
   return (
@@ -215,6 +224,7 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
             ))}
           </div>
         </div>
+        <p className="settings-hint">Thay đổi kế hoạch có hiệu lực từ thứ Hai tuần sau. Streak và lịch ôn từ vựng cùng áp dụng lịch mới. Ngày nghỉ không làm mất streak.</p>
 
         <div className="settings-row settings-reminder-row">
           <div className="settings-row-label">
@@ -268,8 +278,8 @@ export default function SettingsView({ onBack, userId, lesson, vocabulary, textb
         )}
         {notifPermNote && <p className="settings-note">{notifPermNote}</p>}
 
-        <button className="cg-post-btn settings-save-btn" onClick={save}>
-          {saved ? <><CheckCircle2 size={15} /> {t('Đã lưu!')}</> : t('Lưu kế hoạch học tập')}
+        <button className="cg-post-btn settings-save-btn" onClick={save} disabled={syncing || saving}>
+          {saving ? 'Đang lưu…' : saved ? <><CheckCircle2 size={15} /> {t('Đã lưu!')}</> : t('Lưu kế hoạch học tập')}
         </button>
       </div>
       {!planOnly && <div className="settings-card settings-account-card"><button className="settings-signout" onClick={onSignOut}><LogOut size={18} />{t('Đăng xuất')}</button></div>}
@@ -293,7 +303,8 @@ export function ReminderBanner({ userId, onGoStudy }) {
       const pastReminderTime = nowMinutes >= h * 60 + m;
       const studiedToday = g.todayMinutes > 0;
       const alreadyShownToday = p.lastReminderShownDate === todayStr();
-      setShow(pastReminderTime && !studiedToday && !alreadyShownToday);
+      const dayKey = WEEK_DAYS[(new Date().getDay() + 6) % 7].key;
+      setShow(p.weeklySchedule[dayKey] && pastReminderTime && !studiedToday && !alreadyShownToday);
     };
     check();
     const id = setInterval(check, 60000);
@@ -303,7 +314,10 @@ export function ReminderBanner({ userId, onGoStudy }) {
   const dismiss = async () => {
     setShow(false);
     const p = planRef.current;
-    if (p) await saveStudyPlan({ ...p, lastReminderShownDate: todayStr() }, isCelebrationSoundEnabled(), userId);
+    if (p) {
+      const cached = getCachedStudyPlan(userId);
+      await window.storage.set(studyPlanKey(userId), JSON.stringify({ ...cached, lastReminderShownDate: todayStr() }));
+    }
   };
 
   if (!show) return null;

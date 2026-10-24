@@ -1,5 +1,7 @@
 import { supabase } from './supabase'
 import { buildReviewRotation } from './reviewRotation.js'
+import { loadStudyCalendar } from './studySettings'
+import { countStudyDates, isStudyDate, nextStudyDate } from './studyCalendar.js'
 
 export type ReviewWord = {
   id: string
@@ -31,7 +33,6 @@ export type VocabularyReviewEvaluation = {
   wordResults?: Record<string, boolean>
 }
 
-const DAY_MS = 86_400_000
 const DAILY_LIMIT = 10
 const ROTATION_KEY = 'progress:vocabulary-review-rotation'
 const RESULT_KEY_PREFIX = 'progress:vocabulary-review-result:'
@@ -52,6 +53,7 @@ export async function loadVocabularyReviewSchedule(userId: string, numberOfDays 
   const todayKey = localDateKey()
   const emptyDays: VocabularyReviewDay[] = Array.from({ length: numberOfDays }, (_, index) => ({ dateKey: shiftDateKey(todayKey, index), words: [] }))
   if (!supabase || !userId) return emptyDays
+  const calendar = await loadStudyCalendar(userId)
 
   const resultKeys = emptyDays.map((day) => `${RESULT_KEY_PREFIX}${day.dateKey}`)
   const [completedResult, evaluationResult] = await Promise.all([
@@ -137,13 +139,10 @@ export async function loadVocabularyReviewSchedule(userId: string, numberOfDays 
     ...previousIds.map((id) => byId.get(id)).filter((word): word is ReviewWord => Boolean(word)),
     ...words.filter((word) => !previousSet.has(word.id)),
   ]
-  const utcDay = (key: string) => {
-    const [year, month, day] = key.split('-').map(Number)
-    return Date.UTC(year, month - 1, day)
-  }
-  const elapsedDays = Math.max(0, Math.round((utcDay(todayKey) - utcDay(rotation.cycleAnchor)) / DAY_MS))
-  const batches = buildReviewRotation(orderedWords, numberOfDays, DAILY_LIMIT, elapsedDays)
-  batches.forEach((batch: ReviewWord[], index: number) => { emptyDays[index].words = batch })
+  const elapsedDays = countStudyDates(calendar, rotation.cycleAnchor, todayKey)
+  const studyDays = emptyDays.filter((day) => isStudyDate(calendar, day.dateKey))
+  const batches = buildReviewRotation(orderedWords, studyDays.length, DAILY_LIMIT, elapsedDays)
+  batches.forEach((batch: ReviewWord[], index: number) => { studyDays[index].words = batch })
   if (emptyDays[0]?.evaluation && rotation.dateKey === todayKey) {
     const completedIds = new Set(rotation.wordIds || [])
     emptyDays[0].words = words.filter((word) => completedIds.has(word.id))
@@ -160,6 +159,7 @@ export async function saveVocabularyReviewResult(
   evaluation: VocabularyReviewEvaluation,
 ) {
   if (!supabase || !userId || !words.length) return false
+  const calendar = await loadStudyCalendar(userId)
   const rotationResult = await supabase.from('user_progress_states')
     .select('state_value').eq('user_id', userId).eq('state_key', ROTATION_KEY).maybeSingle()
   if (rotationResult.error) throw rotationResult.error
@@ -184,7 +184,10 @@ export async function saveVocabularyReviewResult(
   const currentById = new Map((currentResult.data ?? []).map((item) => [item.vocabulary_id, item]))
   const answerById = new Map(answers.map((answer) => [answer.sourceId, answer.correct]))
   const now = new Date()
-  const addDays = (days: number) => new Date(now.getTime() + days * DAY_MS).toISOString()
+  const addDays = (days: number) => {
+    const key = nextStudyDate(calendar, shiftDateKey(localDateKey(now), days))
+    return key ? new Date(`${key}T00:00:00`).toISOString() : null
+  }
   const rows = words.map((word) => {
     const current = currentById.get(word.id)
     const correct = answerById.get(word.id) === true

@@ -96,10 +96,10 @@ export async function loadStudyGoalDates(userId) {
   }
 }
 
-export async function getDailyGoal(userId) {
-  const remote = await loadRemoteDailyGoal(todayStr());
+export async function getDailyGoal(userId, editing = false) {
+  const remote = await loadRemoteDailyGoal(todayStr(), editing);
   if (remote) {
-    try { await window.storage.set(dailyGoalKey(userId), JSON.stringify(remote)); } catch (e) { }
+    if (!editing) try { await window.storage.set(dailyGoalKey(userId), JSON.stringify(remote)); } catch (e) { }
     return remote;
   }
   try {
@@ -115,16 +115,14 @@ export async function getDailyGoal(userId) {
 }
 
 export async function saveDailyGoal(g, userId) {
+  if (!await saveRemoteDailyGoal(g)) throw new Error('Không thể lưu mục tiêu học. Vui lòng thử lại.');
+  const active = await loadRemoteDailyGoal(todayStr());
   const normalized = g.todayDate === todayStr()
     ? { ...g, targetMinutes: Number(g.targetMinutes) || 15 }
     : { ...g, targetMinutes: Number(g.targetMinutes) || 15, todayMinutes: 0, todayDate: todayStr(), trackingVersion: 2 };
   try {
-    await window.storage.set(dailyGoalKey(userId), JSON.stringify(normalized));
-    window.dispatchEvent(new CustomEvent('kstudy:daily-goal-updated', { detail: normalized }));
-    if (normalized.targetMinutes > 0 && normalized.todayMinutes >= normalized.targetMinutes) {
-      await touchStudyLog(userId);
-    }
-    await saveRemoteDailyGoal(normalized);
+    await window.storage.set(dailyGoalKey(userId), JSON.stringify(active || normalized));
+    window.dispatchEvent(new CustomEvent('kstudy:daily-goal-updated', { detail: active || normalized }));
     return normalized;
   } catch (e) {
     return normalized;
@@ -144,28 +142,37 @@ export async function recordStudyMinutes(minutes, userId) {
   return remote;
 }
 
-export async function getStudyPlan(userId) {
+export async function getStudyPlan(userId, editing = false) {
   let local = { ...DEFAULT_STUDY_PLAN };
   try {
     const r = await readScopedProgress(studyPlanKey(userId), legacyTextbookProgressKey('study-plan'), userId);
     if (r?.value) local = { ...local, ...JSON.parse(r.value) };
   } catch (e) { }
-  const remote = await loadRemoteStudyPlan();
+  const remote = await loadRemoteStudyPlan(editing);
   if (!remote) return local;
   const merged = { ...local, ...remote, lastReminderShownDate: local.lastReminderShownDate };
   try {
     localStorage.setItem(CELEBRATION_SOUND_KEY, String(remote.effectSoundEnabled));
-    await window.storage.set(studyPlanKey(userId), JSON.stringify(merged));
+    if (!editing) await window.storage.set(studyPlanKey(userId), JSON.stringify(merged));
   } catch (e) { }
   return merged;
 }
 
-export async function saveStudyPlan(plan, effectSoundEnabled = isCelebrationSoundEnabled(), userId) {
+export async function saveStudyPlan(plan, effectSoundEnabled = isCelebrationSoundEnabled(), userId, targetMinutes) {
+  const success = await saveRemoteStudyPlan(plan, effectSoundEnabled, targetMinutes);
+  if (!success) throw new Error('Không thể lưu kế hoạch. Vui lòng thử lại.');
   try {
-    await window.storage.set(studyPlanKey(userId), JSON.stringify(plan));
     localStorage.setItem(CELEBRATION_SOUND_KEY, String(effectSoundEnabled));
   } catch (e) { }
-  await saveRemoteStudyPlan(plan, effectSoundEnabled);
+  window.dispatchEvent(new CustomEvent('kstudy:vocabulary-review-updated'));
+  try {
+    await getStudyPlan(userId);
+    const active = await loadRemoteDailyGoal(todayStr());
+    if (active) {
+      await window.storage.set(dailyGoalKey(userId), JSON.stringify(active));
+      window.dispatchEvent(new CustomEvent('kstudy:daily-goal-updated', { detail: active }));
+    }
+  } catch (error) { /* The plan is already saved; refresh cached state on the next load. */ }
 }
 
 export async function hasNewCommunityActivity(userId) {

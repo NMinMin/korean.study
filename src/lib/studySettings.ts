@@ -1,5 +1,14 @@
 import { supabase } from './supabase'
 import { todayStr } from '../utils/streakUtils'
+import { planOnDate } from './studyCalendar.js'
+
+export async function loadStudyCalendar(userId: string) {
+  if (!supabase) throw new Error('Không thể kết nối lịch học')
+  const { data, error } = await supabase.from('study_plan_versions')
+    .select('effective_from, weekly_schedule, daily_goal_minutes').eq('user_id', userId).order('effective_from')
+  if (error) throw error
+  return data ?? []
+}
 
 export type DailyGoalData = {
   targetMinutes: number
@@ -30,7 +39,7 @@ async function currentUserId() {
   return data.user.id
 }
 
-export async function loadRemoteDailyGoal(date: string): Promise<DailyGoalData | null> {
+export async function loadRemoteDailyGoal(date: string, editing = false): Promise<DailyGoalData | null> {
   if (!supabase) return null
   const userId = await currentUserId()
   if (!userId) return null
@@ -40,7 +49,7 @@ export async function loadRemoteDailyGoal(date: string): Promise<DailyGoalData |
   ])
   if (settings.error || stats.error) return null
   return {
-    targetMinutes: Number(settings.data?.daily_goal_minutes ?? 15),
+    targetMinutes: Number(editing ? settings.data?.daily_goal_minutes ?? 15 : planOnDate(await loadStudyCalendar(userId), date).daily_goal_minutes),
     todayMinutes: Number(stats.data?.minutes ?? 0),
     todayDate: date,
     trackingVersion: 2,
@@ -87,18 +96,21 @@ export async function recordRemoteStudyMinutes(minutes: number): Promise<DailyGo
   }
 }
 
-export async function loadRemoteStudyPlan(): Promise<(StudyPlanData & { effectSoundEnabled: boolean }) | null> {
+export async function loadRemoteStudyPlan(editing = false): Promise<(StudyPlanData & { effectSoundEnabled: boolean }) | null> {
   if (!supabase) return null
   const userId = await currentUserId()
   if (!userId) return null
-  const [settings, plan] = await Promise.all([
+  const [settings, plan, target] = await Promise.all([
     supabase.from('user_settings').select('weekly_schedule, reminder_enabled, reminder_time, effect_sound_enabled').eq('user_id', userId).maybeSingle(),
     supabase.from('study_plans').select('target_completion_date').eq('user_id', userId).maybeSingle(),
+    supabase.from('study_target_versions').select('target_completion_date').eq('user_id', userId)
+      .lte('effective_from', todayStr()).order('effective_from', { ascending: false }).limit(1).maybeSingle(),
   ])
-  if (settings.error || plan.error) return null
-  const selectedDays = new Set<number>((settings.data?.weekly_schedule ?? [1, 2, 3, 4, 5]) as number[])
+  if (settings.error || plan.error || target.error) return null
+  const active = planOnDate(await loadStudyCalendar(userId), todayStr())
+  const selectedDays = new Set<number>((editing ? settings.data?.weekly_schedule ?? [1, 2, 3, 4, 5] : active.weekly_schedule) as number[])
   return {
-    targetDate: plan.data?.target_completion_date ?? null,
+    targetDate: (editing ? plan.data : target.data)?.target_completion_date ?? null,
     weeklySchedule: Object.fromEntries(dayKeys.map((key, index) => [key, selectedDays.has(index + 1)])),
     reminderEnabled: Boolean(settings.data?.reminder_enabled),
     reminderTime: String(settings.data?.reminder_time ?? '20:00').slice(0, 5),
@@ -107,11 +119,18 @@ export async function loadRemoteStudyPlan(): Promise<(StudyPlanData & { effectSo
   }
 }
 
-export async function saveRemoteStudyPlan(plan: StudyPlanData, effectSoundEnabled: boolean) {
+export async function saveRemoteStudyPlan(plan: StudyPlanData, effectSoundEnabled: boolean, targetMinutes?: number) {
   if (!supabase) return false
   const userId = await currentUserId()
   if (!userId) return false
   const weeklySchedule = dayKeys.flatMap((key, index) => plan.weeklySchedule[key] ? [index + 1] : [])
+  if (targetMinutes !== undefined) {
+    const { error } = await supabase.rpc('save_weekly_study_plan', {
+      p_days: weeklySchedule, p_goal: targetMinutes, p_target: plan.targetDate,
+      p_reminder: plan.reminderEnabled, p_time: plan.reminderTime, p_sound: effectSoundEnabled,
+    })
+    return !error
+  }
   const [settings, savedPlan] = await Promise.all([
     supabase.from('user_settings').upsert({
       user_id: userId,
