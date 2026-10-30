@@ -3697,3 +3697,9 @@
 .admin-vocabulary-preview td b { color: var(--ks-text-2e2a4a, #2e2a4a); }
 .admin-vocabulary-preview td p { margin: 0 0 6px; white-space: pre-wrap; }
 .admin-vocabulary-preview td small { white-space: pre-wrap; }
+
+.admin-bar-chart.is-month { overflow-x: auto; }
+.admin-bar-chart.is-month .admin-bar-column { flex: 0 0 38px; }
+.admin-bar-chart.is-month .admin-bar-column small { white-space: nowrap; }
+.admin-user-detail-content { padding: 22px 24px; }
+.admin-user-detail-content strong { overflow-wrap: anywhere; }

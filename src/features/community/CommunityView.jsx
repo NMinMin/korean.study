@@ -1,3 +1,4 @@
+import { usePreferences } from '../../contexts/PreferencesContext';
 import React, { useState, useEffect } from 'react';
 import {
   MessageCircle, MessageSquare, Compass, ChevronLeft, Plus,
@@ -13,6 +14,7 @@ import { useAppDialog } from '../../components/common/AppDialog';
 import CommunitySkeleton from './CommunitySkeleton';
 
 export default function CommunityView({ profile, onBack, onStudyCustomLesson, hideHeader, initialTab = 'feed' }) {
+  const { t } = usePreferences();
   const dialog = useAppDialog();
   const [tab, setTab] = useState(initialTab);
   const [posts, setPosts] = useState(null);
@@ -168,26 +170,26 @@ export default function CommunityView({ profile, onBack, onStudyCustomLesson, hi
         <div className="fc2-topbar">
           <div className="fc2-top-left">
             <button className="fc2-back" onClick={onBack} aria-label="Về trang chủ"><ChevronLeft size={20} /></button>
-            <span className="fc2-title"><MessageCircle size={18} color="#7C6FE4" /> Cộng đồng</span>
+            <span className="fc2-title"><MessageCircle size={18} color="#7C6FE4" /> {t("Cộng đồng")}</span>
           </div>
         </div>
       ) : null}
 
       <div className="cg-tabs sub-community-tabs">
-        <button className={`cg-tab ${tab === 'feed' ? 'on' : ''}`} aria-pressed={tab === 'feed'} onClick={() => setTab('feed')}><MessageSquare size={16} /><span>Bảng tin</span></button>
-        <button className={`cg-tab ${tab === 'discover' ? 'on' : ''}`} aria-pressed={tab === 'discover'} onClick={() => setTab('discover')}><Compass size={16} /><span>Khám phá</span></button>
+        <button className={`cg-tab ${tab === 'feed' ? 'on' : ''}`} aria-pressed={tab === 'feed'} onClick={() => setTab('feed')}><MessageSquare size={16} /><span>{t("Bảng tin")}</span></button>
+        <button className={`cg-tab ${tab === 'discover' ? 'on' : ''}`} aria-pressed={tab === 'discover'} onClick={() => setTab('discover')}><Compass size={16} /><span>{t("Khám phá")}</span></button>
       </div>
 
       {tab === 'feed' ? (
       <>
-          <p className="cg-sub">Nơi mọi người học chia sẻ câu hay, mẹo nhớ, hay trải nghiệm học tập — mọi người dùng app đều thấy chung một bảng tin.</p>
+          <p className="cg-sub">{t("Nơi mọi người học chia sẻ câu hay, mẹo nhớ, hay trải nghiệm học tập — mọi người dùng app đều thấy chung một bảng tin.")}</p>
 
           {!showCompose ? (
             <div className="cg-thread-starter">
               <span className="cg-post-avatar">{(profile?.displayName || '?')[0].toUpperCase()}</span>
               <button className="cg-thread-prompt" onClick={() => setShowCompose(true)}>
                 <b>{profile?.displayName || 'Bạn'}</b>
-                <span>Bạn đang nghĩ gì? Chia sẻ cùng cộng đồng...</span>
+                <span>{t("Bạn đang nghĩ gì? Chia sẻ cùng cộng đồng...")}</span>
               </button>
               <button className="cg-new-btn" onClick={() => setShowCompose(true)}>
                 <Plus size={15} /> Đăng bài
@@ -211,7 +213,7 @@ export default function CommunityView({ profile, onBack, onStudyCustomLesson, hi
               </div>
               <div className="cg-compose-actions">
                 <span className="cg-compose-spacer" />
-                <button className="cg-cancel-btn" onClick={() => { setShowCompose(false); setDraft(''); }}>Huỷ</button>
+                <button className="cg-cancel-btn" onClick={() => { setShowCompose(false); setDraft(''); }}>{t("Huỷ")}</button>
                 <button className="cg-post-btn" onClick={submitPost} disabled={!draft.trim() || posting}>
                   {posting ? 'Đang đăng...' : 'Đăng bài'}
                 </button>
@@ -224,7 +226,7 @@ export default function CommunityView({ profile, onBack, onStudyCustomLesson, hi
           ) : posts.length === 0 ? (
             <div className="cg-empty">
               <SwBunnyEmpty />
-              <p>Chưa có bài viết nào — hãy là người đầu tiên chia sẻ!</p>
+              <p>{t("Chưa có bài viết nào — hãy là người đầu tiên chia sẻ!")}</p>
             </div>
           ) : (
             <div className="cg-feed">
@@ -252,10 +254,10 @@ export default function CommunityView({ profile, onBack, onStudyCustomLesson, hi
                         <Heart size={17} fill={liked[p.key] ? '#E5566B' : 'none'} color={liked[p.key] ? '#E5566B' : 'currentColor'} /><span className="cg-action-label">{liked[p.key] ? 'Đã thích' : 'Thích'}</span><span>{p.likes || 0}</span>
                       </button>
                       <button className={`cg-comment-btn ${isCommentsOpen ? 'on' : ''}`} aria-expanded={isCommentsOpen} aria-controls={`post-comments-${p.key}`} aria-label={`Bình luận bài viết, ${p.commentCount || 0} bình luận`} onClick={() => toggleComments(p.key, isCommentsOpen)}>
-                        <MessageCircleIcon size={17} /><span className="cg-action-label">Bình luận</span><span>{p.commentCount || 0}</span>
+                        <MessageCircleIcon size={17} /><span className="cg-action-label">{t("Bình luận")}</span><span>{p.commentCount || 0}</span>
                       </button>
                       {p.commentsLocked && (
-                        <span className="cg-comments-locked"><Lock size={12} /> Đã khoá bình luận</span>
+                        <span className="cg-comments-locked"><Lock size={12} /> {t("Đã khoá bình luận")}</span>
                       )}
                     </div>
 

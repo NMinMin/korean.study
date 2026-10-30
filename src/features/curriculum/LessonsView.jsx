@@ -1,3 +1,4 @@
+import { usePreferences } from '../../contexts/PreferencesContext';
 import React from 'react';
 import { NotebookPen, ChevronLeft, BookOpen, ChevronDown, Check, Lock } from 'lucide-react';
 import { FALLBACK_LESSONS } from '../../data/fallbackData';
@@ -14,6 +15,7 @@ export default function LessonsView({
   title = 'Từ vựng · Theo bài',
   backLabel = 'Quay lại'
 }) {
+  const { t } = usePreferences();
   return (
     <section className="card page">
       <div className="card-title-row">
@@ -29,15 +31,15 @@ export default function LessonsView({
             <select
               value={activeTextbookId || ''}
               onChange={(event) => onChangeTextbook?.(event.target.value)}
-              aria-label="Chọn giáo trình"
+              aria-label={t("Chọn giáo trình")}
             >
               {textbooks.map((book) => <option key={book.id} value={book.id}>{book.title}</option>)}
             </select>
             <ChevronDown size={15} aria-hidden="true" />
           </label>
         ) : <span className="book-chip">{textbookTitle}</span>}
-        <span className="lesson-count">{lessons.length} bài</span>
-        {continueLesson && <span className="current-study-chip">{continueLesson.status === 'done' || (continueLesson.progressPercent || 0) >= 100 ? 'Hoàn thành' : 'Đang học'} · Bài {continueLesson.no}</span>}
+        <span className="lesson-count">{lessons.length} {t('bài')}</span>
+        {continueLesson && <span className="current-study-chip">{continueLesson.status === 'done' || (continueLesson.progressPercent || 0) >= 100 ? t('Hoàn thành') : t('Đang học')} · Bài {continueLesson.no}</span>}
       </div>
       <div className="lesson-list">
         {lessons.map((l) => {
@@ -51,12 +53,12 @@ export default function LessonsView({
             >
               <span className="lesson-no">{l.no}과</span>
               <span className="lesson-main">
-                <b>Bài {l.no}</b>
+                <b>{t('Bài')} {l.no}</b>
                 <em>{l.title}</em>
               </span>
-              <span className="lesson-words">{l.words} từ</span>
-              {isDone && <span className="lesson-badge done-b"><Check size={11} /> Hoàn thành</span>}
-              {!isDone && l.status === 'current' && <span className="lesson-badge cur-b">Đang học</span>}
+              <span className="lesson-words">{l.words} {t('từ')}</span>
+              {isDone && <span className="lesson-badge done-b"><Check size={11} /> {t("Hoàn thành")}</span>}
+              {!isDone && l.status === 'current' && <span className="lesson-badge cur-b">{t("Đang học")}</span>}
               {!isDone && l.status === 'locked' && <span className="lesson-badge lock-b"><Lock size={11} /></span>}
             </button>
           );
@@ -76,6 +78,7 @@ export function ActivityLessonSelectView({
   textbookTitle = 'Giáo trình tiếng Hàn',
   backLabel = 'Trang chủ'
 }) {
+  const { t } = usePreferences();
   return (
     <section className="card page">
       <div className="card-title-row">
@@ -89,7 +92,7 @@ export function ActivityLessonSelectView({
       </p>
       <div className="lesson-book-tag">
         <span className="book-chip">{textbookTitle}</span>
-        <span className="lesson-count">{lessons.length} bài</span>
+        <span className="lesson-count">{lessons.length} {t('bài')}</span>
       </div>
       <div className="lesson-list">
         {lessons.map((l) => {
@@ -102,12 +105,12 @@ export function ActivityLessonSelectView({
           >
             <span className="lesson-no">{l.no}과</span>
             <span className="lesson-main">
-              <b>Bài {l.no}</b>
+              <b>{t('Bài')} {l.no}</b>
               <em>{l.title}</em>
             </span>
-            {isDone && <span className="lesson-badge done-b"><Check size={11} /> Hoàn thành</span>}
-            {!isDone && l.status === 'current' && <span className="lesson-badge cur-b">Đang học</span>}
-            {!isDone && l.status === 'locked' && <span className="lesson-badge lock-b"><Lock size={11} /> Chưa có nội dung</span>}
+            {isDone && <span className="lesson-badge done-b"><Check size={11} /> {t("Hoàn thành")}</span>}
+            {!isDone && l.status === 'current' && <span className="lesson-badge cur-b">{t("Đang học")}</span>}
+            {!isDone && l.status === 'locked' && <span className="lesson-badge lock-b"><Lock size={11} /> {t("Chưa có nội dung")}</span>}
           </button>
         })}
       </div>

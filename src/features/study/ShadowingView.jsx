@@ -1,3 +1,4 @@
+import { usePreferences } from '../../contexts/PreferencesContext';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, Headphones, Target, Volume2, Mic, Sparkles, Lightbulb, CheckCircle2, RotateCcw, AlertTriangle,
@@ -24,6 +25,7 @@ import { compareSpeech, feedbackFor, toneForScore } from './speechAssessment';
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
 
 export function DictationModeSelectView({ lesson, userId, lines = SHADOW_LINES, onBack, onSelect }) {
+  const { t } = usePreferences();
   const [practiceComplete, setPracticeComplete] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(true);
 
@@ -62,7 +64,7 @@ export function DictationModeSelectView({ lesson, userId, lines = SHADOW_LINES, 
       <div className="dictation-mode-grid">
         <button className="dictation-mode-card practice" onClick={() => onSelect("practice")}>
           <span className="dictation-mode-icon"><Headphones size={27} /></span>
-          <strong>Luyện tập</strong>
+          <strong>{t("Luyện tập")}</strong>
           <p>Nghe không giới hạn, dùng gợi ý và luyện từng câu để mở khóa bài Kiểm tra.</p>
           <span>Bắt đầu luyện <ChevronRight size={16} /></span>
         </button>
@@ -72,9 +74,9 @@ export function DictationModeSelectView({ lesson, userId, lines = SHADOW_LINES, 
           onClick={() => onSelect("test")}
           aria-label={!practiceComplete ? 'Kiểm tra đang khóa. Hãy hoàn thành Luyện tập trước.' : 'Vào kiểm tra'}
         >
-          {!practiceComplete && <span className="dictation-mode-lock"><Lock size={14} /> Chưa mở khóa</span>}
+          {!practiceComplete && <span className="dictation-mode-lock"><Lock size={14} /> {t("Chưa mở khóa")}</span>}
           <span className="dictation-mode-icon"><Target size={27} /></span>
-          <strong>Kiểm tra</strong>
+          <strong>{t("Kiểm tra")}</strong>
           <p>{practiceComplete ? 'Mỗi câu được nghe tối đa 2 lần; câu bỏ qua tính là không thuộc. Đạt từ 80% để hoàn thành.' : 'Bạn cần hoàn thành tuyến Luyện tập trước.'}</p>
           <span>{practiceComplete ? <>Vào kiểm tra <ChevronRight size={16} /></> : <><Lock size={15} /> Hoàn thành Luyện tập để mở</>}</span>
         </button>
@@ -186,6 +188,7 @@ const swFormatTime = (s) => {
 };
 
 export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, onBack, onFinish, onProgress }) {
+  const { t } = usePreferences();
   const [idx, setIdx] = useState(0);
   const [status, setStatus] = useState("idle"); // idle | recording | grading | done | error | unsupported
   const [results, setResults] = useState({});
@@ -733,7 +736,7 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
 
             {result && status !== "grading" && (
               <div className="sw-result">
-                <div className="sw-result-head"><Sparkles size={14} color="#7C6FE4" /> Kết quả mới nhất</div>
+                <div className="sw-result-head"><Sparkles size={14} color="#7C6FE4" /> {t("Kết quả mới nhất")}</div>
                 <div className="sw-result-summary">
                   <div className="sw-recording-playback">
                     <button
@@ -747,7 +750,7 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
                         ? <Square size={13} color="#fff" fill="#fff" />
                         : <Play size={15} color="#fff" fill="#fff" />}
                     </button>
-                    <span>Nghe bản ghi của bạn</span>
+                    <span>{t("Nghe bản ghi của bạn")}</span>
                     <span className={`sw-playback-wave ${isPlayingRecording ? "is-playing" : ""}`} aria-hidden="true">
                       {Array.from({ length: 18 }, (_, waveIndex) => (
                         <i
@@ -761,7 +764,7 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
                     </span>
                   </div>
                   <div className="sw-accuracy">
-                    <span>Độ khớp</span>
+                    <span>{t("Độ khớp")}</span>
                     <b className={toneForScore(result.score)}>{result.score}%</b>
                   </div>
                 </div>
@@ -771,9 +774,9 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
                       <Sparkles size={12} /> {result.source === "worker-ai" ? "Đánh giá AI" : "Đánh giá dự phòng"}
                     </span>
                   </div>
-                  {result.strength && <p><strong>Nhận xét:</strong> {result.strength}</p>}
-                  {result.warning && <p className="sw-ai-warning"><strong>Cần cải thiện:</strong> {result.warning}</p>}
-                  {result.tip && <p><strong>Gợi ý:</strong> {result.tip}</p>}
+                  {result.strength && <p><strong>{t("Nhận xét:")}</strong> {result.strength}</p>}
+                  {result.warning && <p className="sw-ai-warning"><strong>{t("Cần cải thiện:")}</strong> {result.warning}</p>}
+                  {result.tip && <p><strong>{t("Gợi ý:")}</strong> {result.tip}</p>}
                 </div>
                 <div className={`sw-score-state ${toneForScore(result.score)}`}>
                   {result.score >= 80
@@ -787,7 +790,7 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
           </div>
 
           <div className="fc-nav sw-question-nav">
-            <button className="fc-nav-btn" disabled={idx === 0} onClick={goPrev}><ChevronLeft size={18} /> Câu trước</button>
+            <button className="fc-nav-btn" disabled={idx === 0} onClick={goPrev}><ChevronLeft size={18} /> {t("Câu trước")}</button>
             <div className="fc-dots sw-question-dots">
               {lines.map((l, i) => (
                 <button
@@ -820,7 +823,7 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
         {/* ===== CỘT PHỤ ===== */}
         <div className="sw-side">
           <div className="sw-help-card">
-            <div className="sw-help-title">Hỗ trợ học tập</div>
+            <div className="sw-help-title">{t("Hỗ trợ học tập")}</div>
             <div className="sw-help-btns">
               <button className={helpPanel === "break" ? "on" : ""} onClick={() => setHelpPanel((p) => (p === "break" ? null : "break"))}>
                 <span className="sw-help-ico"><Scissors size={18} color="#7C6FE4" /></span>
@@ -846,7 +849,7 @@ export default function ShadowingView({ lesson, userId, lines = SHADOW_LINES, on
           </div>
 
           <div className="sw-history-card">
-            <div className="sw-help-title"><Sparkles size={14} color="#7C6FE4" /> Lịch sử kết quả</div>
+            <div className="sw-help-title"><Sparkles size={14} color="#7C6FE4" /> {t("Lịch sử kết quả")}</div>
             {history.length === 0 ? (
               <div className="sw-history-empty">
                 <SwBunnyEmpty />

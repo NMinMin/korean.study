@@ -110,6 +110,7 @@ export default function AdminPage() {
   const [actionBusy, setActionBusy] = useState('')
   const [range, setRange] = useState<7 | 30>(7)
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
+  const dashboardCache = useRef<Partial<Record<7 | 30, DashboardData>>>({})
   const [community, setCommunity] = useState<CommunityData>({ posts: [], reports: [], customLessons: [] })
   const [communityStatus, setCommunityStatus] = useState('all')
   const [communityView, setCommunityView] = useState<'queue' | 'posts' | 'vocabulary' | 'hidden'>('queue')
@@ -129,17 +130,20 @@ export default function AdminPage() {
 
   const refreshDashboard = useCallback(async () => {
     const data = await adminApi<DashboardData>(`/dashboard?days=${range}&refresh=true`)
+    dashboardCache.current[range] = data
     setDashboard(data)
     return data
   }, [range])
 
   const load = useCallback(async () => {
     const sequence = ++loadSequence.current
-    setLoading(true); setError('')
+    const cachedDashboard = tab === 'dashboard' ? dashboardCache.current[range] : undefined
+    if (cachedDashboard) setDashboard(cachedDashboard)
+    setLoading(!cachedDashboard); setError('')
     try {
       if (tab === 'dashboard') {
         const data = await adminApi<DashboardData>(`/dashboard?days=${range}`)
-        if (sequence === loadSequence.current) setDashboard(data)
+        if (sequence === loadSequence.current) { dashboardCache.current[range] = data; setDashboard(data) }
       }
       if (tab === 'textbooks') {
         const data = await adminApi<Textbook[]>('/textbooks')
@@ -539,7 +543,7 @@ export default function AdminPage() {
             <article className="admin-stat pink"><span><Clock3 size={25} /></span><div><small>Thời gian học trung bình</small><strong>{Math.round(dashboard.averageMinutes)}<i> phút/ngày</i></strong></div></article>
             <article className="admin-stat orange" title={`Tỷ lệ học viên của ${range} ngày trước quay lại học trong ${range} ngày gần đây`}><span><Star size={25} /></span><div><small>Tỷ lệ quay lại</small><strong>{Math.round(dashboard.retentionRate)}%</strong><i> so với kỳ trước</i></div></article>
           </div>
-          <div className="admin-analytics-grid"><article className="admin-chart-card"><div className="admin-card-heading"><h3>Tiến độ học tập tổng quan</h3><span>{range} ngày</span></div><div className="admin-bar-chart">{dashboard.chart.map((item) => <div className="admin-bar-column" key={item.date}><div className="admin-bar-value">{Math.round(item.minutes)}</div><div className="admin-bar-track"><div style={{ height: `${Math.max(3, item.minutes / maxChart * 100)}%` }} /></div><small>{new Date(`${item.date}T00:00:00`).toLocaleDateString('vi-VN', { weekday: 'short' })}</small></div>)}</div><p className="admin-chart-note">Tổng số phút học được ghi nhận theo ngày.</p></article><article className="admin-course-card"><h3>Tỷ lệ hoàn thành theo giáo trình</h3><div className="admin-course-list">{dashboard.courses.length ? dashboard.courses.map((course, index) => <div key={`${course.title}-${index}`}><span><b>{course.title}</b><strong>{Math.round(course.percent)}%</strong></span><div><i style={{ width: `${Math.min(100, course.percent)}%` }} /></div></div>) : <p>Chưa có dữ liệu tiến độ.</p>}</div><button onClick={() => setTab('textbooks')}>Xem tất cả giáo trình</button></article></div>
+          <div className="admin-analytics-grid"><article className="admin-chart-card"><div className="admin-card-heading"><h3>Tiến độ học tập tổng quan</h3><span>{range} ngày</span></div><div className={`admin-bar-chart ${range === 30 ? "is-month" : ""}`}>{dashboard.chart.map((item) => <div className="admin-bar-column" key={item.date} title={`${item.date}: ${Math.round(item.minutes)} phút`}><div className="admin-bar-value">{Math.round(item.minutes)}</div><div className="admin-bar-track"><div style={{ height: `${Math.max(3, item.minutes / maxChart * 100)}%` }} /></div><small>{new Date(`${item.date}T00:00:00`).toLocaleDateString('vi-VN', range === 30 ? { day: '2-digit', month: '2-digit' } : { weekday: 'short' })}</small></div>)}</div><p className="admin-chart-note">Tổng số phút học được ghi nhận theo ngày.</p></article><article className="admin-course-card"><h3>Tỷ lệ hoàn thành theo giáo trình</h3><div className="admin-course-list">{dashboard.courses.length ? dashboard.courses.map((course, index) => <div key={`${course.title}-${index}`}><span><b>{course.title}</b><strong>{Math.round(course.percent)}%</strong></span><div><i style={{ width: `${Math.min(100, course.percent)}%` }} /></div></div>) : <p>Chưa có dữ liệu tiến độ.</p>}</div><button onClick={() => setTab('textbooks')}>Xem tất cả giáo trình</button></article></div>
           <article className="admin-hard-words"><div className="admin-card-heading"><div><h3>Thống kê từ vựng khó nhớ</h3><p>Các từ có tỷ lệ trả lời sai cao nhất.</p></div></div><div className="admin-table-wrap"><table><thead><tr><th>Từ vựng (Tiếng Hàn)</th><th>Nghĩa (Tiếng Việt)</th><th>Giáo trình</th><th>Tỷ lệ sai</th></tr></thead><tbody>{dashboard.hardVocabulary.map((word) => <tr key={`${word.word}-${word.course}`}><td><b>{word.word}</b></td><td>{word.meaning}</td><td>{word.course}</td><td><strong className="admin-error-rate">{Math.round(word.errorRate)}%</strong></td></tr>)}</tbody></table></div>{!dashboard.hardVocabulary.length && <div className="admin-empty">Chưa có dữ liệu từ vựng sai.</div>}</article>
         </div>}
         {tab === 'textbooks' && <>
@@ -1307,6 +1311,17 @@ export default function AdminPage() {
           )}
         </>}
       </section>}
+      {selectedUserDetail && <div className="admin-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedUserDetail(null) }}><section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="admin-user-detail-title" onKeyDown={(event) => { if (event.key === 'Escape') setSelectedUserDetail(null) }}><header><div><span><Users size={22} /></span><div><h2 id="admin-user-detail-title">Chi tiết người dùng</h2><p>Thông tin tài khoản và hoạt động</p></div></div><button autoFocus onClick={() => setSelectedUserDetail(null)} aria-label="Đóng"><X size={21} /></button></header><div className="admin-user-detail-grid admin-user-detail-content">{[
+        ['Họ tên', selectedUserDetail.display_name || 'Chưa cập nhật'],
+        ['Email', selectedUserDetail.email || 'Chưa cập nhật'],
+        ['Mã người dùng', selectedUserDetail.id],
+        ['Vai trò', selectedUserDetail.role === 'admin' ? 'Quản trị viên' : 'Học viên'],
+        ['Trạng thái', selectedUserDetail.is_locked ? 'Đã khóa' : 'Hoạt động'],
+        ['Xác thực email', selectedUserDetail.emailConfirmedAt ? formatAdminDateTime(selectedUserDetail.emailConfirmedAt) : 'Chưa xác thực'],
+        ['Ngày tạo', selectedUserDetail.created_at ? formatAdminDateTime(selectedUserDetail.created_at) : 'Chưa có dữ liệu'],
+        ['Đăng nhập gần nhất', selectedUserDetail.lastSignInAt ? formatAdminDateTime(selectedUserDetail.lastSignInAt) : 'Chưa có dữ liệu'],
+        ['Tiến độ', `Cấp ${selectedUserDetail.level || 1} · ${(selectedUserDetail.xp || 0).toLocaleString('vi-VN')} XP`],
+      ].map(([label, value]) => <div className="admin-user-detail-card" key={label}><small>{label}</small><strong>{value}</strong></div>)}</div><footer><button className="admin-cancel" onClick={() => setSelectedUserDetail(null)}>Đóng</button></footer></section></div>}
       {previewLesson && <div className="admin-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewLesson(null) }}><section className="admin-modal admin-preview-modal" role="dialog" aria-modal="true" aria-labelledby="admin-preview-title"><header><div><span><Eye size={22} /></span><div><h2 id="admin-preview-title">Xem bài học</h2><p>Thông tin đang hiển thị cho bài học đã chọn.</p></div></div><button onClick={() => setPreviewLesson(null)} aria-label="Đóng"><X size={21} /></button></header><div className="admin-lesson-preview"><div className="admin-preview-number">Bài {previewLesson.lesson_number}</div><div className="admin-preview-copy"><span className={`admin-status ${previewLesson.status}`}>{statuses.find((item) => item.value === previewLesson.status)?.label}</span><small>Giáo trình</small><p>{previewLesson.textbooks?.title_ko || textbooks.find((book) => book.id === previewLesson.textbook_id)?.title_ko || '—'}</p><small>Tiêu đề tiếng Hàn</small><h3>{previewLesson.title_ko}</h3><small>Tiêu đề tiếng Việt</small><p>{previewLesson.title_vi || 'Chưa có tiêu đề tiếng Việt'}</p></div></div><footer><button className="admin-cancel" onClick={() => setPreviewLesson(null)}>Đóng</button><button className="admin-primary" onClick={() => { const lesson = previewLesson; setPreviewLesson(null); openEditor('lessons', lesson) }}><Pencil size={17} /> Chỉnh sửa bài học</button></footer></section></div>}
       {editor && <div className="admin-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditor(null) }}><section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="admin-editor-title"><header><div><span>{editor.kind === 'textbooks' ? <BookOpen size={22} /> : <BookText size={22} />}</span><div><h2 id="admin-editor-title">{editor.id ? 'Chỉnh sửa' : 'Thêm'} {editor.kind === 'textbooks' ? 'giáo trình' : 'bài học'}</h2><p>Những trường có dấu * là bắt buộc.</p></div></div><button onClick={() => setEditor(null)} aria-label="Đóng"><X size={21} /></button></header><div className="admin-form">
         {editor.kind === 'textbooks' ? <><label>Slug *<input value={draft.slug || ''} onChange={(e) => setDraft({ ...draft, slug: e.target.value })} placeholder="vi-du: sejong-2-1" /></label><label>Tên tiếng Hàn *<input value={draft.titleKo || ''} onChange={(e) => setDraft({ ...draft, titleKo: e.target.value })} /></label><label>Tên tiếng Việt<input value={draft.titleVi || ''} onChange={(e) => setDraft({ ...draft, titleVi: e.target.value })} /></label><label>Thứ tự<input type="number" min="0" value={draft.sortOrder || '0'} onChange={(e) => setDraft({ ...draft, sortOrder: e.target.value })} /></label><label className="wide">Mô tả<textarea rows={3} value={draft.description || ''} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></label></> : <><label className="wide">Giáo trình *<AdminSelect value={draft.textbookId || ''} options={textbooks.map((book) => ({ value: book.id, label: book.title_ko }))} onChange={(value) => setDraft({ ...draft, textbookId: value })} /></label><label>Số bài *<input type="number" min="1" value={draft.lessonNumber || '1'} onChange={(e) => setDraft({ ...draft, lessonNumber: e.target.value })} /></label><label>Tên tiếng Hàn *<input value={draft.titleKo || ''} onChange={(e) => setDraft({ ...draft, titleKo: e.target.value })} /></label><label className="wide">Tên tiếng Việt<input value={draft.titleVi || ''} onChange={(e) => setDraft({ ...draft, titleVi: e.target.value })} /></label></>}

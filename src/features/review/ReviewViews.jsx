@@ -1,3 +1,4 @@
+import { usePreferences } from '../../contexts/PreferencesContext';
 import { calculateReviewComposite } from './reviewScoring';
 import QuizPreparationLoader from '../../components/common/QuizPreparationLoader';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -275,6 +276,7 @@ async function generateReviewFeedback(wrongLabels) {
 }
 
 export function SkillCompletionView({ title, description, assessment, loading, onBack, onRetry, retryLabel = "Kiểm tra lại" }) {
+  const { t } = usePreferences();
   return (
     <section className="skill-complete-card">
       <div className="skill-complete-icon"><CheckCircle2 size={42} /></div>
@@ -290,7 +292,7 @@ export function SkillCompletionView({ title, description, assessment, loading, o
         </div>
       )}
       <div className="skill-complete-actions">
-        <button className="fc-nav-btn" onClick={onBack}><ChevronLeft size={17} /> Về bài học</button>
+        <button className="fc-nav-btn" onClick={onBack}><ChevronLeft size={17} /> {t("Về bài học")}</button>
         <button className="fc-nav-btn primary" onClick={onRetry}><RotateCcw size={17} /> {retryLabel}</button>
       </div>
     </section>
@@ -400,22 +402,23 @@ function buildReviewPool(vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, di
 /*  ÔN TẬP — MÀN CHÍNH: 2 lựa chọn rõ ràng theo đúng tài liệu yêu cầu   */
 /* ------------------------------------------------------------------ */
 export function ReviewHubView({ onBack, onPickByLesson, onPickRandom }) {
+  const { t } = usePreferences();
   return (
     <section className="rv-page">
       <div className="rv-hub-top">
         <button className="fc2-back" onClick={onBack} aria-label="Về trang chủ"><ChevronLeft size={20} /></button>
-        <h1 className="rv-title">Ôn tập</h1>
+        <h1 className="rv-title">{t("Ôn tập")}</h1>
       </div>
       <p className="rv-sub" style={{ marginTop: -6, marginBottom: 4 }}>Chọn cách bạn muốn củng cố lại kiến thức đã học — cả 2 cách đều có 5 mức độ khó.</p>
       <div className="rv-hub-grid">
         <button className="rv-hub-card" onClick={onPickByLesson}>
           <span className="rv-hub-ico" style={{ background: "#F0EEFC" }}><NotebookPen size={26} color="#7C6FE4" /></span>
-          <b>Ôn tập theo bài</b>
+          <b>{t("Ôn tập theo bài")}</b>
           <span>Chọn đúng những bài học bạn muốn ôn lại — chủ động giới hạn phạm vi.</span>
         </button>
         <button className="rv-hub-card" onClick={onPickRandom}>
           <span className="rv-hub-ico" style={{ background: "#FDF3E7" }}><Sparkles size={26} color="#F0912E" /></span>
-          <b>Ôn tập ngẫu nhiên</b>
+          <b>{t("Ôn tập ngẫu nhiên")}</b>
           <span>Kiểm tra năng lực tổng quát như một bài thi thật, luyện phản xạ dài hạn.</span>
         </button>
       </div>
@@ -424,6 +427,7 @@ export function ReviewHubView({ onBack, onPickByLesson, onPickRandom }) {
 }
 
 export function ReviewLessonSelectView({ onBack, onNext, lessons = FALLBACK_LESSONS }) {
+  const { t } = usePreferences();
   const [selected, setSelected] = useState(() => new Set(lessons[0] ? [lessons[0].no] : []));
   const toggle = (no, locked) => {
     if (locked) return;
@@ -461,7 +465,7 @@ export function ReviewLessonSelectView({ onBack, onNext, lessons = FALLBACK_LESS
                 <b>Bài {l.no}</b>
                 <em>{l.title}</em>
               </span>
-              {locked && <span className="lesson-badge lock-b"><Lock size={11} /> Chưa có nội dung</span>}
+              {locked && <span className="lesson-badge lock-b"><Lock size={11} /> {t("Chưa có nội dung")}</span>}
             </button>
           );
         })}
@@ -475,6 +479,7 @@ export function ReviewLessonSelectView({ onBack, onNext, lessons = FALLBACK_LESS
 
 
 export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, dictationLines = SHADOW_LINES, shadowingLines = SHADOW_LINES, hasExamTextbook = true, onOpenCurriculum, onBack, onStart, mobileHeaderProvided = false }) {
+  const { t } = usePreferences();
   const [stars, setStars] = useState(3);
   const [hasStandard, setHasStandard] = useState(null); // random mode: null=đang kiểm tra, false=lần đầu (đề chuẩn), true=đã làm rồi (đề mới)
   const poolSize = useMemo(() => buildReviewPool(vocabulary, grammar, dictationLines).length, [vocabulary, grammar, dictationLines]);
@@ -511,7 +516,7 @@ export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabul
         <button className="fc2-back" onClick={onBack} aria-label="Về trang chủ"><ChevronLeft size={20} /></button>
         <div className="cg-empty" role="status">
           <BookOpen size={36} color="#7C6FE4" />
-          <h2>Chưa có tài liệu để thi thử</h2>
+          <h2>{t("Chưa có tài liệu để thi thử")}</h2>
           <p>{!hasExamTextbook
             ? 'Bạn cần thêm giáo trình vào danh sách của mình và học các bài trong giáo trình để có tài liệu luyện thi.'
             : 'Giáo trình đang chọn chưa có đủ nội dung để tạo đề. Hãy chọn giáo trình có từ vựng, ngữ pháp hoặc bài nghe và bắt đầu học nhé.'}</p>
@@ -529,7 +534,7 @@ export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabul
           {mode === "bylesson" ? (
             <span className="rv-lesson-pill">{selectedLessons?.length || 1} bài đã chọn</span>
           ) : (
-            <span className="rv-lesson-pill">Thi thử ngẫu nhiên</span>
+            <span className="rv-lesson-pill">{t("Thi thử ngẫu nhiên")}</span>
           )}
           <h1 className="rv-title">{mode === "bylesson" ? "Ôn tập theo bài 📘" : "Thi thử 🎯"}</h1>
           <p className="rv-sub">
@@ -549,7 +554,7 @@ export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabul
       </div>
 
       <div className="rv-diff-card">
-        <div className="rv-types-title"><Star size={14} fill="#F0C24E" color="#F0C24E" /> Chọn độ khó</div>
+        <div className="rv-types-title"><Star size={14} fill="#F0C24E" color="#F0C24E" /> {t("Chọn độ khó")}</div>
         <div className="rv-star-row">
           {REVIEW_DIFFICULTY.map((d) => (
             <button key={d.stars} className={`rv-star-btn ${stars === d.stars ? "on" : ""}`} onClick={() => setStars(d.stars)}>
@@ -580,7 +585,7 @@ export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabul
             {hasStandard === null ? (
               "Đang kiểm tra..."
             ) : hasStandard === false ? (
-              <><Target size={14} /> Lần đầu ở mức {stars}★ — bạn sẽ làm <b>Đề thi chuẩn</b>, giống hệt mọi người khác để thiết lập thang đo chung.</>
+              <><Target size={14} /> Lần đầu ở mức {stars}★ — bạn sẽ làm <b>{t("Đề thi chuẩn")}</b>, giống hệt mọi người khác để thiết lập thang đo chung.</>
             ) : (
               <><Sparkles size={14} /> Bạn đã làm đề chuẩn mức {stars}★ rồi — lần này là <b>đề mới sinh ngẫu nhiên</b> để luyện phản xạ.</>
             )}
@@ -595,7 +600,7 @@ export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabul
       <div className="rv-tip"><Lightbulb size={14} color="#E8A93D" /> Từ vựng chọn theo trọng số 70% hay sai / 20% chưa gặp / 10% đã thuộc. Nghe hiểu, hội thoại và ngữ pháp lấy đủ theo đúng phạm vi mức sao để không bỏ sót.</div>
 
       <div className="rv-types-card">
-        <div className="rv-types-title"><Sparkles size={14} color="#7C6FE4" /> Ngân hàng câu hỏi khả dụng</div>
+        <div className="rv-types-title"><Sparkles size={14} color="#7C6FE4" /> {t("Ngân hàng câu hỏi khả dụng")}</div>
         <p className="rv-types-count" style={{ marginTop: 0 }}>Hiện có <b>{poolSize}</b> câu hỏi khả dụng, sinh trực tiếp từ nội dung học liệu của {mode === "bylesson" ? (selectedLessons?.length ? `${selectedLessons.length} bài đã chọn` : (lesson?.title_ko ? `Bài ${lesson.no || ''} · ${lesson.title_ko}` : "bài học")) : "các bài học đã chọn"}.</p>
       </div>
     </section>
@@ -604,6 +609,7 @@ export function ReviewIntroView({ lesson, userId, mode, selectedLessons, vocabul
 
 /* ---------- Màn 2: Làm bài ôn tập ---------- */
 export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabulary = VOCAB_SAMPLE, grammar = GRAMMAR_SAMPLE, dictationLines = SHADOW_LINES, shadowingLines = SHADOW_LINES, isRecheck = false, onBack, onFinish, onProgress, onChangeSet }) {
+  const { t } = usePreferences();
   const [history, setHistory] = useState(null);
   const [pool, setPool] = useState(null);
   const [preparationError, setPreparationError] = useState(false);
@@ -675,8 +681,8 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
       <section className="rv-page">
         {preparationError ? (
           <div className="rv-quiz-card" role="alert">
-            <p>Chưa chuẩn bị được đề thi. Vui lòng quay lại và thử lại.</p>
-            <button className="fc-nav-btn" onClick={onBack}><ChevronLeft size={18} /> Quay lại</button>
+            <p>{t("Chưa chuẩn bị được đề thi. Vui lòng quay lại và thử lại.")}</p>
+            <button className="fc-nav-btn" onClick={onBack}><ChevronLeft size={18} /> {t("Quay lại")}</button>
           </div>
         ) : <QuizPreparationLoader message="Đang chuẩn bị đề thi thử..." />}
       </section>
@@ -756,7 +762,7 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
   /* ---------- Giai đoạn 1: câu hỏi trắc nghiệm bao phủ kiến thức ---------- */
   if (phase === "mc") {
     const q = pool[idx];
-    if (!q) return <section className="rv-page"><div className="rv-quiz-card"><p>Bài học chưa đủ dữ liệu để tạo bộ câu hỏi ôn tập.</p><button className="fc-nav-btn" onClick={onBack}>Về bài học</button></div></section>;
+    if (!q) return <section className="rv-page"><div className="rv-quiz-card"><p>{t("Bài học chưa đủ dữ liệu để tạo bộ câu hỏi ôn tập.")}</p><button className="fc-nav-btn" onClick={onBack}>{t("Về bài học")}</button></div></section>;
     const typeLabel = { image: "Chọn hình đúng", meaning: "Chọn nghĩa đúng", listening: "Nghe hiểu", grammar: "Ngữ pháp", fillblank: "Điền từ", translate: "Dịch câu", dialogue: "Hội thoại" }[q.type];
     const playAudio = () => { if (audioRef.current) { audioRef.current.currentTime = 0; audioRef.current.play().catch(() => { }); } };
     const choose = (opt) => {
@@ -790,7 +796,7 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
           <button className="fc2-back" onClick={onBack} aria-label="Đóng"><XCircle size={20} /></button>
           <span className="rv-quiz-title">Ôn tập · {difficulty.label}</span>
           <span className="rv-quiz-count">{idx + 1} / {total}</span>
-          {mode === "random" && <button className="rv-change-set-btn" onClick={regenerate}><RotateCcw size={13} /> Đổi đề mới</button>}
+          {mode === "random" && <button className="rv-change-set-btn" onClick={regenerate}><RotateCcw size={13} /> {t("Đổi đề mới")}</button>}
         </div>
         <div className="fc2-progress-bar"><div style={{ width: `${((idx + 1) / total) * 100}%` }} /></div>
 
@@ -803,8 +809,8 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
           {q.type === "listening" ? (
             <>
               <audio ref={audioRef} src={q.audio} preload="none" />
-              <button className="rv-listen-btn" onClick={playAudio}><Volume2 size={20} color="#fff" /> Nghe câu</button>
-              <p className="rv-quiz-question">Câu vừa nghe nghĩa là gì?</p>
+              <button className="rv-listen-btn" onClick={playAudio}><Volume2 size={20} color="#fff" /> {t("Nghe câu")}</button>
+              <p className="rv-quiz-question">{t("Câu vừa nghe nghĩa là gì?")}</p>
             </>
           ) : (
             <p className="rv-quiz-question" lang={(q.type === "image" || q.type === "meaning" || q.type === "fillblank" || q.type === "dialogue") ? "ko" : undefined}>
@@ -915,13 +921,13 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
           {wResult && (
             <div className="rv-write-result">
               <div className="rv-write-score-row">
-                <span>Điểm AI chấm</span>
+                <span>{t("Điểm AI chấm")}</span>
                 <b className={wResult.score >= 80 ? "great" : wResult.score >= 60 ? "mid" : "bad"}>{wResult.score}/100</b>
               </div>
-              <div className="rv-write-block ok"><CheckCircle2 size={14} color="#3FA95C" /> <b>Điểm mạnh:</b> {wResult.strengths}</div>
-              <div className="rv-write-block warn"><Target size={14} color="#D64545" /> <b>Lỗi sai:</b> {wResult.errors}</div>
+              <div className="rv-write-block ok"><CheckCircle2 size={14} color="#3FA95C" /> <b>{t("Điểm mạnh:")}</b> {wResult.strengths}</div>
+              <div className="rv-write-block warn"><Target size={14} color="#D64545" /> <b>{t("Lỗi sai:")}</b> {wResult.errors}</div>
               {wResult.naturalVersion && wResult.naturalVersion !== wDraft && (
-                <div className="rv-write-block natural"><Sparkles size={14} color="#7C6FE4" /> <b>Câu tự nhiên hơn:</b> <span lang="ko">{wResult.naturalVersion}</span></div>
+                <div className="rv-write-block natural"><Sparkles size={14} color="#7C6FE4" /> <b>{t("Câu tự nhiên hơn:")}</b> <span lang="ko">{wResult.naturalVersion}</span></div>
               )}
               {wResult.explanation && <p className="rv-write-explain">📖 {wResult.explanation}</p>}
               <button className="rv-next-btn rv-write-next" onClick={nextWriting}>
@@ -1046,9 +1052,9 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
     <section className="rv-page">
       <div className="rv-quiz-top">
         <button className="fc2-back" onClick={onBack} aria-label="Đóng"><XCircle size={20} /></button>
-        <span className="rv-quiz-title">Shadowing phản xạ</span>
+        <span className="rv-quiz-title">{t("Shadowing phản xạ")}</span>
         <span className="rv-quiz-count">{sIdx + 1} / {shadowLines.length}</span>
-        {mode === "random" && <button className="rv-change-set-btn" onClick={regenerate}><RotateCcw size={13} /> Đổi đề mới</button>}
+        {mode === "random" && <button className="rv-change-set-btn" onClick={regenerate}><RotateCcw size={13} /> {t("Đổi đề mới")}</button>}
       </div>
       <div className="fc2-progress-bar"><div style={{ width: `${((sIdx + 1) / shadowLines.length) * 100}%` }} /></div>
 
@@ -1080,14 +1086,14 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
             </p>
           </div>
         )}
-        {sPhaseState === "grading" && <p className="rv-reflex-hint"><Sparkles size={14} color="#7C6FE4" /> AI đang chấm...</p>}
+        {sPhaseState === "grading" && <p className="rv-reflex-hint"><Sparkles size={14} color="#7C6FE4" /> {t("AI đang chấm...")}</p>}
 
         {sPhaseState === "timeout" && (
           <div className="rv-reflex-result timeout">
             <div className="rv-reflex-timeout-msg"><AlertTriangle size={16} color="#D64545" /> Chưa đạt (Quá thời gian)</div>
             <div className="rv-reflex-btn-row">
-              <button className="rv-next-btn secondary" onClick={skipShadow}>Bỏ qua câu này</button>
-              <button className="rv-next-btn" onClick={retryShadow}><RotateCcw size={14} /> Thử lại</button>
+              <button className="rv-next-btn secondary" onClick={skipShadow}>{t("Bỏ qua câu này")}</button>
+              <button className="rv-next-btn" onClick={retryShadow}><RotateCcw size={14} /> {t("Thử lại")}</button>
             </div>
           </div>
         )}
@@ -1100,7 +1106,7 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
         {sPhaseState === "done" && lastReflex && (
           <div className="rv-reflex-result">
             <div className="rv-accuracy" style={{ alignSelf: "center" }}>
-              <span>Độ chính xác phát âm</span>
+              <span>{t("Độ chính xác phát âm")}</span>
               <b className={toneForScore(lastReflex.score)}>{lastReflex.score}%</b>
             </div>
             <div className="rv-reflex-speed">
@@ -1118,6 +1124,7 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
 
 /* ---------- Màn 3: Kết quả ôn tập ---------- */
 export function ReviewResultView({ answers, writingResults, elapsedMs, difficulty, reflexResults, mode, onRetry, onChangeSet, onHome }) {
+  const { t } = usePreferences();
   const [feedback, setFeedback] = useState(null);
   const mcTotal = answers.length;
   const mcCorrect = answers.filter((a) => a.correct).length;
@@ -1182,13 +1189,13 @@ export function ReviewResultView({ answers, writingResults, elapsedMs, difficult
 
         <div className="rv-result-stars-row">
           <div className="rv-result-stars-col">
-            <span className="rv-result-stars-label">Độ khó đã chọn</span>
+            <span className="rv-result-stars-label">{t("Độ khó đã chọn")}</span>
             <span className="rv-result-stars-icons">
               {Array.from({ length: 5 }).map((_, i) => (<Star key={i} size={15} fill={i < difficulty.stars ? "#A9A3C6" : "none"} color="#A9A3C6" />))}
             </span>
           </div>
           <div className="rv-result-stars-col">
-            <span className="rv-result-stars-label">Mức độ thành thạo đạt được</span>
+            <span className="rv-result-stars-label">{t("Mức độ thành thạo đạt được")}</span>
             <span className="rv-result-stars-icons">
               {Array.from({ length: 5 }).map((_, i) => (<Star key={i} size={15} fill={i < achievedStars ? "#F0C24E" : "none"} color={i < achievedStars ? "#F0C24E" : "#DCD3F4"} />))}
             </span>
@@ -1224,7 +1231,7 @@ export function ReviewResultView({ answers, writingResults, elapsedMs, difficult
           <div className={`rv-detail-card ${weak.length === 0 || strengths.length === 0 ? "single" : ""}`}>
             {strengths.length > 0 && (
               <div className="rv-detail-col ok">
-                <div className="rv-detail-title"><Sparkles size={15} /> Điểm mạnh</div>
+                <div className="rv-detail-title"><Sparkles size={15} /> {t("Điểm mạnh")}</div>
                 <div className="rv-detail-items">
                   {strengths.map((c, i) => (<div key={i} className="rv-detail-item"><CheckCircle2 size={14} /> {c.label}</div>))}
                 </div>
@@ -1232,7 +1239,7 @@ export function ReviewResultView({ answers, writingResults, elapsedMs, difficult
             )}
             {weak.length > 0 && (
               <div className="rv-detail-col warn">
-                <div className="rv-detail-title"><Target size={15} /> Cần ôn thêm</div>
+                <div className="rv-detail-title"><Target size={15} /> {t("Cần ôn thêm")}</div>
                 <div className="rv-detail-items">
                   {weak.map((c, i) => (<div key={i} className="rv-detail-item"><Target size={14} /> {c.label}</div>))}
                 </div>
@@ -1261,9 +1268,9 @@ export function ReviewResultView({ answers, writingResults, elapsedMs, difficult
 
       <div className="rv-result-actions">
         {mode === "random" && onChangeSet && (
-          <button className="rv-retry-btn change" onClick={onChangeSet}><Sparkles size={16} /> Đổi đề mới</button>
+          <button className="rv-retry-btn change" onClick={onChangeSet}><Sparkles size={16} /> {t("Đổi đề mới")}</button>
         )}
-        <button className="rv-retry-btn" onClick={onRetry}><RotateCcw size={16} /> Ôn lại lần nữa</button>
+        <button className="rv-retry-btn" onClick={onRetry}><RotateCcw size={16} /> {t("Ôn lại lần nữa")}</button>
         <button className="rv-home-btn" onClick={() => onHome(passed)}><Home size={16} /> {mode === "bylesson" && !passed ? "Quay lại bài học" : "Hoàn thành"}</button>
       </div>
     </section>

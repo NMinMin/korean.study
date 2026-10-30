@@ -74,9 +74,11 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const retained = [...activeUsers].filter((id) => previousUsers.has(id)).length
     const totalMinutes = recent.reduce((sum, item) => sum + Number(item.minutes || 0), 0)
     const completed = (progress ?? []).filter((item) => Number(item.progress_percent) >= 100)
+    const minutesByDate = new Map<string, number>()
+    for (const item of recent) minutesByDate.set(item.study_date, (minutesByDate.get(item.study_date) ?? 0) + Number(item.minutes || 0))
     const chart = Array.from({ length: days }, (_, index) => {
       const key = shiftDateKey(startKey, index)
-      return { date: key, minutes: recent.filter((item) => item.study_date === key).reduce((sum, item) => sum + Number(item.minutes || 0), 0) }
+      return { date: key, minutes: minutesByDate.get(key) ?? 0 }
     })
     const courseMap = new Map<string, { title: string; total: number; count: number }>()
     for (const item of progress ?? []) {

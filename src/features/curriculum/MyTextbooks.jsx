@@ -1,19 +1,21 @@
+import { usePreferences } from '../../contexts/PreferencesContext';
 import React from 'react';
 import { BookOpen, ChevronRight, Plus } from 'lucide-react';
 import { Bar } from '../../components/common/ProgressBar';
 
 export default function MyTextbooks({ onOpenBook, onAddBook, books = [] }) {
+  const { t } = usePreferences();
   return (
     <section className="card">
       <div className="card-title-row">
-        <div className="card-title"><BookOpen size={19} color="#7C6FE4" /> Giáo trình của tôi</div>
+        <div className="card-title"><BookOpen size={19} color="#7C6FE4" /> {t("Giáo trình của tôi")}</div>
         <button className="link-btn" onClick={onAddBook}>Quản lý <ChevronRight size={15} /></button>
       </div>
       <div className="books-grid">
         {!books.length && (
           <div className="my-books-empty">
             <BookOpen size={22} />
-            <span>Bạn chưa thêm giáo trình nào.</span>
+            <span>{t("Bạn chưa thêm giáo trình nào.")}</span>
           </div>
         )}
         {books.slice(0, 3).map((b, index) => {

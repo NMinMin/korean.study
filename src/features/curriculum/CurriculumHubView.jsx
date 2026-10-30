@@ -1,10 +1,12 @@
+import { usePreferences } from '../../contexts/PreferencesContext';
 import React from 'react';
 import { BookOpen, ChevronLeft, ChevronRight, Plus, Sparkles } from 'lucide-react';
 
 export default function CurriculumHubView({ onBack, onOpenBook, onAddBook, myBooks = [], availableBooks = [], addingBookId, notice }) {
+  const { t } = usePreferences();
   const renderBook = (book, mode) => (
     <article key={book.id} className={`gm-hub-card ${book.hasContent ? 'has' : 'soon'} ${mode === 'discover' ? 'discover' : ''}`}>
-      <span className="gm-hub-badge" style={{ color: '#4A90E2', background: '#EEF4FD' }}>GIÁO TRÌNH</span>
+      <span className="gm-hub-badge" style={{ color: '#4A90E2', background: '#EEF4FD' }}>{t("GIÁO TRÌNH")}</span>
       <b lang="ko">{book.title}</b>
       {mode === 'discover' && (
         <p className="gm-hub-description">
@@ -31,29 +33,29 @@ export default function CurriculumHubView({ onBack, onOpenBook, onAddBook, myBoo
       <div className="fc2-topbar">
         <div className="fc2-top-left">
           <button className="fc2-back" onClick={onBack} aria-label="Về trang chủ"><ChevronLeft size={20} /></button>
-          <span className="fc2-title"><BookOpen size={18} color="#4A90E2" /> Giáo trình</span>
+          <span className="fc2-title"><BookOpen size={18} color="#4A90E2" /> {t("Giáo trình")}</span>
         </div>
       </div>
       {notice && <div className={`catalog-notice ${notice.type}`}>{notice.message}</div>}
       <div className="curriculum-section-head">
-        <div><h2>Giáo trình của tôi</h2><p>Chỉ hiển thị những giáo trình bạn đã thêm.</p></div>
+        <div><h2>{t("Giáo trình của tôi")}</h2><p>{t("Chỉ hiển thị những giáo trình bạn đã thêm.")}</p></div>
         <span>{myBooks.length} giáo trình</span>
       </div>
       {myBooks.length ? <div className="gm-hub-grid">{myBooks.map((book) => renderBook(book, 'mine'))}</div> : (
         <div className="curriculum-empty">
-          <BookOpen size={28} /><b>Chưa có giáo trình</b>
-          <span>Chọn một giáo trình ở mục Khám phá bên dưới để bắt đầu học.</span>
+          <BookOpen size={28} /><b>{t("Chưa có giáo trình")}</b>
+          <span>{t("Chọn một giáo trình ở mục Khám phá bên dưới để bắt đầu học.")}</span>
           <button type="button" className="curriculum-empty-action" onClick={() => document.getElementById('discover-textbooks')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
             <Plus size={15} /> Thêm giáo trình
           </button>
         </div>
       )}
       <div className="curriculum-section-head discover-head" id="discover-textbooks">
-        <div><h2>Khám phá giáo trình</h2><p>Các giáo trình đã xuất bản và chưa có trong danh sách của bạn.</p></div>
+        <div><h2>{t("Khám phá giáo trình")}</h2><p>{t("Các giáo trình đã xuất bản và chưa có trong danh sách của bạn.")}</p></div>
         <span>{availableBooks.length} giáo trình</span>
       </div>
       {availableBooks.length ? <div className="gm-hub-grid">{availableBooks.map((book) => renderBook(book, 'discover'))}</div> : (
-        <div className="curriculum-empty compact"><Sparkles size={24} /><span>Bạn đã thêm tất cả giáo trình hiện có.</span></div>
+        <div className="curriculum-empty compact"><Sparkles size={24} /><span>{t("Bạn đã thêm tất cả giáo trình hiện có.")}</span></div>
       )}
     </section>
   );

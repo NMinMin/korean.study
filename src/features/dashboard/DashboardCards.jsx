@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useId } from 'react';
+import { usePreferences } from '../../contexts/PreferencesContext';
 import {
   Target, Edit2, Sparkles, Headphones, Mic, Trophy, ChevronRight,
   TrendingUp, BookOpen, Plus, Play, CalendarDays, Coffee, BookMarked,
@@ -55,6 +56,7 @@ export function ConfettiBurst() {
 }
 
 export function DailyGoalRing({ userId, onChangeGoal }) {
+  const { t } = usePreferences();
   const [goal, setGoal] = useState(null);
   const [plan, setPlan] = useState(null);
   const [showConfetti, setShowConfetti] = useState(false);
@@ -120,15 +122,15 @@ export function DailyGoalRing({ userId, onChangeGoal }) {
   return (
     <section className="card goal-card" aria-busy={loading}>
       <div className="card-title-row">
-        <div className="card-title"><Target size={19} color="#7C6FE4" /> Mục tiêu trong ngày</div>
-        <button className="link-btn" onClick={onChangeGoal}><Edit2 size={13} /> Đổi mục tiêu</button>
+        <div className="card-title"><Target size={19} color="#7C6FE4" /> {t('Mục tiêu trong ngày')}</div>
+        <button className="link-btn" onClick={onChangeGoal}><Edit2 size={13} /> {t('Đổi mục tiêu')}</button>
       </div>
       <div className="goal-ring-row">
         {showConfetti && <ConfettiBurst />}
         {isRestDay ? (
-          <div className="goal-rest-day" aria-label="Hôm nay là ngày nghỉ">
+          <div className="goal-rest-day" aria-label={t('Hôm nay là ngày nghỉ')}>
             <Coffee size={34} color="#8B7BE8" />
-            <div><b>Nay là ngày nghỉ</b><span>Nghỉ ngơi để mai học thật tốt nhé.</span></div>
+            <div><b>{t('Nay là ngày nghỉ')}</b><span>{t('Nghỉ ngơi để mai học thật tốt nhé.')}</span></div>
           </div>
         ) : <>
           <svg viewBox="0 0 100 100" width="88" height="88">
@@ -141,8 +143,8 @@ export function DailyGoalRing({ userId, onChangeGoal }) {
             <text x="50" y="64" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#8B85AB">{loading ? 'Đang tải' : `${Number(goal.todayMinutes.toFixed(1)).toLocaleString('vi-VN')}/${goal.targetMinutes} phút`}</text>
           </svg>
           <div className="goal-msg">
-            {loading ? <span>Đang cập nhật mục tiêu hôm nay...</span> : done
-              ? <span>🎉 Chúc mừng, bạn đã đạt mục tiêu học hôm nay!</span>
+            {loading ? <span>{t('Đang cập nhật mục tiêu hôm nay...')}</span> : done
+              ? <span>{t('🎉 Chúc mừng, bạn đã đạt mục tiêu học hôm nay!')}</span>
               : <span>Còn khoảng {remainingSeconds < 60 ? `${remainingSeconds} giây` : `${Math.ceil(remainingSeconds / 60)} phút`} nữa là đạt mục tiêu hôm nay!</span>}
           </div>
         </>}
@@ -152,6 +154,7 @@ export function DailyGoalRing({ userId, onChangeGoal }) {
 }
 
 export function QuickAccessMenu({ onDictation, onShadowing, onReview, onNotebook }) {
+  const { t } = usePreferences();
   const items = [
     { label: 'Sổ tay từ vựng', icon: BookMarked, color: '#7C6FE4', bg: '#F0EEFC', onClick: onNotebook },
     { label: 'Nghe chép chính tả', icon: Headphones, color: '#3FA95C', bg: '#EBF7EE', onClick: onDictation },
@@ -160,12 +163,12 @@ export function QuickAccessMenu({ onDictation, onShadowing, onReview, onNotebook
   ];
   return (
     <section className="card quick-access-card">
-      <div className="card-title"><Sparkles size={19} color="#7C6FE4" /> Truy cập nhanh</div>
+      <div className="card-title"><Sparkles size={19} color="#7C6FE4" /> {t('Truy cập nhanh')}</div>
       <div className="qa-grid">
         {items.map((it) => (
-          <button key={it.label} className="qa-card" style={{ background: it.bg }} onClick={it.onClick} aria-label={it.label}>
+          <button key={it.label} className="qa-card" style={{ background: it.bg }} onClick={it.onClick} aria-label={t(it.label)}>
             <it.icon size={26} color={it.color} />
-            <span className="qa-label">{it.label}</span>
+            <span className="qa-label">{t(it.label)}</span>
           </button>
         ))}
       </div>
@@ -174,6 +177,7 @@ export function QuickAccessMenu({ onDictation, onShadowing, onReview, onNotebook
 }
 
 export function RankPreviewCard({ profile, onOpen }) {
+  const { t } = usePreferences();
   const [lb, setLb] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -189,12 +193,12 @@ export function RankPreviewCard({ profile, onOpen }) {
         {lb && lb.myRank ? (
           <>
             <b>Bạn đang hạng {lb.myRank}{lb.total ? ` / ${lb.total}` : ''} tuần này</b>
-            <span>Cố lên nhé! Bấm để xem bảng xếp hạng đầy đủ.</span>
+            <span>{t('Cố lên nhé! Bấm để xem bảng xếp hạng đầy đủ.')}</span>
           </>
         ) : (
           <>
-            <b>Chưa có hạng</b>
-            <span>Học thêm để xuất hiện trên bảng xếp hạng!</span>
+            <b>{t('Chưa có hạng')}</b>
+            <span>{t('Học thêm để xuất hiện trên bảng xếp hạng!')}</span>
           </>
         )}
       </div>
@@ -204,6 +208,7 @@ export function RankPreviewCard({ profile, onOpen }) {
 }
 
 export function RecentActivityCard({ profile, lesson, vocabulary, computeHomeProgress, computeAndSyncUserStats }) {
+  const { t } = usePreferences();
   const [summary, setSummary] = useState(null);
 
   useEffect(() => {
@@ -220,15 +225,15 @@ export function RecentActivityCard({ profile, lesson, vocabulary, computeHomePro
 
   return (
     <section className="recent-card">
-      <div className="card-title"><TrendingUp size={18} color="#7C6FE4" /> Hoạt động gần đây</div>
+      <div className="card-title"><TrendingUp size={18} color="#7C6FE4" /> {t('Hoạt động gần đây')}</div>
       <div className="recent-list">
         <div className="recent-item purple">
           <span className="recent-dot" />
-          <div><span>Tiến độ tốt nhất</span><b>{summary?.best?.label || 'Chưa có hoạt động'}{summary?.best ? ` · ${summary.best.pct}%` : ''}</b></div>
+          <div><span>{t('Tiến độ tốt nhất')}</span><b>{summary?.best?.label ? t(summary.best.label) : t('Chưa có hoạt động')}{summary?.best ? ` · ${summary.best.pct}%` : ''}</b></div>
         </div>
         <div className="recent-item green">
           <span className="recent-dot" />
-          <div><span>Chuyên cần</span><b>Đạt chuỗi {summary?.streak ?? 0} ngày streak</b></div>
+          <div><span>{t('Chuyên cần')}</span><b>Đạt chuỗi {summary?.streak ?? 0} ngày streak</b></div>
         </div>
       </div>
     </section>
@@ -236,22 +241,23 @@ export function RecentActivityCard({ profile, lesson, vocabulary, computeHomePro
 }
 
 export function ContinueLearning({ onGo, textbook, lesson, hasStarted = false, plantVariant = 'mugunghwa' }) {
+  const { t } = usePreferences();
   const overallPct = lesson?.progressPercent ?? textbook?.progressPercent ?? 0;
   const isCompleted = overallPct >= 100 || lesson?.status === 'done';
   if (!textbook || !lesson) {
     const hasTextbook = Boolean(textbook);
     return (
       <section className="card continue continue-empty">
-        <div className="card-title">Tạm nghỉ ngơi</div>
-        <div className="continue-empty-body"><Coffee size={30} /><div><b>{hasTextbook ? 'Tạm chưa có bài học mới' : 'Chưa có bài học nào'}</b><span>{hasTextbook ? 'Bạn đã hoàn thành các bài hiện có. Nghỉ một chút nhé!' : 'Thêm một giáo trình vào danh sách của bạn khi sẵn sàng bắt đầu.'}</span></div></div>
-        {!hasTextbook && <button className="primary-btn" onClick={onGo}><Plus size={16} /> Thêm giáo trình</button>}
+        <div className="card-title">{t('Tạm nghỉ ngơi')}</div>
+        <div className="continue-empty-body"><Coffee size={30} /><div><b>{t(hasTextbook ? 'Tạm chưa có bài học mới' : 'Chưa có bài học nào')}</b><span>{t(hasTextbook ? 'Bạn đã hoàn thành các bài hiện có. Nghỉ một chút nhé!' : 'Thêm một giáo trình vào danh sách của bạn khi sẵn sàng bắt đầu.')}</span></div></div>
+        {!hasTextbook && <button className="primary-btn" onClick={onGo}><Plus size={16} /> {t('Thêm giáo trình')}</button>}
       </section>
     );
   }
   return (
     <section className="card continue">
       <div className="card-title-row">
-        <div className="card-title">{isCompleted ? 'Đã hoàn thành' : hasStarted ? 'Tiếp tục học' : 'Bắt đầu học'}</div>
+        <div className="card-title">{t(isCompleted ? 'Đã hoàn thành' : hasStarted ? 'Tiếp tục học' : 'Bắt đầu học')}</div>
       </div>
       <div className="cont-body">
         <div className="book-3d" style={{ '--bk': '#7C6FE4' }}>{lesson.no}과</div>
@@ -267,7 +273,7 @@ export function ContinueLearning({ onGo, textbook, lesson, hasStarted = false, p
       </div>
       <button className="primary-btn" onClick={onGo}>
         {isCompleted ? <Check size={16} /> : <Play size={16} fill="#fff" />}
-        {isCompleted ? 'Đã hoàn thành hôm nay' : hasStarted ? 'Tiếp tục học' : 'Bắt đầu học'}
+        {t(isCompleted ? 'Đã hoàn thành hôm nay' : hasStarted ? 'Tiếp tục học' : 'Bắt đầu học')}
       </button>
     </section>
   );
@@ -282,6 +288,7 @@ const EMPTY_RADAR_AXES = [
 ];
 
 export function RadarChart({ axes, size = 200, loading = false }) {
+  const { t } = usePreferences();
   const cx = size / 2, cy = size / 2, r = size / 2 - 38;
   const n = axes.length;
   const angleFor = (i) => (-90 + i * (360 / n)) * (Math.PI / 180);
@@ -309,7 +316,7 @@ export function RadarChart({ axes, size = 200, loading = false }) {
         const [lx, ly] = pointAt(i, 1.26);
         return (
           <text key={i} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle" fontSize="10.5" fontWeight="800" fill="#4B4470">
-            {ax.label}
+            {t(ax.label)}
           </text>
         );
       })}
@@ -318,6 +325,7 @@ export function RadarChart({ axes, size = 200, loading = false }) {
 }
 
 export function PersonalProgressSection({ profile, lesson, vocabulary, computeRadarStats }) {
+  const { t } = usePreferences();
   const [axes, setAxes] = useState(null);
   const [detail, setDetail] = useState(null);
   const [showDetail, setShowDetail] = useState(() => window.matchMedia('(min-width: 861px)').matches);
@@ -351,9 +359,9 @@ export function PersonalProgressSection({ profile, lesson, vocabulary, computeRa
   return (
     <section className="card radar-card" aria-busy={loading}>
       <div className="card-title-row">
-        <div className="card-title"><Target size={19} color="#7C6FE4" /> Tiến độ cá nhân</div>
+        <div className="card-title"><Target size={19} color="#7C6FE4" /> {t('Tiến độ cá nhân')}</div>
         <button className="link-btn" disabled={!detail} onClick={() => setShowDetail((v) => !v)}>
-          {showDetail ? 'Thu gọn' : 'Xem chi tiết'} <ChevronRight size={15} className={showDetail ? 'chev-rot' : ''} />
+          {t(showDetail ? 'Thu gọn' : 'Xem chi tiết')} <ChevronRight size={15} className={showDetail ? 'chev-rot' : ''} />
         </button>
       </div>
       <div className={`radar-row ${showDetail ? 'with-detail' : ''}`}>
@@ -361,16 +369,16 @@ export function PersonalProgressSection({ profile, lesson, vocabulary, computeRa
         {showDetail && detail && (
           <div className="radar-detail">
             <div className="radar-achieve-grid">
-              <div className="radar-achieve"><Type size={16} color="#7C6FE4" /><span>{detail ? `${detail.vocab.count}/${detail.vocab.total}` : loading ? <span className="community-skeleton-block radar-value-skeleton" aria-hidden="true" /> : '—'}</span><small>Từ vựng</small></div>
-              <div className="radar-achieve"><Headphones size={16} color="#4A90E2" /><span>{detail ? `${detail.listening.count}/${detail.listening.total}` : loading ? <span className="community-skeleton-block radar-value-skeleton" aria-hidden="true" /> : '—'}</span><small>Nghe</small></div>
-              <div className="radar-achieve"><Mic size={16} color="#3FA95C" /><span>{detail ? `${detail.pronunciation.count}/${detail.pronunciation.total}` : loading ? <span className="community-skeleton-block radar-value-skeleton" aria-hidden="true" /> : '—'}</span><small>Phát âm</small></div>
+              <div className="radar-achieve"><Type size={16} color="#7C6FE4" /><span>{detail ? `${detail.vocab.count}/${detail.vocab.total}` : loading ? <span className="community-skeleton-block radar-value-skeleton" aria-hidden="true" /> : '—'}</span><small>{t('Từ vựng')}</small></div>
+              <div className="radar-achieve"><Headphones size={16} color="#4A90E2" /><span>{detail ? `${detail.listening.count}/${detail.listening.total}` : loading ? <span className="community-skeleton-block radar-value-skeleton" aria-hidden="true" /> : '—'}</span><small>{t('Nghe')}</small></div>
+              <div className="radar-achieve"><Mic size={16} color="#3FA95C" /><span>{detail ? `${detail.pronunciation.count}/${detail.pronunciation.total}` : loading ? <span className="community-skeleton-block radar-value-skeleton" aria-hidden="true" /> : '—'}</span><small>{t('Phát âm')}</small></div>
               <div className="radar-achieve">
                 <Target size={16} color="#E5566B" />
                 <span>{loading ? <span className="community-skeleton-block radar-value-skeleton" aria-hidden="true" /> : detail?.reflex ? `${detail.reflex.avgTimeLeft}s` : '—'}</span>
                 <small>Phản xạ{detail?.reflex ? ` (${detail.reflex.count} lượt)` : detail ? ' (chưa có)' : ''}</small>
               </div>
               <div className="radar-achieve radar-achieve-wide">
-                <Flame size={16} color="#F0642E" fill="#F79A5E" /><span>{detail.retained.count}/{detail.retained.total}</span><small>Kiến thức còn nhớ (từ nhớ lâu)</small>
+                <Flame size={16} color="#F0642E" fill="#F79A5E" /><span>{detail.retained.count}/{detail.retained.total}</span><small>{t('Kiến thức còn nhớ (từ nhớ lâu)')}</small>
               </div>
             </div>
           </div>
@@ -382,6 +390,7 @@ export function PersonalProgressSection({ profile, lesson, vocabulary, computeRa
 }
 
 function ReviewWordResult({ evaluation, wordId, wordCount }) {
+  const { t } = usePreferences();
   const correct = getReviewWordResult(evaluation, wordId, wordCount);
   if (typeof correct !== 'boolean') return null;
   return <span className={`review-word-result ${correct ? 'correct' : 'incorrect'}`} role="img" aria-label={correct ? 'Trả lời đúng' : 'Trả lời sai'} title={correct ? 'Trả lời đúng' : 'Trả lời sai'}>
@@ -390,6 +399,7 @@ function ReviewWordResult({ evaluation, wordId, wordCount }) {
 }
 
 export function ReviewSchedule({ userId, onReview }) {
+  const { t } = usePreferences();
   const [calendarOpen, setCalendarOpen] = useState(false);
   const calendarId = useId();
 
@@ -452,18 +462,18 @@ export function ReviewSchedule({ userId, onReview }) {
         aria-controls={calendarId}
         onClick={() => setCalendarOpen((open) => !open)}
       >
-        <span className="card-title"><CalendarDays size={19} color="#7C6FE4" aria-hidden="true" /> Lịch ôn từ vựng</span>
+        <span className="card-title"><CalendarDays size={19} color="#7C6FE4" aria-hidden="true" /> {t('Lịch ôn từ vựng')}</span>
         <ChevronDown size={20} aria-hidden="true" className={calendarOpen ? 'is-open' : ''} />
       </button>
       <div id={calendarId} className={`review-calendar-content${calendarOpen ? ' is-open' : ''}`}>
       <div className="card-title-row">
-        <div className="card-title"><CalendarDays size={19} color="#7C6FE4" /> Lịch ôn từ vựng</div>
+        <div className="card-title"><CalendarDays size={19} color="#7C6FE4" /> {t('Lịch ôn từ vựng')}</div>
         <span className="review-cycle" title="Mỗi nhóm ôn vào ngày 1, 3, 5 và 7">Chu kỳ 1–3–5–7 · tối đa 10 từ</span>
       </div>
       {(loading || loadError) && <span className={loading ? 'community-skeleton-status' : 'settings-hint'} role="status">{loading ? 'Đang tải lịch ôn từ vựng...' : 'Chưa tải được lịch ôn. Vui lòng thử lại sau.'}</span>}
       <div className="mobile-review-days">
         {schedule.map((day, index) => <button key={day.dateKey} disabled={loading || loadError || index > 0 || !day.words.length} className={`mobile-review-day ${day.evaluation ? `review-result-${day.evaluation.rating.toLowerCase()}` : ''} ${index === 0 ? 'today' : ''}`} onClick={() => { if (index === 0 && day.words.length) detailDialog.current?.showModal(); }} aria-haspopup="dialog" aria-label={index === 0 ? `Xem từ ôn hôm nay, ${day.date.toLocaleDateString('vi-VN')}` : `${day.label}, danh sách từ sẽ mở vào đúng ngày ôn`}>
-          <span><b>{day.label}</b><small>{day.date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</small></span>
+          <span><b>{t(day.label)}</b><small>{day.date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</small></span>
           <span className="mobile-review-count">{loading ? <span className="community-skeleton-block review-count-skeleton" aria-hidden="true" /> : loadError ? '—' : day.evaluation ? `${day.evaluation.score}%` : day.words.length ? `${day.words.length} từ` : 'Nghỉ'}</span><ChevronRight size={16} />
         </button>)}
       </div>
@@ -474,7 +484,7 @@ export function ReviewSchedule({ userId, onReview }) {
           {picked && <>
             <p>{picked.evaluation ? `${picked.evaluation.rating} · ${picked.evaluation.correctCount}/${picked.evaluation.totalCount} từ đúng — ${picked.evaluation.feedback}` : picked.words.length ? `${picked.words.length} từ đang chờ bạn ôn lại` : 'Ngày nghỉ — không có từ nào cần ôn'}</p>
             {picked.words.length > 0 && <ul className="review-dialog-words">{picked.words.map((word) => <li key={word.id}><b>{word.word}</b><span>{word.meaningVi}</span><ReviewWordResult evaluation={picked.evaluation} wordId={word.id} wordCount={picked.words.length} /></li>)}</ul>}
-            {picked.words.length > 0 && <button className="primary-btn" onClick={() => { detailDialog.current?.close(); onReview(picked.words, picked.dateKey); }}>Ôn ngay</button>}
+            {picked.words.length > 0 && <button className="primary-btn" onClick={() => { detailDialog.current?.close(); onReview(picked.words, picked.dateKey); }}>{t('Ôn ngay')}</button>}
           </>}
         </div>
       </dialog>
@@ -484,7 +494,7 @@ export function ReviewSchedule({ userId, onReview }) {
           <div key={d.date.toISOString()} className={`day ${d.evaluation ? `review-result-${d.evaluation.rating.toLowerCase()}` : ''} ${index === 0 ? 'today selected' : 'preview-locked'} ${d.date.getDay() === 6 ? 'saturday' : ''} ${d.date.getDay() === 0 ? 'sunday' : ''} ${d.words.length ? 'has-review' : d.evaluation ? 'reviewed-day' : 'rest-day'}`} role={index === 0 && d.words.length ? 'button' : undefined} tabIndex={index === 0 && d.words.length ? 0 : undefined} aria-expanded={index === 0 && d.words.length ? showWords : undefined} aria-controls={index === 0 && d.words.length ? 'review-today-words' : undefined} title={index > 0 ? 'Danh sách từ sẽ mở vào đúng ngày ôn' : undefined} onClick={() => { if (index === 0 && d.words.length) setShowWords((visible) => !visible); }} onKeyDown={(event) => { if (event.target === event.currentTarget && index === 0 && d.words.length && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setShowWords((visible) => !visible); } }}>
 
               {d.words.length > 0 && <PurpleMugunghwaIcon className="day-review-flower" />}
-              <span className="day-name">{d.label}</span>
+              <span className="day-name">{t(d.label)}</span>
               <span className="day-date">{d.date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</span>
               <span className="day-words">{loading ? <span className="community-skeleton-block review-count-skeleton" aria-hidden="true" /> : loadError ? '—' : d.evaluation ? `${d.evaluation.score}%` : d.words.length ? `${d.words.length} từ` : 'Nghỉ ngơi'}</span>
               {index === 0 && d.words.length ? (

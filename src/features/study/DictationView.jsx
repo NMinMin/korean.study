@@ -1,3 +1,4 @@
+import { usePreferences } from '../../contexts/PreferencesContext';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, Volume2, Sparkles, CheckCircle2, RotateCcw, AlertTriangle,
@@ -44,6 +45,7 @@ const buildImageQuizItems = () => VOCAB_SAMPLE.map((word, index) => {
 });
 
 export function FillBlankListenView({ onBack }) {
+  const { t } = usePreferences();
   const [answers, setAnswers] = useState({});
   const [checked, setChecked] = useState(false);
   const total = FILL_BLANK_ITEMS.length;
@@ -58,7 +60,7 @@ export function FillBlankListenView({ onBack }) {
       <div className="fc2-topbar">
         <div className="fc2-top-left">
           <button className="fc2-back" onClick={onBack} aria-label="Quay lại"><ChevronLeft size={20} /></button>
-          <span className="fc2-title"><Headphones size={18} color="#7C6FE4" /> Điền vào chỗ trống [Nghe]</span>
+          <span className="fc2-title"><Headphones size={18} color="#7C6FE4" /> {t("Điền vào chỗ trống [Nghe]")}</span>
         </div>
       </div>
 
@@ -94,7 +96,7 @@ export function FillBlankListenView({ onBack }) {
                   </p>
                   {checked && (
                     isCorrect
-                      ? <span className="qz-fb-feedback ok"><CheckCircle2 size={14} /> Chính xác!</span>
+                      ? <span className="qz-fb-feedback ok"><CheckCircle2 size={14} /> {t("Chính xác!")}</span>
                       : <span className="qz-fb-feedback wrong">Đáp án đúng: <b lang="ko">{it.word}</b></span>
                   )}
                 </div>
@@ -113,11 +115,11 @@ export function FillBlankListenView({ onBack }) {
             setChecked(true);
             if (FILL_BLANK_ITEMS.every((item, index) => (answers[index] || "").trim() === item.word)) playCorrectSound();
             else playIncorrectSound();
-          }}>Kiểm tra đáp án</button>
+          }}>{t("Kiểm tra đáp án")}</button>
         ) : (
           <div className="qz-result-row">
             <span className="qz-score">Bạn đúng {score}/{total} câu</span>
-            <button className="qz-check-btn purple" onClick={retry}>Làm lại</button>
+            <button className="qz-check-btn purple" onClick={retry}>{t("Làm lại")}</button>
           </div>
         )}
       </div>
@@ -129,6 +131,7 @@ export function FillBlankListenView({ onBack }) {
 /*  DẠNG 2 — GHÉP CẶP                                                   */
 /* ------------------------------------------------------------------ */
 export function MatchPairsView({ onBack }) {
+  const { t } = usePreferences();
   const [order] = useState(() => shuffleArr(MATCH_ITEMS.map((_, i) => i)));
   const [selected, setSelected] = useState(null);
   const [pairs, setPairs] = useState({});
@@ -160,7 +163,7 @@ export function MatchPairsView({ onBack }) {
       <div className="fc2-topbar">
         <div className="fc2-top-left">
           <button className="fc2-back" onClick={onBack} aria-label="Quay lại"><ChevronLeft size={20} /></button>
-          <span className="fc2-title"><Link2 size={18} color="#3FA95C" /> Ghép cặp</span>
+          <span className="fc2-title"><Link2 size={18} color="#3FA95C" /> {t("Ghép cặp")}</span>
         </div>
       </div>
 
@@ -216,6 +219,7 @@ export function MatchPairsView({ onBack }) {
 /*  DẠNG 3 — CHỌN HÌNH                                                  */
 /* ------------------------------------------------------------------ */
 export function ChooseImageView({ onBack }) {
+  const { t } = usePreferences();
   const [items] = useState(buildImageQuizItems);
   const [idx, setIdx] = useState(0);
   const [picked, setPicked] = useState(null);
@@ -238,7 +242,7 @@ export function ChooseImageView({ onBack }) {
       <div className="fc2-topbar">
         <div className="fc2-top-left">
           <button className="fc2-back" onClick={onBack} aria-label="Quay lại"><ChevronLeft size={20} /></button>
-          <span className="fc2-title"><ImageIcon size={18} color="#4A90E2" /> Chọn hình</span>
+          <span className="fc2-title"><ImageIcon size={18} color="#4A90E2" /> {t("Chọn hình")}</span>
         </div>
       </div>
 
@@ -287,6 +291,7 @@ export function ChooseImageView({ onBack }) {
 /*  cho Shadowing), gợi ý hé lộ từng ký tự khi trả lời sai              */
 /* ------------------------------------------------------------------ */
 export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vocabulary = VOCAB_SAMPLE, initialMode = "practice", onBack, onFinish, onGoVocab, onProgress }) {
+  const { t } = usePreferences();
   const mode = initialMode;
   const [orderedLines] = useState(() => shuffleArr([...lines]));
   const [idx, setIdx] = useState(0);
@@ -711,7 +716,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
       <div className="fc2-topbar">
         <div className="fc2-top-left">
           <button className="fc2-back" onClick={onBack} aria-label="Quay lại"><ChevronLeft size={20} /></button>
-          <span className="fc2-title"><Headphones size={18} color="#7C6FE4" /> Nghe chép chính tả</span>
+          <span className="fc2-title"><Headphones size={18} color="#7C6FE4" /> {t("Nghe chép chính tả")}</span>
           <span className="dc-lesson-pill"><BookOpen size={13} /> Bài {lesson.no}</span>
         </div>
         <div className="fc2-top-mid"><span className="fc2-progress-text">Câu {idx + 1} / {total}</span></div>
@@ -759,12 +764,12 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
             </div>
           </div>
           <div className="dc-speed-row">
-            <span className="dc-speed-label">Tốc độ:</span>
+            <span className="dc-speed-label">{t("Tốc độ:")}</span>
             {[0.75, 1, 1.25].map((s) => (
               <button key={s} className={`dc-speed-chip ${speed === s ? "on" : ""}`} onClick={() => setSpeed(s)}>{s}x</button>
             ))}
           </div>
-          <p className="dc-instruction"><Volume2 size={15} color="#7C6FE4" /> Nghe đoạn hội thoại và nhập chính xác câu bạn nghe được.</p>
+          <p className="dc-instruction"><Volume2 size={15} color="#7C6FE4" /> {t("Nghe đoạn hội thoại và nhập chính xác câu bạn nghe được.")}</p>
 
           <div className="dc-input-row">
             <textarea
@@ -795,14 +800,14 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
           {hintTexts[idx] && (
             <div className="dc-hint-line">
               <Lightbulb size={15} />
-              <strong>Từ tiếp theo:</strong>
+              <strong>{t("Từ tiếp theo:")}</strong>
               <span lang="ko">{hintTexts[idx]}</span>
             </div>
           )}
           {showTrans[idx] && (
             <div className={`dc-trans-line ${line.vi ? "" : "is-empty"}`}>
               <BookMarked size={15} />
-              <strong>Bản dịch:</strong>
+              <strong>{t("Bản dịch:")}</strong>
               <span>{line.vi || "Câu này chưa có bản dịch tiếng Việt."}</span>
             </div>
           )}
@@ -825,7 +830,7 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
               {diffWords().map((d, i) => (
                 <span key={i} className={`dc-diff-word ${d.correct ? "correct" : "wrong"} ${d.missing ? "missing" : ""}`} title={!d.correct && d.expected ? `Đúng: ${d.expected}` : undefined}>
                   {d.correct ? d.word : d.missing ? (
-                    <><span>Thiếu:</span><b>{d.expected}</b></>
+                    <><span>{t("Thiếu:")}</span><b>{d.expected}</b></>
                   ) : (
                     <><del>{d.word}</del><span className="dc-diff-arrow">→</span><b>{d.expected}</b></>
                   )}
@@ -835,27 +840,27 @@ export default function DictationView({ lesson, userId, lines = SHADOW_LINES, vo
           )}
 
           <div className="dc-actions">
-            <button className="dc-act-btn" onClick={skipCurrentQuestion} disabled={questionLocked}><ChevronRight size={15} /> Bỏ qua câu</button>
+            <button className="dc-act-btn" onClick={skipCurrentQuestion} disabled={questionLocked}><ChevronRight size={15} /> {t("Bỏ qua câu")}</button>
             <button className="dc-act-btn primary" onClick={check} disabled={!value.trim() || questionLocked}><CheckCircle2 size={15} /> {questionLocked ? "Đã hoàn thành" : "Kiểm tra"}</button>
           </div>
         </div>
 
         <div className="dc-side">
           <div className="dc-tip-box">
-            <div className="dc-tip-title"><Star size={15} fill="#F0C24E" color="#F0C24E" /> Mẹo</div>
+            <div className="dc-tip-title"><Star size={15} fill="#F0C24E" color="#F0C24E" /> {t("Mẹo")}</div>
             <ul>
               <li>{mode === "practice" ? "Hoàn thành Luyện tập để mở Kiểm tra; mỗi câu có tối đa 3 gợi ý." : `Đạt từ ${DICTATION_PASS_PERCENT}% câu đúng để tiến trình được tính 100%; câu bỏ qua tính là không thuộc.`}</li>
-              <li>Dấu câu và khoảng trắng nhỏ không bị tính sai.</li>
-              <li>Nghe theo cụm từ.</li>
+              <li>{t("Dấu câu và khoảng trắng nhỏ không bị tính sai.")}</li>
+              <li>{t("Nghe theo cụm từ.")}</li>
             </ul>
             <div className="dc-tip-bunny"><BunnyMascot /></div>
           </div>
           <button className="dc-vocab-box" onClick={onGoVocab}>
-            <div className="dc-vocab-title"><BookOpen size={15} /> Từ vựng xuất hiện trong bài</div>
+            <div className="dc-vocab-title"><BookOpen size={15} /> {t("Từ vựng xuất hiện trong bài")}</div>
             <div className="dc-vocab-count-wrap">
               <span className="dc-vocab-ico"><BookMarked size={22} color="#7C6FE4" /></span>
               <b>{vocabulary.length}</b>
-              <small>từ vựng</small>
+              <small>{t("từ vựng")}</small>
             </div>
           </button>
         </div>

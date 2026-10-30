@@ -1,3 +1,4 @@
+import { usePreferences } from '../../contexts/PreferencesContext';
 import React, { useState, useEffect } from 'react';
 import {
   Trophy, BookOpen, ChevronLeft, ChevronRight, Crown, Medal, Flame, Sparkles
@@ -7,6 +8,7 @@ import { computeLeaderboard } from './leaderboardApi';
 import LeaderboardSkeleton from './LeaderboardSkeleton';
 
 export default function LeaderboardView({ profile, onBack, hideHeader, textbooks = [] }) {
+  const { t } = usePreferences();
   const [selectedTextbookId, setSelectedTextbookId] = useState('');
   const [page, setPage] = useState(1);
   const [lb, setLb] = useState(null);
@@ -44,7 +46,7 @@ export default function LeaderboardView({ profile, onBack, hideHeader, textbooks
         <div className="fc2-topbar">
           <div className="fc2-top-left">
             <button className="fc2-back" onClick={onBack} aria-label="Về trang chủ"><ChevronLeft size={20} /></button>
-            <span className="fc2-title"><Trophy size={18} color="#F0912E" /> Bảng xếp hạng</span>
+            <span className="fc2-title"><Trophy size={18} color="#F0912E" /> {t("Bảng xếp hạng")}</span>
           </div>
         </div>
       )}
@@ -54,7 +56,7 @@ export default function LeaderboardView({ profile, onBack, hideHeader, textbooks
         <div className="lb-selector-wrap">
           <label className="lb-selector-label">
             <BookOpen size={16} color="#7C6FE4" />
-            <span>Giáo trình:</span>
+            <span>{t("Giáo trình:")}</span>
           </label>
           <AppCombobox
             value={selectedTextbookId}
@@ -88,7 +90,7 @@ export default function LeaderboardView({ profile, onBack, hideHeader, textbooks
       ) : !lb || lb.rows.length === 0 ? (
         <div className="cg-empty">
           <Trophy size={36} color="#C9BCF2" />
-          <p>Chưa có học viên nào có điểm XP trong bảng xếp hạng này.</p>
+          <p>{t("Chưa có học viên nào có điểm XP trong bảng xếp hạng này.")}</p>
         </div>
       ) : (
         <>
@@ -115,7 +117,7 @@ export default function LeaderboardView({ profile, onBack, hideHeader, textbooks
                   <div className="lb-user-info">
                     <span className="lb-name">
                       {u.displayName}
-                      {isMe && <span className="lb-me-tag">bạn</span>}
+                      {isMe && <span className="lb-me-tag">{t("bạn")}</span>}
                     </span>
                     <span className="lb-streak">
                       <Flame size={13} color="#F0642E" fill="#F79A5E" /> {u.streak} ngày liên tiếp
