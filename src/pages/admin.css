@@ -3792,3 +3792,12 @@
 }
 .admin-course-progress-tools small { flex-basis: 100%; color: var(--ks-text-847da5, #847da5); font-size: 12px; }
 .admin-curriculum-ranking { margin: 24px 0; }
+
+@media (max-width: 860px) {
+  .admin-combobox-menu { width: 100%; min-width: 0; max-width: 100%; }
+  .admin-combobox-search { min-width: 0; }
+  .admin-combobox-options { overflow-x: hidden; }
+  .admin-combobox-menu button { white-space: normal; overflow-wrap: anywhere; }
+  .admin-combobox-menu button span, .admin-combobox-trigger span { min-width: 0; overflow-wrap: anywhere; }
+  .admin-combobox-trigger svg { flex: none; }
+}
