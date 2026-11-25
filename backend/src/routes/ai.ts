@@ -2,8 +2,10 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { config } from '../config.js'
 import { requireAuth } from '../plugins/auth.js'
+import { BusyError, createAdmission } from '../lib/admission.js'
 
 const AI_TIMEOUT_MS = 25_000
+const acquireAi = createAdmission(6, 30, 15_000)
 
 const requestSchema = z.object({
   text: z.string().trim().min(1).max(30_000),
@@ -39,6 +41,13 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
       })
     }
 
+    let release: () => void
+    try { release = await acquireAi() }
+    catch (error) {
+      if (!(error instanceof BusyError)) throw error
+      return reply.header('Retry-After', '10').code(503).send({ code: 'AI_BUSY', message: error.message, requestId: request.id })
+    }
+    try {
     let response: Response
     try {
       response = await fetch(config.GROQ_GRADER_URL, {
@@ -117,5 +126,6 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
       result: result.trim(),
       model: typeof data?.model === 'string' ? data.model : config.GROQ_GRADER_MODEL,
     }
+    } finally { release() }
   })
 }

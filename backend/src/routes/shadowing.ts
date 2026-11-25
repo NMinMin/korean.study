@@ -2,9 +2,11 @@ import multipart from '@fastify/multipart'
 import type { FastifyPluginAsync } from 'fastify'
 import { config } from '../config.js'
 import { requireAuth } from '../plugins/auth.js'
+import { BusyError, createAdmission } from '../lib/admission.js'
 
 const MAX_RECORDING_BYTES = 20 * 1024 * 1024
 const TRANSCRIPTION_TIMEOUT_MS = 60_000
+const acquireTranscription = createAdmission(4, 20, 15_000)
 
 type SpeechToTextResponse = {
   text?: unknown
@@ -25,6 +27,7 @@ async function transcribeRecording(content: Buffer, mimetype: string, filename: 
   const data = await response.json().catch(() => null) as SpeechToTextResponse | null
 
   if (!response.ok) {
+    if (response.status === 429) throw Object.assign(new Error('Dịch vụ nhận diện giọng nói đang giới hạn lượt dùng. Vui lòng thử lại sau.'), { statusCode: 429 })
     const providerMessage = typeof data?.detail === 'string'
       ? data.detail
       : typeof data?.message === 'string' ? data.message : ''
@@ -43,6 +46,13 @@ export const shadowingRoutes: FastifyPluginAsync = async (app) => {
   })
 
   app.post('/shadowing/transcribe', { preHandler: requireAuth }, async (request, reply) => {
+    let release: () => void
+    try { release = await acquireTranscription() }
+    catch (error) {
+      if (!(error instanceof BusyError)) throw error
+      return reply.header('Retry-After', '10').code(503).send({ code: 'SPEECH_BUSY', message: error.message, requestId: request.id })
+    }
+    try {
     const part = await request.file()
     if (!part) {
       return reply.code(400).send({ code: 'AUDIO_REQUIRED', message: 'Thiếu file ghi âm.', requestId: request.id })
@@ -56,11 +66,13 @@ export const shadowingRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(400).send({ code: 'EMPTY_AUDIO', message: 'File ghi âm không có dữ liệu.', requestId: request.id })
     }
 
-    const transcript = await transcribeRecording(
-      content,
-      part.mimetype,
-      part.filename || 'shadowing.webm',
-    )
+    let transcript: string
+    try { transcript = await transcribeRecording(content, part.mimetype, part.filename || 'shadowing.webm') }
+    catch (error) {
+      if (error instanceof Error && 'statusCode' in error && error.statusCode === 429) return reply.header('Retry-After', '10').code(429).send({ code: 'SPEECH_RATE_LIMIT', message: error.message, requestId: request.id })
+      request.log.error({ err: error }, 'Speech-to-text request failed')
+      return reply.code(502).send({ code: 'SPEECH_UNAVAILABLE', message: 'Dịch vụ nhận diện giọng nói tạm thời không phản hồi. Vui lòng thử lại.', requestId: request.id })
+    }
 
     if (!transcript) {
       return reply.code(422).send({
@@ -71,5 +83,6 @@ export const shadowingRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return { transcript, provider: 'speech-to-text-hy3k' }
+    } finally { release() }
   })
 }
