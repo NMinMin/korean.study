@@ -3801,3 +3801,14 @@
   .admin-combobox-menu button span, .admin-combobox-trigger span { min-width: 0; overflow-wrap: anywhere; }
   .admin-combobox-trigger svg { flex: none; }
 }
+
+.admin-skill-detail-button { padding: 8px 12px; border: 1px solid var(--ks-border-ded8f1, #ded8f1); border-radius: 10px; background: var(--ks-surface-fbfaff, #fbfaff); color: var(--ks-text-6255d8, #6255d8); font: 700 12px 'Quicksand', sans-serif; cursor: pointer; }
+.admin-skill-detail-modal { width: min(560px, 100%); }
+.admin-skill-detail-body { display: grid; gap: 14px; padding: 20px 24px; }
+.admin-skill-detail-body > p { margin: 0; color: var(--ks-text-847da5, #847da5); font-size: 12px; line-height: 1.5; }
+.admin-skill-detail-row { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(70px, 2fr) auto; align-items: center; gap: 10px; font-size: 12px; }
+.admin-skill-detail-row > span { overflow-wrap: anywhere; }
+.admin-skill-detail-row > b { min-width: 37px; text-align: right; color: var(--ks-text-6255d8, #6255d8); font-size: 12px; }
+.admin-skill-detail-track { height: 8px; overflow: hidden; border-radius: 999px; background: var(--ks-surface-e7e7ea, #e7e7ea); }
+.admin-skill-detail-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #7040d8, #a68af2); }
+@media (max-width: 520px) { .admin-skill-detail-body { padding: 16px; } .admin-skill-detail-row { grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; } .admin-skill-detail-track { grid-row: 2; grid-column: 1 / -1; } }

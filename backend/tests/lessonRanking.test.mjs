@@ -16,6 +16,7 @@ supabaseAdmin.from = (table) => {
     select(...args) { calls.push([table, 'select', ...args]); return this },
     eq(...args) { calls.push([table, 'eq', ...args]); return this },
     order(...args) { calls.push([table, 'order', ...args]); return this },
+    in(...args) { calls.push([table, 'in', ...args]); return Promise.resolve({ data: [{ user_id: 'learner', activity_type: 'nghechep', progress_percent: 60 }, { user_id: 'learner', activity_type: 'tuvung', progress_percent: 0 }], error: null }) },
     maybeSingle() { return Promise.resolve({ data: table === 'profiles' ? { is_locked: false } : { role: 'admin' }, error: null }) },
     range(...args) { calls.push([table, 'range', ...args]); return Promise.resolve({ data: [{ user_id: 'learner', progress_percent: 75, updated_at: '2026-01-01T00:00:00Z', profiles: { display_name: 'Học viên' } }], count: 21, error: null }) },
   }
@@ -29,8 +30,9 @@ test('admin lesson ranking is authenticated, paginated and wrapped for adminApi'
   assert.equal(unauthorized.statusCode, 401)
   const response = await app.inject({ method: 'GET', url: '/v1/admin/lessons/lesson-1/ranking?page=2', headers: { authorization: 'Bearer test' } })
   assert.equal(response.statusCode, 200)
-  assert.deepEqual(response.json().data, { items: [{ user_id: 'learner', progress_percent: 75, updated_at: '2026-01-01T00:00:00Z', profiles: { display_name: 'Học viên' } }], total: 21, page: 2, pageSize: 20 })
+  assert.deepEqual(response.json().data, { items: [{ user_id: 'learner', progress_percent: 75, updated_at: '2026-01-01T00:00:00Z', profiles: { display_name: 'Học viên' }, skills: { nghechep: 60, tuvung: 0 } }], total: 21, page: 2, pageSize: 20 })
   assert.ok(calls.some((call) => JSON.stringify(call) === JSON.stringify(['lesson_progress', 'eq', 'lesson_id', 'lesson-1'])))
   assert.ok(calls.some((call) => JSON.stringify(call) === JSON.stringify(['lesson_progress', 'range', 20, 39])))
+  assert.ok(calls.some((call) => JSON.stringify(call) === JSON.stringify(['activity_progress', 'eq', 'lesson_id', 'lesson-1'])))
   await app.close()
 })

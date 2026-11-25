@@ -314,25 +314,19 @@ function extractExerciseStorageUrls(item?: Exercise | null): string[] {
   return urls.filter((u): u is string => typeof u === 'string' && /api-cloud-u4v8\.onrender\.com\/files\//i.test(u))
 }
 
-function ttsFilename(text: string): string {
-  const safe = text.trim().replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'korean'
-  return `${Date.now()}-${safe}-speech.mp3`
-}
-
 async function generateKoreanTts(text: string, voice: TtsVoice, speed: number = 1): Promise<string> {
   const apiVoice = voice === 'ko-KR-HyunSuNeural' ? 'ko-KR-HyunsuNeural' : voice
-  const response = await fetch('https://text-to-speed.onrender.com/tts', {
+  const data = await adminApi<{ id: string }>('/tts', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, voice: apiVoice, filename: ttsFilename(text), speed }),
+    body: JSON.stringify({ text, voice: apiVoice, speed }),
   })
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok || data?.success === false) {
-    throw new Error(data?.message || data?.error || 'Không thể tạo audio phát âm.')
+  if (!data?.id) throw new Error('Không thể thêm yêu cầu tạo giọng vào hàng chờ.')
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, 10000 + Math.random() * 5000))
+    const job = await adminApi<{ status: string; url?: string; message?: string }>(`/tts/${data.id}`)
+    if (job.status === 'completed' && job.url) return normalizeAssetUrl(job.url)
+    if (job.status === 'failed') throw new Error(job.message || 'Không thể tạo audio phát âm.')
   }
-  const url = data?.url || data?.data?.url
-  if (!url || typeof url !== 'string') throw new Error('API TTS chưa trả về URL audio.')
-  return normalizeAssetUrl(url)
 }
 
 function VoiceSelect({
@@ -912,16 +906,7 @@ export default function AdminExercises() {
         setUploading('image')
         imageUrl = await uploadImageToApi(pendingImage)
       }
-      if ((isVocabularyExercise || isDictation || isShadowing) && draft.promptKo.trim() && !audioUrl) {
-        setUploading('audio')
-        try {
-          audioUrl = await generateKoreanTts(draft.promptKo.trim(), draft.ttsVoice, draft.ttsSpeed)
-        } catch (cause) {
-          // TTS là tài nguyên bổ sung: lỗi dịch vụ không được làm mất nội dung admin vừa nhập.
-          ttsWarning = cause instanceof Error ? cause.message : 'không thể tạo audio TTS.'
-          audioUrl = ''
-        }
-      }
+      const needsAudio = (isVocabularyExercise || isDictation || isShadowing) && !audioUrl
       const body = {
         lessonId: draft.lessonId,
         skillType: draft.skillType,
@@ -936,10 +921,16 @@ export default function AdminExercises() {
         sortOrder: editing?.sort_order ?? 0,
         status: editing?.status ?? 'published',
       }
-      await adminApi(`/exercises${editing?.id ? `/${editing.id}` : ''}`, {
+      const savedExercise = await adminApi<{ id: string }>(`/exercises${editing?.id ? `/${editing.id}` : ''}`, {
         method: editing?.id ? 'PATCH' : 'POST',
         body: JSON.stringify(body),
       })
+      if (needsAudio) {
+        try {
+          const voice = draft.ttsVoice === 'ko-KR-HyunSuNeural' ? 'ko-KR-HyunsuNeural' : draft.ttsVoice
+          await adminApi('/tts', { method: 'POST', body: JSON.stringify({ text: draft.promptKo.trim(), voice, speed: draft.ttsSpeed, exerciseId: savedExercise.id }) })
+        } catch (cause) { ttsWarning = cause instanceof Error ? cause.message : 'không thể đưa audio vào hàng chờ.' }
+      }
       if (editing) {
         const oldAudio = editing.audio_url || (editing.answer as any)?.audioUrl
         if (oldAudio && oldAudio !== audioUrl && !oldAudio.startsWith('blob:')) {

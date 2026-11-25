@@ -22,7 +22,7 @@ type CourseProgress = { id: string; title: string; learners: number; records: nu
 type ProgressReportRow = { user_id: string; textbook_id: string; progress_percent: number; last_activity: string | null; updated_at: string; profiles: { display_name?: string } | null; textbooks: { title_ko?: string } | null; lessons: { lesson_number?: number; title_ko?: string } | null }
 type CurriculumRankingPage = { items: { rank_position: number; user_id: string; display_name: string; xp: number; streak: number; updated_at: string }[]; total: number; page: number; pageSize: number }
 type ProgressReportPage = { items: ProgressReportRow[]; total: number; page: number; pageSize: number }
-type LessonRanking = { items: { user_id: string; progress_percent: number; updated_at: string; profiles: { display_name?: string } | null }[]; total: number; page: number; pageSize: number }
+type LessonRanking = { items: { user_id: string; progress_percent: number; updated_at: string; profiles: { display_name?: string } | null; skills: Partial<Record<'tuvung' | 'nghechep' | 'shadowing' | 'ontap', number>> }[]; total: number; page: number; pageSize: number }
 type AdminUser = { id: string; email?: string; display_name?: string; avatar_url?: string; role: 'user' | 'admin'; level?: number; xp?: number; created_at?: string; emailConfirmedAt?: string; lastSignInAt?: string; is_locked?: boolean; locked_at?: string }
 type DashboardData = { days: number; activeUsers: number; averageCompletedLessons: number; averageMinutes: number; retentionRate: number; pendingReports: number; totalTextbooks: number; totalLessons: number; totalUsers: number; chart: { date: string; minutes: number }[]; courses: { title: string; percent: number }[]; hardVocabulary: { word: string; meaning: string; course: string; errorRate: number }[] }
 type CommunityReport = { id: string; post_id: string | null; custom_lesson_id?: string | null; reason: string; status: 'pending' | 'resolved' | 'dismissed'; created_at: string; profiles?: { display_name?: string } }
@@ -114,6 +114,7 @@ export default function AdminPage() {
   const [ranking, setRanking] = useState<LessonRanking | null>(null)
   const [rankingLoading, setRankingLoading] = useState(false)
   const [rankingError, setRankingError] = useState('')
+  const [rankingDetail, setRankingDetail] = useState<LessonRanking['items'][number] | null>(null)
   const [courseProgress, setCourseProgress] = useState<CourseProgress[] | null>(null)
   const [courseProgressError, setCourseProgressError] = useState('')
   const [progressBookId, setProgressBookId] = useState('all')
@@ -652,8 +653,8 @@ export default function AdminPage() {
       const selectedLesson = lessons.find((item) => item.id === rankingLessonId)
       const selectedBook = textbooks.find((item) => item.id === rankingBookId)
       await downloadExcel('xep-hang-bai-hoc.xlsx', [
-        ['Hạng', 'Mã học viên', 'Học viên', 'Giáo trình', 'Bài số', 'Tên bài học', 'Tiến độ (%)', 'Cập nhật'],
-        ...rows.map((item, index) => [index + 1, item.user_id, item.profiles?.display_name || 'Học viên', selectedBook?.title_ko || '', selectedLesson?.lesson_number ?? '', selectedLesson?.title_ko || '', Number(item.progress_percent), item.updated_at || '']),
+        ['Hạng', 'Mã học viên', 'Học viên', 'Giáo trình', 'Bài số', 'Tên bài học', 'Tiến độ (%)', 'Từ vựng & Ngữ pháp (%)', 'Nghe (%)', 'Shadowing (%)', 'Ôn tập (%)', 'Cập nhật'],
+        ...rows.map((item, index) => [index + 1, item.user_id, item.profiles?.display_name || 'Học viên', selectedBook?.title_ko || '', selectedLesson?.lesson_number ?? '', selectedLesson?.title_ko || '', Number(item.progress_percent), item.skills?.tuvung ?? '', item.skills?.nghechep ?? '', item.skills?.shadowing ?? '', item.skills?.ontap ?? '', item.updated_at || '']),
       ])
     } catch (cause) { setRankingError(cause instanceof Error ? cause.message : 'Không thể xuất bảng xếp hạng.') }
     finally { setExporting(null) }
@@ -738,7 +739,7 @@ export default function AdminPage() {
               <label>Bài học<AdminSelect value={rankingLessonId} label="Chọn bài học" options={[{ value: '', label: 'Chọn bài học' }, ...lessons.filter((lesson) => lesson.textbook_id === rankingBookId).sort((a, b) => a.lesson_number - b.lesson_number).map((lesson) => ({ value: lesson.id, label: `Bài ${lesson.lesson_number} · ${lesson.title_ko}` }))]} onChange={(value) => { setRankingLessonId(value); setRankingPage(1) }} /></label>
             </div>
             {!rankingLessonId ? <div className="admin-empty">Chọn giáo trình và bài học để xem bảng xếp hạng.</div> : rankingLoading ? <div className="admin-empty">Đang tải bảng xếp hạng…</div> : rankingError ? <div className="admin-empty" role="alert">{rankingError}</div> : ranking && !ranking.items.length ? <div className="admin-empty">Chưa có học viên có tiến độ trong bài học này.</div> : ranking && <>
-              <div className="admin-table-wrap"><table><thead><tr><th>Hạng</th><th>Học viên</th><th>Hoàn thành</th><th>Cập nhật lần cuối</th></tr></thead><tbody>{ranking.items.map((item, index) => <tr key={item.user_id}><td>{(ranking.page - 1) * ranking.pageSize + index + 1}</td><td>{item.profiles?.display_name || 'Học viên'}</td><td>{Number(item.progress_percent)}%</td><td>{formatAdminDateTime(item.updated_at)}</td></tr>)}</tbody></table></div>
+              <div className="admin-table-wrap"><table><thead><tr><th>Hạng</th><th>Học viên</th><th>Hoàn thành</th><th>Cập nhật lần cuối</th><th>Chi tiết</th></tr></thead><tbody>{ranking.items.map((item, index) => <tr key={item.user_id}><td>{(ranking.page - 1) * ranking.pageSize + index + 1}</td><td>{item.profiles?.display_name || 'Học viên'}</td><td>{Number(item.progress_percent)}%</td><td>{formatAdminDateTime(item.updated_at)}</td><td><button type="button" className="admin-skill-detail-button" onClick={() => setRankingDetail(item)}>Xem kỹ năng</button></td></tr>)}</tbody></table></div>
               <AdminPagination page={ranking.page} totalItems={ranking.total} pageSize={ranking.pageSize} onChange={setRankingPage} />
             </>}
           </section>}
@@ -1497,6 +1498,7 @@ export default function AdminPage() {
           )}
         </>}
       </section>}
+      {rankingDetail && <div className="admin-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRankingDetail(null) }}><section className="admin-modal admin-skill-detail-modal" role="dialog" aria-modal="true" aria-labelledby="ranking-skill-title" onKeyDown={(event) => { if (event.key === 'Escape') setRankingDetail(null) }}><header><div><span><Users size={22} /></span><div><h2 id="ranking-skill-title">Tiến độ kỹ năng</h2><p>{rankingDetail.profiles?.display_name || 'Học viên'} · {lessons.find((lesson) => lesson.id === rankingLessonId)?.title_ko || 'Bài học'}</p></div></div><button type="button" autoFocus onClick={() => setRankingDetail(null)} aria-label="Đóng"><X size={21} /></button></header><div className="admin-skill-detail-body"><p>Tiến độ từng hoạt động trong bài học, không phải điểm đánh giá năng lực.</p>{([{ key: 'tuvung', label: 'Từ vựng & Ngữ pháp' }, { key: 'nghechep', label: 'Nghe chép chính tả' }, { key: 'shadowing', label: 'Shadowing' }, { key: 'ontap', label: 'Ôn tập' }] as const).map(({ key, label }) => { const value = rankingDetail.skills?.[key]; return <div className="admin-skill-detail-row" key={key}><span>{label}</span><div className="admin-skill-detail-track" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} {...(value == null ? { 'aria-valuetext': 'Chưa có dữ liệu' } : { 'aria-valuenow': Math.max(0, Math.min(100, value)) })}><i style={{ width: `${Math.max(0, Math.min(100, value ?? 0))}%` }} /></div><b>{value == null ? 'Chưa có dữ liệu' : `${Number(value).toFixed(0)}%`}</b></div> })}</div><footer><button type="button" className="admin-cancel" onClick={() => setRankingDetail(null)}>Đóng</button></footer></section></div>}
       {selectedUserDetail && <div className="admin-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedUserDetail(null) }}><section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="admin-user-detail-title" onKeyDown={(event) => { if (event.key === 'Escape') setSelectedUserDetail(null) }}><header><div><span><Users size={22} /></span><div><h2 id="admin-user-detail-title">Chi tiết người dùng</h2><p>Thông tin tài khoản và hoạt động</p></div></div><button autoFocus onClick={() => setSelectedUserDetail(null)} aria-label="Đóng"><X size={21} /></button></header><div className="admin-user-detail-grid admin-user-detail-content">{[
         ['Họ tên', selectedUserDetail.display_name || 'Chưa cập nhật'],
         ['Email', selectedUserDetail.email || 'Chưa cập nhật'],
