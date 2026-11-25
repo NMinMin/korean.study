@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { adminApi } from '../lib/adminApi'
+import { downloadCsv } from '../lib/csvExport'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { usePreferences } from '../contexts/PreferencesContext'
@@ -13,6 +14,10 @@ import './admin.css'
 type Status = 'draft' | 'published' | 'locked' | 'no_content'
 type Textbook = { id: string; slug: string; title_ko: string; title_vi: string | null; description?: string | null; sort_order?: number; status: Status }
 type Lesson = { id: string; textbook_id: string; lesson_number: number; title_ko: string; title_vi: string | null; status: Status; textbooks?: { title_ko?: string } }
+type CourseProgress = { id: string; title: string; learners: number; records: number; completed: number; average: number | null }
+type ProgressReportRow = { user_id: string; progress_percent: number; last_activity: string | null; updated_at: string; profiles: { display_name?: string } | null; textbooks: { title_ko?: string } | null; lessons: { lesson_number?: number; title_ko?: string } | null }
+type CurriculumRankingPage = { items: { rank_position: number; user_id: string; display_name: string; xp: number; streak: number; updated_at: string }[]; total: number; page: number; pageSize: number }
+type ProgressReportPage = { items: ProgressReportRow[]; total: number; page: number; pageSize: number }
 type LessonRanking = { items: { user_id: string; progress_percent: number; updated_at: string; profiles: { display_name?: string } | null }[]; total: number; page: number; pageSize: number }
 type AdminUser = { id: string; email?: string; display_name?: string; avatar_url?: string; role: 'user' | 'admin'; level?: number; xp?: number; created_at?: string; emailConfirmedAt?: string; lastSignInAt?: string; is_locked?: boolean; locked_at?: string }
 type DashboardData = { days: number; activeUsers: number; averageCompletedLessons: number; averageMinutes: number; retentionRate: number; pendingReports: number; totalTextbooks: number; totalLessons: number; totalUsers: number; chart: { date: string; minutes: number }[]; courses: { title: string; percent: number }[]; hardVocabulary: { word: string; meaning: string; course: string; errorRate: number }[] }
@@ -106,6 +111,10 @@ export default function AdminPage() {
   const [ranking, setRanking] = useState<LessonRanking | null>(null)
   const [rankingLoading, setRankingLoading] = useState(false)
   const [rankingError, setRankingError] = useState('')
+  const [courseProgress, setCourseProgress] = useState<CourseProgress[] | null>(null)
+  const [courseProgressError, setCourseProgressError] = useState('')
+  const [progressBookId, setProgressBookId] = useState('all')
+  const [exporting, setExporting] = useState<'progress' | 'ranking' | 'curriculum-ranking' | null>(null)
   const [lessonStatusFilter, setLessonStatusFilter] = useState('all')
   const [lessonTextbookFilter, setLessonTextbookFilter] = useState('all')
   const [expandedTextbookGroups, setExpandedTextbookGroups] = useState<Set<string>>(new Set())
@@ -186,6 +195,17 @@ export default function AdminPage() {
       .finally(() => { if (active) setRankingLoading(false) })
     return () => { active = false }
   }, [tab, lessonView, rankingLessonId, rankingPage])
+
+  useEffect(() => {
+    if (tab !== 'lessons' || lessonView !== 'statistics') return
+    let active = true
+    setCourseProgress(null)
+    setCourseProgressError('')
+    adminApi<CourseProgress[]>('/reports/course-progress')
+      .then((data) => { if (active) setCourseProgress(data) })
+      .catch((cause) => { if (active) setCourseProgressError(cause instanceof Error ? cause.message : 'Không thể tải tiến độ giáo trình.') })
+    return () => { active = false }
+  }, [tab, lessonView])
 
   useEffect(() => {
     if (!supabase || tab !== 'dashboard') return
@@ -529,6 +549,71 @@ export default function AdminPage() {
   const pagedCommunityVocabulary = displayedCommunityVocabulary.slice((communityVocabularyPage - 1) * pageSize, communityVocabularyPage * pageSize)
   const pagedUsers = filteredUsers.slice((userPage - 1) * pageSize, userPage * pageSize)
   const maxChart = Math.max(1, ...(dashboard?.chart.map((item) => item.minutes) || [1]))
+  const exportProgress = async () => {
+    setExporting('progress'); setError('')
+    try {
+      const rows: ProgressReportRow[] = []
+      let page = 1
+      let total = 0
+      do {
+        const params = new URLSearchParams({ page: String(page) })
+        if (progressBookId !== 'all') params.set('textbookId', progressBookId)
+        const result = await adminApi<ProgressReportPage>(`/reports/lesson-progress?${params}`)
+        rows.push(...result.items); total = result.total; page += 1
+        if (!result.items.length) break
+      } while (rows.length < total)
+      downloadCsv('tien-do-hoc-tap.csv', [
+        ['Mã học viên', 'Học viên', 'Giáo trình', 'Bài số', 'Tên bài học', 'Tiến độ (%)', 'Hoạt động gần nhất', 'Cập nhật'],
+        ...rows.map((item) => [item.user_id, item.profiles?.display_name || 'Học viên', item.textbooks?.title_ko || '', item.lessons?.lesson_number ?? '', item.lessons?.title_ko || '', Number(item.progress_percent), item.last_activity || '', item.updated_at || '']),
+      ])
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể xuất dữ liệu tiến độ.') }
+    finally { setExporting(null) }
+  }
+
+  const exportCurriculumRanking = async () => {
+    setExporting('curriculum-ranking'); setError('')
+    try {
+      const rows: CurriculumRankingPage['items'] = []
+      let page = 1
+      let total = 0
+      do {
+        const params = new URLSearchParams({ page: String(page) })
+        if (progressBookId !== 'all') params.set('textbookId', progressBookId)
+        const result = await adminApi<CurriculumRankingPage>(`/reports/leaderboard?${params}`)
+        rows.push(...result.items); total = result.total; page += 1
+        if (!result.items.length) break
+      } while (rows.length < total)
+      const bookTitle = progressBookId === 'all' ? 'Tất cả giáo trình' : courseProgress?.find((course) => course.id === progressBookId)?.title || ''
+      downloadCsv('xep-hang-giao-trinh.csv', [
+        ['Hạng', 'Mã học viên', 'Học viên', 'Giáo trình', 'XP', 'Chuỗi ngày', 'Cập nhật'],
+        ...rows.map((item) => [Number(item.rank_position), item.user_id, item.display_name || 'Học viên', bookTitle, Number(item.xp), Number(item.streak), item.updated_at || '']),
+      ])
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể xuất bảng xếp hạng.') }
+    finally { setExporting(null) }
+  }
+
+  const exportLessonRanking = async () => {
+    if (!rankingLessonId) return
+    setExporting('ranking'); setRankingError('')
+    try {
+      const rows: LessonRanking['items'] = []
+      let page = 1
+      let total = 0
+      do {
+        const result = await adminApi<LessonRanking>(`/lessons/${encodeURIComponent(rankingLessonId)}/ranking?page=${page}`)
+        rows.push(...result.items); total = result.total; page += 1
+        if (!result.items.length) break
+      } while (rows.length < total)
+      const selectedLesson = lessons.find((item) => item.id === rankingLessonId)
+      const selectedBook = textbooks.find((item) => item.id === rankingBookId)
+      downloadCsv('xep-hang-bai-hoc.csv', [
+        ['Hạng', 'Mã học viên', 'Học viên', 'Giáo trình', 'Bài số', 'Tên bài học', 'Tiến độ (%)', 'Cập nhật'],
+        ...rows.map((item, index) => [index + 1, item.user_id, item.profiles?.display_name || 'Học viên', selectedBook?.title_ko || '', selectedLesson?.lesson_number ?? '', selectedLesson?.title_ko || '', Number(item.progress_percent), item.updated_at || '']),
+      ])
+    } catch (cause) { setRankingError(cause instanceof Error ? cause.message : 'Không thể xuất bảng xếp hạng.') }
+    finally { setExporting(null) }
+  }
+
   const exportDashboard = () => {
     if (!dashboard) return
     const rows = [['Ngày', 'Phút học'], ...dashboard.chart.map((item) => [item.date, String(Math.round(item.minutes))])]
@@ -580,10 +665,20 @@ export default function AdminPage() {
         {tab === 'lessons' && <>
           <div className="admin-lesson-tabs" role="tablist" aria-label="Bài học">
             <button type="button" role="tab" aria-selected={lessonView === 'list'} onClick={() => setLessonView('list')}>Danh sách bài học</button>
-            <button type="button" role="tab" aria-selected={lessonView === 'statistics'} onClick={() => setLessonView('statistics')}>Xếp hạng</button>
+            <button type="button" role="tab" aria-selected={lessonView === 'statistics'} onClick={() => setLessonView('statistics')}>Thống kê</button>
           </div>
           {lessonView === 'statistics' ? <section className="admin-lesson-ranking">
-            <div className="admin-panel-title"><div><h2>Bảng xếp hạng bài học</h2><p>Xếp theo phần trăm hoàn thành bài học; nếu bằng nhau, ưu tiên thời điểm cập nhật sớm hơn.</p></div></div>
+          <article className="admin-course-progress-report">
+            <div className="admin-card-heading"><div><h3>Tiến độ chung theo giáo trình</h3><p>Trung bình tính trên các bản ghi bài học đã có tiến độ, không bao gồm bài chưa được ghi nhận.</p></div></div>
+            <div className="admin-course-progress-tools">
+              <AdminSelect value={progressBookId} label="Chọn giáo trình để xuất tiến độ" options={[{ value: 'all', label: 'Tất cả giáo trình' }, ...(courseProgress || []).map((course) => ({ value: course.id, label: course.title }))]} onChange={setProgressBookId} />
+              <button type="button" onClick={() => void exportProgress()} disabled={!!exporting || !courseProgress}><Download size={16} /> {exporting === 'progress' ? 'Đang xuất…' : 'Xuất tiến độ CSV'}</button>
+              <button type="button" onClick={() => void exportCurriculumRanking()} disabled={!!exporting || !courseProgress}><Download size={16} /> {exporting === 'curriculum-ranking' ? 'Đang xuất…' : 'Xuất xếp hạng CSV'}</button>
+            </div>
+            {courseProgressError ? <p role="alert">{courseProgressError}</p> : !courseProgress ? <p>Đang tải tiến độ…</p> : !courseProgress.length ? <p>Chưa có giáo trình.</p> : <div className="admin-table-wrap"><table><thead><tr><th>Giáo trình</th><th>Học viên có tiến độ</th><th>Bài đã hoàn thành</th><th>Tiến độ trung bình</th></tr></thead><tbody>{courseProgress.filter((course) => progressBookId === 'all' || course.id === progressBookId).map((course) => <tr key={course.id}><td>{course.title}</td><td>{course.learners}</td><td>{course.completed}</td><td>{course.average === null ? '—' : `${course.average.toFixed(1)}%`}</td></tr>)}</tbody></table></div>}
+          </article>
+
+            <div className="admin-panel-title"><div><h2>Bảng xếp hạng bài học</h2><p>Xếp theo phần trăm hoàn thành bài học; nếu bằng nhau, ưu tiên thời điểm cập nhật sớm hơn.</p></div><button type="button" className="admin-primary" disabled={!rankingLessonId || !!exporting || rankingLoading || !!rankingError} onClick={() => void exportLessonRanking()}><Download size={16} /> {exporting === 'ranking' ? 'Đang xuất…' : 'Xuất bảng xếp hạng CSV'}</button></div>
             <div className="admin-ranking-filters">
               <label>Giáo trình<AdminSelect value={rankingBookId} label="Chọn giáo trình" options={[{ value: '', label: 'Chọn giáo trình' }, ...textbooks.map((book) => ({ value: book.id, label: book.title_ko }))]} onChange={(value) => { setRankingBookId(value); setRankingLessonId(''); setRankingPage(1); setRanking(null) }} /></label>
               <label>Bài học<AdminSelect value={rankingLessonId} label="Chọn bài học" options={[{ value: '', label: 'Chọn bài học' }, ...lessons.filter((lesson) => lesson.textbook_id === rankingBookId).sort((a, b) => a.lesson_number - b.lesson_number).map((lesson) => ({ value: lesson.id, label: `Bài ${lesson.lesson_number} · ${lesson.title_ko}` }))]} onChange={(value) => { setRankingLessonId(value); setRankingPage(1) }} /></label>
