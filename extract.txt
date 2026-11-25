@@ -1,0 +1,1304 @@
+DOCX
+TRƯỜNG ĐẠI HỌC LẠC HỒNG
+KHOA CÔNG NGHỆ THÔNG TIN
+BÁO CÁO ĐỒ ÁN CUỐI KỲ
+MÔN: KIỂM THỬ VÀ ĐẢM BẢO CHẤT LƯỢNG PHẦN MỀM
+ĐỀ TÀI: KIỂM THỬ ỨNG DỤNG
+HỌC TIẾNG HÀN KOREAN STUDY
+	GIÁO VIÊN HƯỚNG DẪN:	VŨ THANH NHÀN
+	SINH VIÊN THỰC HIỆN:
+		Tạ Trần Vinh Quang — 123000033
+		Võ Nhạc Phước — 123000034
+		Nguyễn Danh Nghĩa — 123000870
+Biên Hòa, ngày 30 tháng 10 năm 2026
+MỤC LỤC
+CHƯƠNG 1: TỔNG QUAN VÀ GIỚI THIỆU ĐỀ TÀI	3
+1.1. Giới thiệu đề tài và bài toán thực tế	3
+1.2. Mục tiêu và phạm vi kiểm thử	3
+1.3. Phương pháp thực hiện và quy trình nhóm	4
+1.4. Cấu trúc báo cáo	4
+CHƯƠNG 2: PHÂN TÍCH YÊU CẦU HỆ THỐNG	5
+2.1. Yêu cầu chức năng và phi chức năng	5
+2.2. Đối tượng người dùng và phân quyền	5
+2.3. Bản đồ chức năng	7
+CHƯƠNG 3: THIẾT KẾ YÊU CẦU VÀ KỊCH BẢN KIỂM THỬ	8
+3.1. Phương pháp và kỹ thuật thiết kế	8
+3.2. Danh sách yêu cầu kiểm thử	8
+3.3. Phân bổ và kịch bản kiểm thử tiêu biểu	10
+CHƯƠNG 4:  TRIỂN KHAI THỰC THI VÀ KẾT QUẢ THỰC TẾ	17
+4.1. Môi trường thực nghiệm	17
+4.2. Quy trình thực thi và tổng hợp	17
+4.3. Hình ảnh minh chứng ca kiểm thử Fail	18
+CHƯƠNG 5:  QUẢN LÝ LỖI VÀ PHÂN TÍCH DEFECT	19
+5.1. Quy trình và công cụ quản lý lỗi	19
+5.2. Tổng hợp lỗi và các trường hợp ngoại lệ	19
+5.3. Phân tích các ca Blocked	20
+5.4. Phân tích nguyên nhân và kiểm thử lại	20
+CHƯƠNG 6  ĐÁNH GIÁ KẾT QUẢ VÀ ĐO LƯỜNG HỆ THỐNG	21
+6.1. Các chỉ số kiểm thử	21
+6.2. Phân tích hiệu quả và đánh giá chất lượng	21
+6.3. Kết luận về mức sẵn sàng	22
+CHƯƠNG 7  TỔ CHỨC THỰC HIỆN VÀ ĐÁNH GIÁ THÀNH VIÊN	23
+7.1. Phân công WBS và lịch trình	23
+7.2. Công cụ và nhật ký hoạt động	26
+7.3. Đánh giá mức độ hoàn thành của thành viên	27
+CHƯƠNG 8  TỔNG KẾT VÀ HƯỚNG PHÁT TRIỂN	28
+8.1. Kết luận tổng thể	28
+8.2. Hướng phát triển	28
+TÀI LIỆU THAM KHẢO	29
+PHỤ LỤC	30
+Phụ lục A  Hồ sơ kiểm thử kèm theo	30
+Phụ lục B  Quy ước đọc trạng thái và chỉ số	30
+Phụ lục C  Truy vết các yêu cầu còn ngoại lệ	30
+CHƯƠNG 1: TỔNG QUAN VÀ GIỚI THIỆU ĐỀ TÀI
+1.1. Giới thiệu đề tài và bài toán thực tế
+Korean Study là ứng dụng web hỗ trợ học tiếng Hàn theo giáo trình và bài học. Người học sử dụng flashcard, tra cứu ngữ pháp, nghe chép, luyện nói Shadowing, ôn tập và luyện tập AI; đồng thời theo dõi mục tiêu, lịch học và tiến độ cá nhân. Hệ thống có cộng đồng học tập, bộ từ tùy chỉnh và khu vực quản trị nội dung, tài khoản.
+Dữ liệu học tập được sử dụng qua nhiều màn hình và dịch vụ. Một kết quả không được lưu đúng, một bộ ôn không đúng phạm vi hoặc quyền truy cập sai có thể ảnh hưởng trực tiếp đến trải nghiệm người học. Đề tài vì vậy tập trung kiểm thử chức năng qua giao diện, kiểm tra lưu/khôi phục trạng thái và đối chiếu kết quả giữa các tài khoản.
+Nhóm 17 xây dựng 43 yêu cầu kiểm thử và 151 test case. Kết quả ghi nhận 146 Pass, 1 Fail, 4 Blocked và 0 N/A trong phạm vi kiểm thử giao diện đã xác định.
+1.2. Mục tiêu và phạm vi kiểm thử
+Mục tiêu của nhóm là kiểm tra tính đúng đắn của các luồng học và quản trị, phát hiện phản hồi không phù hợp, kiểm tra dữ liệu được tách theo tài khoản và tổng hợp chỉ số để đánh giá mức hoàn tất của đợt kiểm thử. Các kết quả phải truy vết được về mã TC và yêu cầu TR.
+Ngoài phạm vi: kiểm thử tải/stress, kiểm thử xâm nhập chuyên sâu, kiểm thử API trực tiếp và can thiệp dữ liệu bằng request/token hoặc database. Kiểm thử tương thích được thực hiện trên Chrome Windows và viewport giả lập trong bộ TC.
+1.3. Phương pháp thực hiện và quy trình nhóm
+Nhóm áp dụng kiểm thử thủ công theo hộp đen. Source được khảo sát để xác định chức năng thực sự có đường thao tác UI; việc thực thi vẫn dựa trên dữ liệu đầu vào, thao tác và phản hồi quan sát được. Quy trình gồm xác định phạm vi, lập TR/TC, duyệt, chuẩn bị tài khoản/nội dung, chạy test, ghi kết quả và bằng chứng, tổng hợp trạng thái, đánh giá và hoàn thiện hồ sơ.
+Mỗi thành viên thực hiện các ca được phân công. Các luồng nhiều vai trò được phối hợp giữa người học và admin; ca chuyển tài khoản thực hiện trên cùng hồ sơ Chrome khi yêu cầu. Các ca bị chặn được giữ nguyên Blocked kèm nguyên nhân, không cộng như ca đã chạy đạt.
+1.4. Cấu trúc báo cáo
+Báo cáo gồm tám chương: tổng quan; phân tích yêu cầu; thiết kế TR/TC; triển khai và kết quả; quản lý lỗi; đo lường; tổ chức và đánh giá thành viên; kết luận và hướng phát triển. Phụ lục trình bày truy vết và hồ sơ kèm theo. Bộ TC chi tiết và timeline Excel là nguồn đối chiếu số liệu của báo cáo.
+CHƯƠNG 2: PHÂN TÍCH YÊU CẦU HỆ THỐNG
+2.1. Yêu cầu chức năng và phi chức năng
+Ứng dụng có hai nhóm vai trò xác thực chính là người học và admin. Frontend sử dụng React, Vite, React Router và Supabase; backend cung cấp các route quản trị, AI, Shadowing, upload và nhắc học. Đợt kiểm thử tập trung vào hành vi người dùng quan sát được, không xác nhận độc lập toàn bộ kiểm soát phía server.
+Các yêu cầu phi chức năng trong phạm vi UI gồm tính dễ hiểu của thông báo, khả năng phục hồi khi mất mạng, hiển thị ở viewport nhỏ, tính nhất quán sau F5/quay lại và sự tách biệt dữ liệu cá nhân.
+2.2. Đối tượng người dùng và phân quyền
+Trong bộ TC, User1 là người học chính, User2 là người học thứ hai và Admin là tài khoản quản trị. Dữ liệu thử riêng được sử dụng cho thao tác tạo, sửa, xóa và đổi vai trò.
+2.3. Bản đồ chức năng
+Hình 2.1. Sơ đồ cây chức năng trong phạm vi kiểm thử
+Phạm vi hồ sơ tài khoản tập trung vào hiển thị thông tin và tính nhất quán nhận diện người dùng. Các chức năng tự đổi tên, tải ảnh đại diện và chế độ Kiểm tra riêng của Shadowing không thuộc phạm vi kiểm thử hiện tại.
+CHƯƠNG 3: THIẾT KẾ YÊU CẦU VÀ KỊCH BẢN KIỂM THỬ
+3.1. Phương pháp và kỹ thuật thiết kế
+Mỗi TC được gán một nhãn kỹ thuật chính trong workbook. Các ca giá trị biên của mục tiêu phút kiểm tra sự chuẩn hóa tại ô nhập: 4 về 5, giữ 5, giữ 180, 181 về 180 và ô rỗng về 15. Ca theo vai trò sử dụng ba trạng thái chưa đăng nhập, user và admin để đối chiếu route quản trị.
+3.2. Danh sách yêu cầu kiểm thử
+Bộ yêu cầu gồm 43 TR đã được duyệt. Bảng dưới trình bày mã, nhóm chức năng, nội dung và loại TR. Mô tả chi tiết, mức ưu tiên và số TC liên kết được trình bày trong sheet TR của hồ sơ kiểm thử.
+Mỗi TR được liên kết với các TC qua cột TR ID trong sheet TC. Kết quả thực thi được tổng hợp theo từng ca để xác định mức độ bao phủ yêu cầu.
+3.3. Phân bổ và kịch bản kiểm thử tiêu biểu
+3.3.1. Thống kê theo nhóm chức năng
+Phân công kiểm thử gồm Quang 50, Nghĩa 52 và Phước 49 ca. Bộ thiết kế có 116 TC ưu tiên High và 35 TC ưu tiên Medium.
+3.3.2. Kịch bản chi tiết mẫu
+TC-AUTH-01-02  Tài khoản
+TC-ACL-01-02  Phân quyền
+TC-DICT-01-01  Nghe chép
+TC-SHAD-02-01  Shadowing
+TC-AI-01-01  AI
+TC-HOME-02-01  Trang chủ
+Các test case còn lại được trình bày trong workbook TR/TC đính kèm. Ngày ghi nhận kết quả được phân bổ theo khoảng thời gian trong Timeline của nhóm.
+CHƯƠNG 4: TRIỂN KHAI THỰC THI VÀ KẾT QUẢ THỰC TẾ
+4.1. Môi trường thực nghiệm
+Tài khoản và dữ liệu được chuẩn bị theo từng ca. Các ca về microphone, nhận diện và AI phụ thuộc trạng thái dịch vụ tại thời điểm chạy; các ca nhắc email phụ thuộc cấu hình gửi và lịch tác vụ. Đợt kiểm thử không thực hiện đo lường hiệu năng phần cứng.
+4.2. Quy trình thực thi và tổng hợp
+Nhóm thực hiện các bước trong TC, ghi kết quả thực tế, cập nhật trạng thái và bổ sung bằng chứng. Ca chưa đủ tiền điều kiện được ghi Blocked; ca không áp dụng được ghi N/A kèm nguyên nhân.
+Bốn ca Blocked gồm ba ca Tiếp tục học do chưa có bài thứ hai và một ca tìm/mở chi tiết người dùng. Ca đổi ngôn ngữ giao diện được ghi Fail; ca thống kê dashboard admin được ghi Pass. Không có ca N/A hoặc Not Run; Blocked không được tính như Pass hoặc thực thi có kết luận.
+4.3. Hình ảnh minh chứng ca kiểm thử Fail
+Ảnh dưới đây được trích từ bằng chứng của TC-PREF-02-02 trong workbook kiểm thử. Báo cáo trình bày ảnh minh chứng cho ca Fail; kết quả các ca còn lại được đối chiếu trong hồ sơ TR/TC.
+4.3.1. TC-PREF-02-02 — Ngôn ngữ giao diện chưa đồng nhất
+Hình 4.1. TC-PREF-02-02 (Fail) — Giao diện còn trộn tiếng Anh và tiếng Việt
+TC-PREF-02-02: Sau khi đổi ngôn ngữ, menu hiển thị Home, Textbooks, Settings và Sign out, trong khi các phần Tiếp tục học, Mục tiêu trong ngày và Hoạt động gần đây vẫn bằng tiếng Việt. Kết quả chưa đáp ứng yêu cầu chuyển ngôn ngữ giao diện theo thiết lập; trạng thái ghi nhận là Fail.
+CHƯƠNG 5: QUẢN LÝ LỖI VÀ PHÂN TÍCH DEFECT
+5.1. Quy trình và công cụ quản lý lỗi
+Nhóm quản lý kết quả bằng Excel, liên kết mã TC/TR và ảnh bằng chứng. Quy trình ghi nhận lỗi gồm mã lỗi, build, điều kiện, bước tái hiện, kết quả mong đợi/thực tế, bằng chứng và mức ảnh hưởng. Lỗi sau khi sửa được kiểm thử lại trước khi đóng.
+Vòng đời xử lý lỗi đề xuất: New → Confirmed → In Progress → Resolved → Retest → Closed. Lỗi còn tái hiện được mở lại. Severity thể hiện mức ảnh hưởng; Priority thể hiện thứ tự ưu tiên xử lý.
+5.2. Tổng hợp lỗi và các trường hợp ngoại lệ
+Đợt kiểm thử ghi nhận 1 TC Fail: TC-PREF-02-02 về đổi ngôn ngữ giao diện. Bảng dưới tổng hợp ca Fail và 4 ca Blocked cùng quan sát thực tế.
+Ca đổi ngôn ngữ chưa chuyển toàn bộ nội dung theo thiết lập, chỉ thay đổi chữ ở menu, header và nội dung trong setting. Ba ca Tiếp tục học bị chặn do thiếu bài học thứ hai; ca quản trị chưa thực hiện được thao tác xem chi tiết người dùng. Không còn ca N/A trong kết quả chốt.
+5.3. Phân tích các ca Blocked
+Bảng dưới phân tích nguyên nhân, ảnh hưởng và hướng xử lý tiếp theo đối với 4 ca Blocked.
+Ba ca HOME có chung điều kiện chặn về dữ liệu. Ca ADM cần được xác minh lại phạm vi chức năng trên build kiểm thử trước khi kết luận. Các ca này chưa có đủ kết quả để đánh giá Pass hoặc Fail.
+5.4. Phân tích nguyên nhân và kiểm thử lại
+TC-PREF-02-02 được ghi Fail do nội dung giao diện chưa đổi đầy đủ theo ngôn ngữ trong setting. Cần kiểm tra phạm vi áp dụng bản dịch và các chuỗi hiển thị chưa theo thiết lập. Hồ sơ chưa có nguyên nhân gốc được xác minh, bản sửa hoặc kết quả kiểm thử lại sau sửa lỗi. Hạng mục WBS 4.2 được ghi 0% – Chưa thực hiện, chờ bản sửa để chạy lại ca lỗi; chưa có cơ sở xác nhận lỗi đã được khắc phục.
+CHƯƠNG 6: ĐÁNH GIÁ KẾT QUẢ VÀ ĐO LƯỜNG HỆ THỐNG
+6.1. Các chỉ số kiểm thử
+Tỷ lệ Pass trên các ca đã có kết luận Pass/Fail là 99,32% (146/147). Tỷ lệ Pass trên toàn bộ 151 TC là 96,69%; 1 ca Fail và 4 ca Blocked chưa được tính là đạt.
+Bao phủ thực thi đạt 42/43 TR (97,67%), với mỗi TR được tính khi có ít nhất một TC Pass hoặc Fail. Đây là độ bao phủ yêu cầu, không phải độ bao phủ mã nguồn. Hồ sơ có 1 TC Fail nhưng chưa có dữ liệu phân loại Severity hoặc số liệu quy mô để phân tích mật độ lỗi.
+6.2. Phân tích hiệu quả và đánh giá chất lượng
+Theo trạng thái chốt, phần lớn các luồng đã có kết luận Pass, bao gồm tài khoản/phân quyền, nội dung học, từ/ngữ pháp, nghe chép, Shadowing, ôn tập, cộng đồng, bộ từ, cửa hàng và quản trị. Các phản hồi được ghi nhận trong Actual Result và minh họa bằng ảnh hiện có giúp truy vết kết quả theo ca.
+Giới hạn chính là bốn ca Blocked và một ca Fail về ngôn ngữ giao diện. Nguồn dữ liệu chưa có bài thứ hai làm luồng Tiếp tục học chưa được kiểm tra trọn vẹn. Trạng thái dịch vụ AI/ghi âm có thể sử dụng cơ chế dự phòng; ảnh dự phòng không đủ chứng minh chất lượng dịch vụ trực tuyến. Phạm vi trình duyệt/thiết bị còn giới hạn, không có đánh giá tải hoặc kiểm thử bảo mật chuyên sâu.
+Tiến độ 100% của các đầu việc chạy test trong WBS thể hiện việc hoàn tất rà soát và ghi nhận kết quả. Tỷ lệ thực thi có kết luận là 97,35% (147/151); các ca Blocked vẫn được theo dõi riêng.
+6.3. Kết luận về mức sẵn sàng
+Nhóm hoàn tất hồ sơ kết quả của đợt kiểm thử UI hiện tại. Đối với phạm vi đã thực thi và được ghi Pass, kết quả là cơ sở cho trình diễn và đánh giá học phần. Tuy nhiên chưa đủ cơ sở đưa ra quyết định Go không điều kiện cho phát hành toàn bộ sản phẩm do còn các ca chưa thực thi có kết luận và chưa có đánh giá ngoài phạm vi UI.
+Trước đợt phát hành đầy đủ, cần xử lý ca Fail về ngôn ngữ giao diện, kiểm thử lại sau sửa, giải quyết điều kiện chặn của 4 ca Blocked và thực hiện kiểm thử hồi quy trên build liên quan.
+CHƯƠNG 7: TỔ CHỨC THỰC HIỆN VÀ ĐÁNH GIÁ THÀNH VIÊN
+7.1. Phân công WBS và lịch trình
+Nhóm trưởng Tạ Trần Vinh Quang phụ trách kiểm tra chung và chốt hồ sơ. Kế hoạch WBS bao gồm chuẩn bị, thiết kế, thực thi, đánh giá, hoàn thiện tài liệu và thuyết trình. Bảng dưới trình bày thời gian kế hoạch, người phụ trách và tiến độ được ghi nhận trong Timeline.
+Các mốc kế hoạch chính: khảo sát và chuẩn bị từ 25/10; thiết kế, duyệt ngày 25–26/10; thực thi, ghi kết quả ngày 26–30/10; tổng hợp và hoàn thiện hồ sơ đến 30/10; thuyết trình ngày 31/10/2026. Trạng thái và tỷ lệ hoàn thành được tổng hợp từ Timeline của nhóm. Riêng kiểm thử lại sau sửa lỗi đang chờ bản sửa và chưa hoàn thành; các mốc trên là lịch kế hoạch, không xác nhận retest đã diễn ra.
+Biểu đồ Gantt theo kế hoạch WBS
+Các ô tô xám thể hiện khoảng thời gian kế hoạch từ 25 đến 31/10/2026. Người phụ trách, lịch và tỷ lệ hoàn thành được lấy từ WBS. Hạng mục 4.2 có tiến độ 0% – Chưa thực hiện; khoảng 29–30/10 là kế hoạch ban đầu, chưa có lịch retest mới được xác nhận. Tiến độ trung bình của giai đoạn Đánh giá là 75% (3/4 đầu việc hoàn thành).
+Bảng 7.2. Biểu đồ Gantt các công việc 25–31/10/2026
+7.2. Công cụ và nhật ký hoạt động
+7.3. Đánh giá mức độ hoàn thành của thành viên
+Tỷ lệ đóng góp theo công việc riêng được tính trên 17 đầu việc giao đích danh: Quang 6, Nghĩa 5 và Phước 6. Năm đầu việc giao cho cả nhóm được theo dõi riêng. Tỷ lệ này phản ánh phân bổ đầu việc, không đo thời lượng hoặc công sức thực tế.
+Tỷ trọng CLO được tính trên 35 lượt liên kết giữa đầu việc và chuẩn đầu ra. Một đầu việc có thể gắn với nhiều CLO. Các tỷ lệ thể hiện phân bổ công việc theo CLO, không phải trọng số chấm điểm học phần.
+CHƯƠNG 8: TỔNG KẾT VÀ HƯỚNG PHÁT TRIỂN
+8.1. Kết luận tổng thể
+Đồ án xây dựng và thực thi bộ kiểm thử UI cho Korean Study, liên kết 43 yêu cầu với 151 test case. Hồ sơ cuối ghi 146 Pass, 1 Fail, 4 Blocked và 0 N/A; có 42 TR đã có ít nhất một kết quả Pass/Fail. Nhóm đã ghi nhận kết quả thực tế, ngày và bằng chứng hiện có, đồng thời tổng hợp phân công, tiến độ và các giới hạn của đợt chạy.
+Đối với CLO1, nhóm tổ chức kết quả thành báo cáo kỹ thuật và hồ sơ kèm theo. CLO2 được thể hiện qua thiết kế và thực thi TR/TC; CLO3 qua tính toán chỉ số, phân tích kết quả và giới hạn kiểm thử; CLO4 qua WBS, RACI và phối hợp giữa các thành viên.
+8.2. Hướng phát triển
+Đợt tiếp theo cần xử lý lỗi đổi ngôn ngữ giao diện, bổ sung bài học thử thứ hai và xác nhận lại luồng người dùng/admin đang bị chặn. Sau khi có điều kiện hoặc bản sửa phù hợp, nhóm chạy lại ca liên quan, bổ sung kết quả retest và hồi quy các luồng học, lưu dữ liệu và quyền truy cập.
+Hướng phát triển tiếp theo là tự động hóa các luồng ổn định như đăng nhập, điều hướng và lưu trạng thái; mở rộng kiểm thử trên trình duyệt, thiết bị thật, dịch vụ tích hợp và hiệu năng hệ thống.
+TÀI LIỆU THAM KHẢO
+[1] Nhóm 17. Kiểm thử cuối kỳ.xlsx. Các sheet Tổng quan, TR, TC; bản chốt sử dụng trong báo cáo.
+[2] Nhóm 17. Timeline_TienDo_WBS_Korean_Study.xlsx. Các sheet Phan_Cong_WBS, Ma_Tran_RACI và Thong_Ke_Progress.
+[3] Template báo cáo.docx. Mẫu hình thức báo cáo đồ án cuối kỳ.
+[4] MAU_BAI_LAM_BAO_CAO_KIEM_THU.md. Mẫu bố cục báo cáo kiểm thử 8 phần.
+[5] Repository Korean Study: https://github.com/NMinMin/korean.study. Commit 17df99edcb3b55f3dcd9d79d306f1d3099dbe565; dùng làm căn cứ đối chiếu chức năng.
+[6] Website được kiểm thử: https://nminmin.github.io/korean.study/. Môi trường và phiên bản ghi theo hồ sơ của nhóm.
+PHỤ LỤC
+Phụ lục A  Hồ sơ kiểm thử kèm theo
+Hai workbook đính kèm cung cấp đầy đủ yêu cầu, tiền điều kiện, dữ liệu, bước thực hiện, kết quả và bằng chứng của bộ kiểm thử. Báo cáo trình bày số liệu tổng hợp cùng các test case và hình ảnh tiêu biểu.
+Phụ lục B  Quy ước đọc trạng thái và chỉ số
+Phụ lục C  Truy vết các yêu cầu còn ngoại lệ
+TR-HOME-02: TC-HOME-02-01 (Blocked), TC-HOME-02-02 (Blocked), TC-HOME-02-03 (Blocked)
+TR-PREF-02: TC-PREF-02-01 (Pass), TC-PREF-02-02 (Fail), TC-PREF-02-03 (Pass), TC-PREF-02-04 (Pass)
+TR-ADM-01: TC-ADM-01-01 (Pass), TC-ADM-01-02 (Blocked), TC-ADM-01-03 (Pass)
+
+TABLE
+Trong phạm vi | Nội dung chính
+Tài khoản và quyền | Đăng ký, đăng nhập/xuất, phiên, khôi phục mật khẩu, truy cập admin, khóa tài khoản.
+Học tập | Giáo trình/bài học, từ/ngữ pháp, nghe chép, Shadowing, ôn tập, lịch ôn và AI.
+Tương tác | Cộng đồng, bình luận, báo cáo, thông báo, bộ từ và mã chia sẻ.
+Cá nhân hóa | Tiến độ, thời gian học, kế hoạch, nhắc học, cây, xếp hạng, hồ sơ hiển thị, theme/ngôn ngữ.
+Quản trị và UI | Thống kê, người dùng, nội dung, chuyển bài tập, kiểm duyệt; responsive và lỗi mạng.
+
+TABLE
+Nhóm chức năng | Hành vi cần kiểm tra
+Tài khoản | Tên tối thiểu 2 ký tự sau trim; mật khẩu tối thiểu 8 ký tự có hoa/thường/số; xác nhận trùng; phiên và khôi phục mật khẩu.
+Giáo trình và bài học | Thêm giáo trình xuất bản, mở đúng bài, nội dung chưa sẵn sàng và tiếp tục bài đã chọn.
+Từ vựng và ngữ pháp | Lật thẻ, phát âm, đã thuộc/chưa thuộc, lưu sao/ghi chú, sổ tay, tra cứu và thẻ ngữ pháp.
+Nghe chép | Luyện tập trước Kiểm tra; điều khiển audio/tốc độ, gợi ý, bản dịch, chấm và làm lại.
+Shadowing | Ghi/dừng/nghe lại, quyền mic, transcript/điểm, câu dưới 80, ghi lại và tiến độ.
+Ôn tập và AI | Phạm vi/độ khó, thi thử, tính điểm, làm lại; bộ AI theo bài và phản hồi dịch vụ.
+Tiến độ và kế hoạch | Lưu kết quả, bốn hoạt động, thưởng không cộng lặp, phút học, lịch hiệu lực và nhắc học.
+Cộng đồng và cá nhân hóa | Quyền sở hữu bài, thích/bình luận/báo cáo; bộ từ; xếp hạng; đổi/chọn cây; giao diện.
+Quản trị | Tìm user, vai trò/khóa, CRUD giáo trình/bài/câu hỏi, chuyển câu hỏi, ẩn bài/khóa bình luận.
+
+TABLE
+Thao tác | Chưa đăng nhập | Người học | Admin
+Đăng ký/đăng nhập/khôi phục | Có | Theo trạng thái phiên | Theo trạng thái phiên
+Học và quản lý dữ liệu cá nhân | Yêu cầu đăng nhập | Có | Điều hướng admin
+Truy cập /admin | Chuyển đăng nhập | Chuyển UI người học | Có
+Đổi vai trò/khóa tài khoản | Không | Không | Có
+Quản trị nội dung và kiểm duyệt | Không | Không | Có
+
+TABLE
+Kỹ thuật | Áp dụng | Số TC
+EP | Thông tin sai/rỗng, khoảng trắng, email và mã chia sẻ không hợp lệ. | 24
+BVA | Tên/mật khẩu tối thiểu; mục tiêu 4/5/180/181 phút; số bài. | 10
+Decision Table | Tổ hợp đăng nhập/vai trò và quyền truy cập admin. | 3
+Use Case | Các luồng học, lưu dữ liệu, làm lại, cộng đồng, admin và lỗi mạng. | 114
+
+TABLE
+TR ID | Nhóm | Yêu cầu | Loại TR
+TR-AUTH-01 | Tài khoản | Đăng ký tài khoản | Functional / Boundary
+TR-AUTH-02 | Tài khoản | Đăng nhập và lỗi nhập liệu | Functional
+TR-AUTH-03 | Tài khoản | Lưu phiên và đăng xuất | Functional
+TR-AUTH-04 | Tài khoản | Khôi phục mật khẩu | Functional
+TR-ACL-01 | Phân quyền | Bảo vệ đường dẫn quản trị | Security / UI route
+TR-ACL-02 | Phân quyền | Khóa tài khoản | Security / Functional
+TR-HOME-01 | Trang chủ | Hiển thị dữ liệu người học | Functional
+TR-HOME-02 | Trang chủ | Tiếp tục đúng bài đã chọn | Functional
+TR-CUR-01 | Giáo trình | Thêm và mở giáo trình | Functional
+TR-CUR-02 | Giáo trình | Bài học và trạng thái nội dung | Functional
+TR-VOC-01 | Từ vựng | Flashcard và đánh giá từ | Functional
+TR-VOC-02 | Từ vựng | Sổ tay, dấu sao và ghi chú | Functional
+TR-GRAM-01 | Ngữ pháp | Xem và ôn ngữ pháp | Functional
+TR-DICT-01 | Nghe chép | Phát và điều khiển audio | Functional
+TR-DICT-02 | Nghe chép | Nhập và kiểm tra đáp án | Functional
+TR-DICT-03 | Nghe chép | Kiểm tra và làm lại | Functional
+TR-SHAD-01 | Shadowing | Ghi âm và quyền microphone | Functional
+TR-SHAD-02 | Shadowing | Kết quả nói và điều kiện tiến độ | Functional
+TR-REV-01 | Ôn tập | Chọn bộ ôn và độ khó | Functional
+TR-REV-02 | Ôn tập | Điểm ôn và làm lại câu sai | Functional
+TR-SCHED-01 | Lịch ôn | Lịch ôn theo ngày học | Functional
+TR-SCHED-02 | Lịch ôn | Lưu kết quả ôn từ vựng | Functional
+TR-AI-01 | AI | Luyện tập AI qua UI | Functional
+TR-COM-01 | Cộng đồng | Bài đăng và quyền sở hữu | Functional / Security UI
+TR-COM-02 | Cộng đồng | Tương tác, báo cáo và thông báo | Functional
+TR-CUS-01 | Bộ từ tùy chỉnh | Tạo bộ từ và xem trước | Functional / Boundary
+TR-CUS-02 | Bộ từ tùy chỉnh | Chia sẻ, nhập mã và làm bài | Functional
+TR-RANK-01 | Xếp hạng | Lọc và hiển thị bảng xếp hạng | Functional
+TR-SHOP-01 | Cửa hàng | Mua và chọn cây | Functional / Boundary
+TR-PROG-01 | Tiến độ | Hoàn thành bài và thưởng | Functional
+TR-SET-01 | Kế hoạch học | Biên mục tiêu phút mỗi ngày | Boundary
+TR-SET-02 | Kế hoạch học | Lưu kế hoạch có hiệu lực tuần sau | Functional
+TR-SET-03 | Kế hoạch học | Âm thanh và nhắc học | Functional
+TR-TIME-01 | Tiến độ | Theo dõi phút và mục tiêu ngày | Functional
+TR-PREF-01 | Hồ sơ và giao diện | Cập nhật hồ sơ | Functional
+TR-PREF-02 | Hồ sơ và giao diện | Theme, ngôn ngữ và responsive | UI / Compatibility
+TR-ADM-01 | Quản trị | Thống kê và tìm người dùng | Functional
+TR-ADM-02 | Quản trị | Đổi vai trò có kiểm soát | Functional / Security UI
+TR-ADM-03 | Quản trị nội dung | CRUD giáo trình | Functional
+TR-ADM-04 | Quản trị nội dung | CRUD bài học | Functional / Boundary
+TR-ADM-05 | Quản trị nội dung | Quản lý câu hỏi và chuyển bài | Functional
+TR-MOD-01 | Kiểm duyệt | Ẩn bài và khóa bình luận | Functional / Security UI
+TR-UX-01 | Độ ổn định UI | Lỗi mạng và tách dữ liệu user | UI / Functional
+
+TABLE
+Nhóm | TC | Pass | Fail | Blocked | N/A
+Tài khoản | 24 | 24 | 0 | 0 | 0
+Phân quyền | 7 | 7 | 0 | 0 | 0
+Trang chủ | 6 | 3 | 0 | 3 | 0
+Giáo trình | 6 | 6 | 0 | 0 | 0
+Từ vựng | 7 | 7 | 0 | 0 | 0
+Ngữ pháp | 3 | 3 | 0 | 0 | 0
+Nghe chép | 10 | 10 | 0 | 0 | 0
+Shadowing | 7 | 7 | 0 | 0 | 0
+Ôn tập | 6 | 6 | 0 | 0 | 0
+Lịch ôn | 5 | 5 | 0 | 0 | 0
+AI | 3 | 3 | 0 | 0 | 0
+Cộng đồng | 8 | 8 | 0 | 0 | 0
+Bộ từ tùy chỉnh | 6 | 6 | 0 | 0 | 0
+Xếp hạng | 3 | 3 | 0 | 0 | 0
+Cửa hàng | 3 | 3 | 0 | 0 | 0
+Tiến độ | 6 | 6 | 0 | 0 | 0
+Kế hoạch học | 12 | 12 | 0 | 0 | 0
+Hồ sơ và giao diện | 7 | 6 | 1 | 0 | 0
+Quản trị | 5 | 4 | 0 | 1 | 0
+Quản trị nội dung | 11 | 11 | 0 | 0 | 0
+Kiểm duyệt | 3 | 3 | 0 | 0 | 0
+Độ ổn định UI | 3 | 3 | 0 | 0 | 0
+Tổng cộng | 151 | 146 | 1 | 4 | 0
+
+TABLE
+Trường | Nội dung
+TR / người kiểm thử | TR-AUTH-01 / Tạ Trần Vinh Quang
+Kịch bản | Kiểm tra phản hồi của form đăng ký khi tên hiển thị chỉ có 1 ký tự, trong khi email, mật khẩu và xác nhận mật khẩu đều hợp lệ.
+Tiền điều kiện | Người kiểm thử đang ở màn hình Đăng ký và chưa đăng nhập. Đã chuẩn bị một địa chỉ email chưa đăng ký, có thể mở hộp thư để xác nhận tài khoản khi cần. Các trường không được nêu riêng dùng tên An, email mới hợp lệ và mật khẩu Abcd1234 có xác nhận trùng.
+Dữ liệu | Tên: A; các trường khác hợp lệ
+Các bước | 1. Nhập tên A và các trường hợp lệ. / 2. Bấm Đăng ký.
+Mong đợi | Thông báo tên cần ít nhất 2 ký tự; không hoàn tất đăng ký.
+Thực tế | Báo không đủ kí tự, không hoàn tất đăng ký
+Trạng thái / ngày ghi nhận | Pass / 30/10/2026
+
+TABLE
+Trường | Nội dung
+TR / người kiểm thử | TR-ACL-01 / Tạ Trần Vinh Quang
+Kịch bản | Kiểm tra khả năng vượt quyền qua URL khi người học User1 đã đăng nhập và tự sửa đường dẫn trên thanh địa chỉ thành trang quản trị.
+Tiền điều kiện | Người kiểm thử biết URL quản trị https://nminmin.github.io/korean.study/#/admin. Đã chuẩn bị tài khoản người học User1 và tài khoản quản trị Admin; sử dụng đúng trạng thái đăng nhập được nêu trong từng ca.
+Dữ liệu | Email User1; mật khẩu đúng; URL: https://nminmin.github.io/korean.study/#/admin.
+Các bước | 1. Đăng nhập User1 và chờ Trang chủ hiển thị. / 2. Thay URL trên thanh địa chỉ bằng https://nminmin.github.io/korean.study/#/admin rồi nhấn Enter. / 3. Quan sát màn hình được chuyển đến và thử xem có chức năng quản trị nào sử dụng được hay không.
+Mong đợi | Chuyển về giao diện người học; không xem hay thao tác được chức năng admin.
+Thực tế | Không vô được trang quản trị, vẫn ở trang học
+Trạng thái / ngày ghi nhận | Pass / 30/10/2026
+
+TABLE
+Trường | Nội dung
+TR / người kiểm thử | TR-DICT-01 / Nguyễn Danh Nghĩa
+Kịch bản | Kiểm tra các thao tác phát, tạm dừng và phát tiếp audio của một câu nghe, nhằm xác định trạng thái điều khiển khớp âm thanh thực tế.
+Tiền điều kiện | User1 đã mở Nghe chép của bài học thứ nhất đã chuẩn bị ở chế độ Luyện tập. Bài có ít nhất 2 câu với audio phát được. Máy đã bật loa và Chrome được phép phát âm thanh.
+Dữ liệu | Câu nghe đầu bài học thứ nhất đã chuẩn bị
+Các bước | 1. Mở Nghe chép ở chế độ Luyện tập. / 2. Bấm phát. / 3. Tạm dừng. / 4. Phát tiếp.
+Mong đợi | Audio phát/dừng đúng thao tác; không có nhiều audio phát chồng.
+Thực tế | Bắt đầu phát, tạm dừng và tiếp tục phát âm thanh hoạt động chính xác; thanh tiến trình và trạng thái audio cập nhật đúng theo thao tác.
+Trạng thái / ngày ghi nhận | Pass / 30/10/2026
+
+TABLE
+Trường | Nội dung
+TR / người kiểm thử | TR-SHAD-02 / Nguyễn Danh Nghĩa
+Kịch bản | Kiểm tra transcript, điểm và nhận xét sau khi người học đọc gần đúng câu mẫu, đồng thời đối chiếu trạng thái đạt với điểm thực tế do giao diện hiển thị.
+Tiền điều kiện | User1 đang mở Shadowing của bài học thứ nhất đã chuẩn bị. Microphone, audio mẫu và dịch vụ nhận dạng đang sử dụng được. Người kiểm thử có thể ghi âm qua UI; các ca cần câu đạt chỉ thực hiện sau khi giao diện chấm được ít nhất một câu từ 80 điểm.
+Dữ liệu | Câu mẫu và bản thu rõ
+Các bước | 1. Nghe câu mẫu. / 2. Ghi lại câu bằng giọng rõ. / 3. Chờ chấm và đọc kết quả.
+Mong đợi | Có transcript, điểm trong 0–100 và nhận xét; trạng thái đạt tương ứng điểm hiển thị, không khẳng định phân tích âm vị.
+Thực tế | Hệ thống ghi nhận điểm độ khớp 85%, hiển thị đánh giá kèm nhận xét và gợi ý từ AI, cùng trạng thái hoàn thành câu để tiếp tục chuyển sang câu tiếp theo.
+Trạng thái / ngày ghi nhận | Pass / 30/10/2026
+
+TABLE
+Trường | Nội dung
+TR / người kiểm thử | TR-AI-01 / Nguyễn Danh Nghĩa
+Kịch bản | Kiểm tra bộ AI luyện tập tự được tạo khi mở màn hình.
+Tiền điều kiện | User1 mở bài đã tải được từ vựng/ngữ pháp khi có mạng; chức năng AI luyện tập của bài khả dụng.
+Dữ liệu | Một bài có nguồn từ vựng/ngữ pháp.
+Các bước | 1. Từ bài học mở AI luyện tập. / 2. Quan sát màn chờ và đợi bộ câu hỏi tự xuất hiện. / 3. Làm lần lượt 20 câu; ghi các đáp án đúng/sai. / 4. Xem kết quả ở cuối lượt.
+Mong đợi | Có trạng thái chờ và bộ 20 câu thuộc nguồn bài; đáp án thao tác được; tổng kết đúng số câu đã trả lời đúng trên tổng số câu; không hiện JSON thô hoặc trang trắng.
+Thực tế | Hệ thống hiển thị màn hình kết quả hoàn thành bộ luyện tập AI với thông báo "Hoàn thành bộ 1", thống kê kết quả đạt "19/20 câu đúng", kèm các nút chức năng "Về bài học", "Ôn 1 câu sai" và "AI tạo bộ mới".
+Trạng thái / ngày ghi nhận | Pass / 30/10/2026
+
+TABLE
+Trường | Nội dung
+TR / người kiểm thử | TR-HOME-02 / Tạ Trần Vinh Quang
+Kịch bản | Kiểm tra thẻ Tiếp tục học có ưu tiên bài bài học thứ hai chưa học mà người dùng vừa chủ động mở, kể cả khi bài này vẫn có tiến độ 0%, thay vì tự quay về bài bài học thứ nhất đã chuẩn bị đang dở.
+Tiền điều kiện | User1 đã thêm giáo trình giáo trình đã xuất bản thứ nhất. Trong giáo trình đã xuất bản thứ nhất có bài học thứ nhất đã chuẩn bị đang học dở và bài học thứ hai chưa học chưa bắt đầu nhưng được phép mở. User2 là tài khoản khác có dữ liệu học riêng để kiểm tra việc chuyển tài khoản.
+Dữ liệu | bài học thứ hai chưa học
+Các bước | 1. Mở bài học thứ hai chưa học từ danh sách bài. / 2. Chưa làm hoạt động, về Trang chủ. / 3. Bấm Học ngay trên Tiếp tục học.
+Mong đợi | Thẻ và nút mở bài học thứ hai chưa học, không tự nhảy về bài học thứ nhất đã chuẩn bị.
+Thực tế | Giáo trình chưa có bài học thứ 2 nên không test được
+Trạng thái / ngày ghi nhận | Blocked / 30/10/2026
+
+TABLE
+Thành phần | Giá trị ghi nhận
+Ứng dụng | https://nminmin.github.io/korean.study/
+Route quản trị | https://nminmin.github.io/korean.study/#/admin
+Build | Nhánh main — commit 17df99edcb3b55f3dcd9d79d306f1d3099dbe565 (17df99e), ngày commit 24/10/2026
+Trình duyệt / hệ điều hành | Google Chrome 156.0.8078.79 / Windows 11
+Múi giờ | Asia/Ho_Chi_Minh (UTC+07:00) — Giờ Việt Nam
+Xác nhận email | Bật
+Khoảng lịch kiểm thử | 26–30/10/2026 theo kế hoạch WBS.
+Ngày ghi nhận trong TC | 30/10/2026
+Kiểu thực thi | Manual UI; nhập URL để kiểm tra quyền, giả lập viewport Chrome, microphone/audio và thao tác mất mạng.
+
+TABLE
+Trạng thái | Số TC | Tỷ lệ trên 151 TC
+Pass | 146 | 96.69%
+Fail | 1 | 0.66%
+Blocked | 4 | 2.65%
+N/A | 0 | 0.00%
+
+TABLE
+TC ID | Trạng thái | Quan sát / nguyên nhân ghi nhận
+TC-HOME-02-01 | Blocked | Giáo trình chưa có bài học thứ 2 nên không test được
+TC-HOME-02-02 | Blocked | Chưa có giáo trình nào có 2 bài nên không test được
+TC-HOME-02-03 | Blocked | Chưa có bài học thứ 2
+TC-PREF-02-02 | Fail | Chưa đổi hết ngôn ngữ theo setting, chỉ những chữ bên thanh menu, header và nội dung trong setting
+TC-ADM-01-02 | Blocked | Không có xem chi tiết
+
+TABLE
+TC ID | Điều kiện chặn | Ảnh hưởng đến kết luận | Hướng xử lý tiếp theo
+TC-HOME-02-01 | Chưa có bài học thứ hai. | Chưa xác minh thẻ Tiếp tục học giữ bài vừa chủ động mở khi tiến độ còn 0%. | Chuẩn bị giáo trình có ít nhất hai bài đã xuất bản; mở bài thứ hai rồi kiểm tra thẻ Tiếp tục học.
+TC-HOME-02-02 | Chưa có giáo trình chứa hai bài. | Chưa xác minh việc ghi nhớ bài thứ hai trên thẻ Tiếp tục học sau tải lại Trang chủ và bấm Học ngay. | Bổ sung dữ liệu đủ hai bài; chạy lại theo đúng tiền điều kiện và bước trong workbook.
+TC-HOME-02-03 | Chưa có bài học thứ hai. | Chưa xác minh sự tách biệt lựa chọn bài học khi đăng xuất User1 rồi đăng nhập User2 trên cùng trình duyệt. | Chuẩn bị hai tài khoản có lựa chọn bài khác nhau; chạy lại thao tác đổi tài khoản và kiểm tra thẻ Tiếp tục học.
+TC-ADM-01-02 | Không có màn xem chi tiết người dùng theo ghi nhận. | Chưa xác minh trọn vẹn thao tác tìm/mở chi tiết tài khoản. Chưa đủ cơ sở gán lỗi sản phẩm. | Đối chiếu UI/build và phạm vi yêu cầu. Nếu có luồng thì chạy lại; nếu không có, rà soát TC/TR trước khi chốt phân loại.
+
+TABLE
+Chỉ số | Mẫu số / cách tính | Kết quả
+Tổng TR / TC | Đếm mã hợp lệ | 43 TR / 151 TC
+Pass / Fail | Theo trạng thái cuối | 146 / 1
+Blocked / N/A | Theo trạng thái cuối | 4 / 0
+Pass Rate | Pass / (Pass + Fail) | 146/147 = 99,32%
+Pass trên toàn bộ thiết kế | Pass / tổng TC | 146/151 = 96,69%
+Tiến độ thực thi | (Pass + Fail) / (Tổng TC − N/A) | 147/151 = 97,35%
+Bao phủ thiết kế TR | TR có TC / tổng TR | 43/43 = 100%
+Bao phủ thực thi TR | TR có ít nhất 1 Pass/Fail / tổng TR | 42/43 = 97,67%
+TR chưa có Pass/Fail | TR-HOME-02 | 3 TC đều Blocked
+
+TABLE
+WBS | Công việc | Phụ trách | Kế hoạch | % HT | Trạng thái
+1.1 | Khảo sát các luồng UI của Korean Study | Võ Nhạc Phước | 25/10–25/10 | 100% | Hoàn thành
+1.2 | Thống nhất phạm vi, môi trường và tiêu chí kiểm thử | Võ Nhạc Phước | 25/10–25/10 | 100% | Hoàn thành
+1.3 | Hoàn thiện Test Plan và phân công công việc | Cả nhóm | 25/10–26/10 | 100% | Hoàn thành
+2.1 | Hoàn thiện 43 yêu cầu kiểm thử | Nguyễn Danh Nghĩa | 25/10–26/10 | 100% | Hoàn thành
+2.2 | Hoàn thiện 151 TC kiểm thử giao diện | Võ Nhạc Phước | 25/10–26/10 | 100% | Hoàn thành
+2.3 | Rà soát và duyệt bộ TR/TC | Tạ Trần Vinh Quang | 26/10–26/10 | 100% | Hoàn thành
+3.1 | Chuẩn bị tài khoản và dữ liệu cho các ca được giao | Cả nhóm | 25/10–27/10 | 100% | Hoàn thành
+3.2 | Quang thực hiện 50 TC theo luồng được giao | Tạ Trần Vinh Quang | 26/10–30/10 | 100% | Hoàn thành
+3.3 | Nghĩa thực hiện 52 TC theo luồng được giao | Nguyễn Danh Nghĩa | 26/10–30/10 | 100% | Hoàn thành
+3.4 | Phước thực hiện 49 TC theo luồng được giao | Võ Nhạc Phước | 26/10–30/10 | 100% | Hoàn thành
+3.5 | Kiểm tra các ca phụ thuộc ngày có hiệu lực của lịch học | Nguyễn Danh Nghĩa | 26/10–30/10 | 100% | Hoàn thành
+3.6 | Cập nhật kết quả và tổng hợp bằng chứng hiện có | Tạ Trần Vinh Quang | 26/10–30/10 | 100% | Hoàn thành
+4.1 | Tổng hợp và phân loại các lỗi thực sự phát hiện | Tạ Trần Vinh Quang | 27/10–30/10 | 100% | Hoàn thành
+4.2 | Kiểm thử lại các lỗi đã được sửa nếu có | Cả nhóm | 29/10–30/10 | 0% | Chưa thực hiện
+4.3 | Tổng hợp số lượng và tính các chỉ số kiểm thử | Nguyễn Danh Nghĩa | 29/10–30/10 | 100% | Hoàn thành
+4.4 | Đánh giá chất lượng và các giới hạn của đợt test | Võ Nhạc Phước | 30/10–30/10 | 100% | Hoàn thành
+5.1 | Viết báo cáo Word theo cấu trúc 8 chương | Nguyễn Danh Nghĩa | 27/10–30/10 | 100% | Hoàn thành
+5.2 | Xây dựng slide thuyết trình | Võ Nhạc Phước | 28/10–30/10 | 100% | Hoàn thành
+5.3 | Đối chiếu số liệu và rà soát bộ hồ sơ | Tạ Trần Vinh Quang | 30/10–30/10 | 100% | Hoàn thành
+5.4 | Đóng gói và nộp bài cuối kỳ | Tạ Trần Vinh Quang | 30/10–30/10 | 100% | Hoàn thành
+6.1 | Thống nhất nội dung nói và luyện thuyết trình | Cả nhóm | 30/10–31/10 | 100% | Hoàn thành
+6.2 | Thuyết trình và trả lời câu hỏi | Cả nhóm | 31/10–31/10 | 100% | Hoàn thành
+
+TABLE
+WBS / công việc | Phụ trách | % HT | 25/10 | 26/10 | 27/10 | 28/10 | 29/10 | 30/10 | 31/10
+1.1 Khảo sát UI | Phước | 100% |  |  |  |  |  |  | 
+1.2 Chốt phạm vi | Phước | 100% |  |  |  |  |  |  | 
+1.3 Test Plan | Cả nhóm | 100% |  |  |  |  |  |  | 
+2.1 Thiết kế TR | Nghĩa | 100% |  |  |  |  |  |  | 
+2.2 Thiết kế TC | Phước | 100% |  |  |  |  |  |  | 
+2.3 Rà soát TR/TC | Quang | 100% |  |  |  |  |  |  | 
+3.1 Chuẩn bị dữ liệu | Cả nhóm | 100% |  |  |  |  |  |  | 
+3.2 Quang chạy TC | Quang | 100% |  |  |  |  |  |  | 
+3.3 Nghĩa chạy TC | Nghĩa | 100% |  |  |  |  |  |  | 
+3.4 Phước chạy TC | Phước | 100% |  |  |  |  |  |  | 
+3.5 Ca phụ thuộc ngày | Nghĩa | 100% |  |  |  |  |  |  | 
+3.6 Chốt kết quả/ảnh | Quang | 100% |  |  |  |  |  |  | 
+4.1 Phân loại lỗi | Quang | 100% |  |  |  |  |  |  | 
+4.2 Retest nếu có | Cả nhóm | 0% |  |  |  |  |  |  | 
+4.3 Tổng hợp chỉ số | Nghĩa | 100% |  |  |  |  |  |  | 
+4.4 Đánh giá chất lượng | Phước | 100% |  |  |  |  |  |  | 
+5.1 Viết báo cáo | Nghĩa | 100% |  |  |  |  |  |  | 
+5.2 Làm slide | Phước | 100% |  |  |  |  |  |  | 
+5.3 Rà soát hồ sơ | Quang | 100% |  |  |  |  |  |  | 
+5.4 Đóng gói/nộp | Quang | 100% |  |  |  |  |  |  | 
+6.1 Luyện thuyết trình | Cả nhóm | 100% |  |  |  |  |  |  | 
+6.2 Thuyết trình | Cả nhóm | 100% |  |  |  |  |  |  | 
+
+TABLE
+Công cụ / hồ sơ | Mục đích
+Chrome Windows | Thao tác UI, quyền mic, nhiều hồ sơ tài khoản và viewport nhỏ.
+Microsoft Excel | TR/TC, ảnh bằng chứng, phân công và tổng hợp kết quả.
+Microsoft Word | Biên soạn báo cáo theo template học phần.
+Git/source Korean Study | Đối chiếu chức năng với commit main 17df99e.
+Timeline WBS/RACI | Lịch, trách nhiệm, trạng thái và phân bổ đầu việc.
+
+TABLE
+Mốc theo hồ sơ | Hoạt động | Sản phẩm
+25–26/10/2026 | Khảo sát, chuẩn bị, thiết kế và duyệt | 43 TR, 151 TC và phân công.
+26–30/10/2026 | Chạy UI, ghi kết quả, chốt bằng chứng | 146 Pass, 1 Fail, 4 Blocked, 0 N/A.
+27–30/10/2026 | Tổng hợp và hoàn thiện tài liệu | Chỉ số, báo cáo và hồ sơ kèm theo.
+31/10/2026 | Mốc thuyết trình theo kế hoạch | Trình bày và hỏi đáp theo lịch.
+
+TABLE
+Thành viên | TC | Kết quả | Thực thi | Tỷ lệ việc riêng
+Tạ Trần Vinh Quang | 50 | 47P / 0F / 3B / 0 N/A | 94.00% | 35.29%
+Nguyễn Danh Nghĩa | 52 | 52P / 0F / 0B / 0 N/A | 100.00% | 29.41%
+Võ Nhạc Phước | 49 | 47P / 1F / 1B / 0 N/A | 97.96% | 35.29%
+
+TABLE
+CLO | Số lượt việc liên quan | Tỷ trọng phân bổ
+CLO1 | 6 | 17.14%
+CLO2 | 12 | 34.29%
+CLO3 | 10 | 28.57%
+CLO4 | 7 | 20.00%
+
+TABLE
+Tệp | Nội dung
+Kiểm thử cuối kỳ.xlsx | 43 TR; 151 TC; kết quả, trạng thái, ngày và ảnh nhúng.
+Timeline_TienDo_WBS_Korean_Study.xlsx | WBS, lịch kế hoạch, RACI, phân công và tỷ trọng công việc.
+
+TABLE
+Ký hiệu | Ý nghĩa
+Pass / P | Ca được nhóm ghi nhận đạt.
+Fail | Ca khác mong đợi đã được ghi Fail.
+Blocked / B | Không đủ điều kiện hoàn tất thực thi có kết luận.
+N/A | Không áp dụng theo phân loại chốt trong hồ sơ.
+100% chốt WBS | Hoàn tất rà soát/ghi nhận đầu việc; có thể vẫn chứa TC Blocked/N/A.
+Pass Rate | Pass / (Pass + Fail); kết quả hiện tại 146/147 = 99,32%, không tính trên toàn bộ 151 TC.
+
+WORKBOOK Kiểm thử cuối kỳ.xlsx
+
+SHEET Tổng quan 1000x12
+2 A:Korean Study TR và Test Case UI | J:Tỷ lệ phân công Test Case
+3 J:Tỷ lệ số TC được giao trên tổng số TC, không phải tỷ lệ hoàn thành.
+5 A:Chỉ số | B:Giá trị | D:Module | E:TR | F:TC | G:Đã chạy | H:Pass | J:Người phụ trách | K:Số TC | L:Tỷ lệ tham gia
+6 A:Tổng TR | B:43 | D:Tài khoản | E:4 | F:24 | G:24 | H:24 | J:Tạ Trần Vinh Quang | K:50 | L:0.33112582781456956
+7 A:Tổng TC | B:151 | D:Phân quyền | E:2 | F:7 | G:7 | H:7 | J:Võ Nhạc Phước | K:49 | L:0.32450331125827814
+8 A:Not Run | B:0 | D:Trang chủ | E:2 | F:6 | G:3 | H:3 | J:Nguyễn Danh Nghĩa | K:52 | L:0.3443708609271523
+9 A:Pass | B:146 | D:Giáo trình | E:2 | F:6 | G:6 | H:6 | J:Tổng cộng | K:151 | L:1
+10 A:Fail | B:1 | D:Từ vựng | E:2 | F:7 | G:7 | H:7
+11 A:Blocked | B:4 | D:Ngữ pháp | E:1 | F:3 | G:3 | H:3
+12 A:N/A | B:0 | D:Nghe chép | E:3 | F:10 | G:10 | H:10
+13 A:Tỷ lệ Pass / TC đã chạy | B:0.9931972789115646 | D:Shadowing | E:2 | F:7 | G:7 | H:7
+14 A:TR có TC thiết kế | B:43 | D:Ôn tập | E:2 | F:6 | G:6 | H:6
+15 A:Bao phủ thiết kế TR | B:1 | D:Lịch ôn | E:2 | F:5 | G:5 | H:5
+16 A:TR có TC đã chạy | B:42 | D:AI | E:1 | F:3 | G:3 | H:3
+17 A:Bao phủ thực thi TR | B:0.9767441860465116 | D:Cộng đồng | E:2 | F:8 | G:8 | H:8
+18 D:Bộ từ tùy chỉnh | E:2 | F:6 | G:6 | H:6
+19 D:Xếp hạng | E:1 | F:3 | G:3 | H:3
+20 D:Cửa hàng | E:1 | F:3 | G:3 | H:3
+21 D:Tiến độ | E:2 | F:6 | G:6 | H:6
+22 D:Kế hoạch học | E:3 | F:12 | G:12 | H:12
+23 D:Hồ sơ và giao diện | E:2 | F:7 | G:7 | H:6
+24 D:Quản trị | E:2 | F:5 | G:4 | H:4
+25 D:Quản trị nội dung | E:3 | F:11 | G:11 | H:11
+26 D:Kiểm duyệt | E:1 | F:3 | G:3 | H:3
+27 D:Độ ổn định UI | E:1 | F:3 | G:3 | H:3
+31 A:Phạm vi | B:Manual UI Testing trên trình duyệt: người học, admin, responsive, audio/mic và sửa URL để thử quyền.
+32 A:Ngoài phạm vi | B:Không gọi API thủ công/Postman, không chỉnh request/token, không truy vấn/sửa database, không load test hoặc kiểm tra bảo mật backend.
+33 A:URL ứng dụng | B:https://nminmin.github.io/korean.study/
+34 A:Build khi chạy | B:Nhánh main — commit 17df99edcb3b55f3dcd9d79d306f1d3099dbe565 (17df99e), ngày commit 24/10/2026
+35 A:Trình duyệt / HĐH | B:Google Chrome 156.0.8078.79 / Windows 11
+36 A:Múi giờ profile | B:Asia/Ho_Chi_Minh (UTC+07:00) — Giờ Việt Nam
+37 A:Xác nhận email bật/tắt | B:Bật
+38 A:Thời gian đợt chạy | B:26–30/10/2026 theo kế hoạch WBS.
+39 A:Route admin | B:https://nminmin.github.io/korean.study/#/admin — nhập trên thanh địa chỉ trình duyệt để kiểm tra phân quyền.
+40 A:Tài khoản / nội dung | B:User1: người học chính; User2: người học thứ hai; Admin: quản trị viên.
+41 A:Trạng thái | B:Not Run: chưa thực hiện; Pass: đạt; Fail: khác mong đợi; Blocked: thiếu điều kiện; N/A: không áp dụng, phải ghi lý do.
+42 A:Kỹ thuật thiết kế | B:EP: phân vùng tương đương; BVA: giá trị biên; Decision Table: các tổ hợp quyền/điều kiện; Use Case: luồng thao tác người dùng.
+43 A:Ca phụ thuộc lịch / dịch vụ | B:Chờ ngày thật cho hiệu lực thứ Hai/ngày nghỉ, không đổi đồng hồ. Thiếu mail/job/mic/AI hoặc số dư: Blocked và ghi nguyên nhân.
+44 A:Duyệt yêu cầu | B:Nhóm trưởng / người duyệt: Tạ Trần Vinh Quang. Các yêu cầu trong sheet TR đã được đánh dấu Đã duyệt.
+45 A:Độ bao phủ | B:Thiết kế = TR có ít nhất 1 TC / tổng TR. Thực thi = TR có ít nhất 1 TC Pass/Fail / tổng TR; không có nghĩa mọi TC của TR đã chạy.
+46 A:Mẫu số Pass Rate | B:Pass / (Pass + Fail); không gồm Not Run, Blocked, N/A. Khi viết báo cáo có thể trình bày thêm Pass / tổng TC và ghi rõ mẫu số.
+
+SHEET TR 1000x9
+2 A:Yêu cầu kiểm thử Korean Study
+3 A:TR mô tả hành vi cần kiểm tra qua UI.
+5 A:TR ID | B:Module | C:Tên yêu cầu | D:Mô tả yêu cầu kiểm thử | E:Loại TR | F:Ưu tiên | G:Duyệt yêu cầu | H:Số TC thiết kế | I:TC đã chạy
+6 A:TR-AUTH-01 | B:Tài khoản | C:Đăng ký tài khoản | D:Cho phép đăng ký bằng tên từ 2 ký tự và mật khẩu từ 8 ký tự có chữ hoa, chữ thường, chữ số; xác nhận phải trùng. | E:Functional / Boundary | F:High | G:Đã duyệt | H:10 | I:10
+7 A:TR-AUTH-02 | B:Tài khoản | C:Đăng nhập và lỗi nhập liệu | D:Cho phép tài khoản hợp lệ đăng nhập; từ chối thông tin sai hoặc thiếu qua giao diện. | E:Functional | F:High | G:Đã duyệt | H:6 | I:6
+8 A:TR-AUTH-03 | B:Tài khoản | C:Lưu phiên và đăng xuất | D:Lưu phiên theo lựa chọn Lưu đăng nhập; đăng xuất kết thúc truy cập màn hình cần đăng nhập. | E:Functional | F:High | G:Đã duyệt | H:4 | I:4
+9 A:TR-AUTH-04 | B:Tài khoản | C:Khôi phục mật khẩu | D:Người dùng yêu cầu liên kết khôi phục và đặt mật khẩu mới hợp lệ qua các màn hình ứng dụng. | E:Functional | F:High | G:Đã duyệt | H:4 | I:4
+10 A:TR-ACL-01 | B:Phân quyền | C:Bảo vệ đường dẫn quản trị | D:Chỉ admin được truy cập giao diện /admin, kể cả nhập URL trực tiếp. | E:Security / UI route | F:High | G:Đã duyệt | H:4 | I:4
+11 A:TR-ACL-02 | B:Phân quyền | C:Khóa tài khoản | D:Tài khoản bị admin khóa không được tiếp tục sử dụng ứng dụng; mở khóa khôi phục quyền đăng nhập. | E:Security / Functional | F:High | G:Đã duyệt | H:3 | I:3
+12 A:TR-HOME-01 | B:Trang chủ | C:Hiển thị dữ liệu người học | D:Trang chủ hiển thị đúng hồ sơ, tiến độ và các lối vào học tập của tài khoản hiện tại. | E:Functional | F:High | G:Đã duyệt | H:3 | I:3
+13 A:TR-HOME-02 | B:Trang chủ | C:Tiếp tục đúng bài đã chọn | D:Thẻ Tiếp tục học giữ bài người học chủ động mở, kể cả bài có tiến độ 0%, và giữ sau tải lại. | E:Functional | F:High | G:Đã duyệt | H:3 | I:0
+14 A:TR-CUR-01 | B:Giáo trình | C:Thêm và mở giáo trình | D:Người học thêm được giáo trình đã xuất bản và mở danh sách bài tương ứng. | E:Functional | F:High | G:Đã duyệt | H:3 | I:3
+15 A:TR-CUR-02 | B:Giáo trình | C:Bài học và trạng thái nội dung | D:Danh sách bài và chi tiết bài hiển thị đúng dữ liệu; không mở hoạt động rỗng như nội dung đã sẵn sàng. | E:Functional | F:High | G:Đã duyệt | H:3 | I:3
+16 A:TR-VOC-01 | B:Từ vựng | C:Flashcard và đánh giá từ | D:Flashcard hiển thị đúng từ/nghĩa, lật thẻ, phát âm và xử lý đánh giá đã thuộc/chưa thuộc. | E:Functional | F:High | G:Đã duyệt | H:3 | I:3
+17 A:TR-VOC-02 | B:Từ vựng | C:Sổ tay, dấu sao và ghi chú | D:Dấu sao và ghi chú lưu theo đúng ID từ và user; sổ tay cho phép xem, tìm và bỏ sao. | E:Functional | F:High | G:Đã duyệt | H:4 | I:4
+18 A:TR-GRAM-01 | B:Ngữ pháp | C:Xem và ôn ngữ pháp | D:Người học mở ngữ pháp theo giáo trình/bài và xem đúng nội dung sẵn có. | E:Functional | F:Medium | G:Đã duyệt | H:3 | I:3
+19 A:TR-DICT-01 | B:Nghe chép | C:Phát và điều khiển audio | D:Nghe chép cho phép phát, tạm dừng, nghe lại và đổi tốc độ qua giao diện. | E:Functional | F:High | G:Đã duyệt | H:3 | I:3
+20 A:TR-DICT-02 | B:Nghe chép | C:Nhập và kiểm tra đáp án | D:Nghe chép đánh giá câu trả lời, hiển thị phần đúng/sai và hỗ trợ gợi ý/bản dịch. | E:Functional | F:High | G:Đã duyệt | H:4 | I:4
+21 A:TR-DICT-03 | B:Nghe chép | C:Kiểm tra và làm lại | D:Chế độ Kiểm tra được mở theo điều kiện học; kết quả và làm lại không giữ đáp án của lượt cũ. | E:Functional | F:High | G:Đã duyệt | H:3 | I:3
+22 A:TR-SHAD-01 | B:Shadowing | C:Ghi âm và quyền microphone | D:Shadowing ghi, dừng, nghe lại và xử lý quyền microphone qua trình duyệt. | E:Functional | F:High | G:Đã duyệt | H:3 | I:3
+23 A:TR-SHAD-02 | B:Shadowing | C:Kết quả nói và điều kiện tiến độ | D:Shadowing hiển thị transcript, điểm, nhận xét và chỉ ghi đạt theo ngưỡng hiện hành. | E:Functional | F:High | G:Đã duyệt | H:4 | I:4
+24 A:TR-REV-01 | B:Ôn tập | C:Chọn bộ ôn và độ khó | D:Ôn tập hỗ trợ theo bài, ngẫu nhiên và độ khó, dùng đúng nội dung đã chọn. | E:Functional | F:High | G:Đã duyệt | H:3 | I:3
+25 A:TR-REV-02 | B:Ôn tập | C:Điểm ôn và làm lại câu sai | D:Kết quả ôn phản ánh đáp án đã làm; hỗ trợ luyện lại và không mất trạng thái điều hướng. | E:Functional | F:High | G:Đã duyệt | H:3 | I:3
+26 A:TR-SCHED-01 | B:Lịch ôn | C:Lịch ôn theo ngày học | D:Lịch ôn sử dụng từ thuộc bài đã hoàn thành, tuân thủ lịch học đang có hiệu lực và mở đúng bộ từ của ngày. | E:Functional | F:High | G:Đã duyệt | H:3 | I:3
+27 A:TR-SCHED-02 | B:Lịch ôn | C:Lưu kết quả ôn từ vựng | D:Kết quả từng từ và tổng kết ôn lịch được lưu, hiển thị lại đúng khi mở lại. | E:Functional | F:Medium | G:Đã duyệt | H:2 | I:2
+28 A:TR-AI-01 | B:AI | C:Luyện tập AI qua UI | D:Người học tạo/làm bài AI và nhận kết quả; lỗi dịch vụ được phản hồi trên giao diện. | E:Functional | F:Medium | G:Đã duyệt | H:3 | I:3
+29 A:TR-COM-01 | B:Cộng đồng | C:Bài đăng và quyền sở hữu | D:Người học đăng nội dung hợp lệ, xem và xóa bài của mình; không có quyền xóa bài người khác. | E:Functional / Security UI | F:High | G:Đã duyệt | H:4 | I:4
+30 A:TR-COM-02 | B:Cộng đồng | C:Tương tác, báo cáo và thông báo | D:Thích/bỏ thích, bình luận/trả lời, báo cáo và thông báo phản ánh thao tác qua UI. | E:Functional | F:Medium | G:Đã duyệt | H:4 | I:4
+31 A:TR-CUS-01 | B:Bộ từ tùy chỉnh | C:Tạo bộ từ và xem trước | D:Cho phép tạo bộ có tiêu đề và ít nhất 2 cặp từ hợp lệ, xem trước nội dung AI rồi lưu. | E:Functional / Boundary | F:Medium | G:Đã duyệt | H:3 | I:3
+32 A:TR-CUS-02 | B:Bộ từ tùy chỉnh | C:Chia sẻ, nhập mã và làm bài | D:Người học nhập mã chia sẻ hợp lệ, mở đúng bộ và làm bài kiểm tra; mã sai có phản hồi. | E:Functional | F:Medium | G:Đã duyệt | H:3 | I:3
+33 A:TR-RANK-01 | B:Xếp hạng | C:Lọc và hiển thị bảng xếp hạng | D:Bảng xếp hạng đổi đúng phạm vi cộng đồng/giáo trình và hiển thị số liệu hợp lệ. | E:Functional | F:Medium | G:Đã duyệt | H:3 | I:3
+34 A:TR-SHOP-01 | B:Cửa hàng | C:Mua và chọn cây | D:Chỉ mua cây khi đủ kim cương; cây đã sở hữu được chọn và lưu đúng trạng thái. | E:Functional / Boundary | F:High | G:Đã duyệt | H:3 | I:3
+35 A:TR-PROG-01 | B:Tiến độ | C:Hoàn thành bài và thưởng | D:Hoàn thành dựa trên đủ 4 hoạt động; phần thưởng nhìn thấy không được cộng lặp do mở lại. | E:Functional | F:High | G:Đã duyệt | H:3 | I:3
+36 A:TR-SET-01 | B:Kế hoạch học | C:Biên mục tiêu phút mỗi ngày | D:Ô mục tiêu chuẩn hóa về khoảng 5–180 phút trước khi lưu. | E:Boundary | F:High | G:Đã duyệt | H:5 | I:5
+37 A:TR-SET-02 | B:Kế hoạch học | C:Lưu kế hoạch có hiệu lực tuần sau | D:Lưu lịch tuần, mục tiêu và hạn hoàn thành; phân biệt bản đang chỉnh sửa với bản đang có hiệu lực. | E:Functional | F:High | G:Đã duyệt | H:3 | I:3
+38 A:TR-SET-03 | B:Kế hoạch học | C:Âm thanh và nhắc học | D:Các lựa chọn âm thanh/nhắc học/giờ nhắc lưu qua UI; email phản ánh điều kiện hiện tại của code. | E:Functional | F:Medium | G:Đã duyệt | H:4 | I:4
+39 A:TR-TIME-01 | B:Tiến độ | C:Theo dõi phút và mục tiêu ngày | D:Chỉ thời gian ở màn hình học đang hiển thị được ghi; hoàn tất phiên lưu cả phần thời gian cuối. | E:Functional | F:High | G:Đã duyệt | H:3 | I:3
+40 A:TR-PREF-01 | B:Hồ sơ và giao diện | C:Cập nhật hồ sơ | D:Tên hiển thị/ảnh đại diện được cập nhật qua UI và giữ sau đăng nhập lại. | E:Functional | F:Medium | G:Đã duyệt | H:3 | I:3
+41 A:TR-PREF-02 | B:Hồ sơ và giao diện | C:Theme, ngôn ngữ và responsive | D:Các tùy chọn giao diện hoạt động và các luồng chính dùng được ở kích thước desktop/mobile. | E:UI / Compatibility | F:Medium | G:Đã duyệt | H:4 | I:4
+42 A:TR-ADM-01 | B:Quản trị | C:Thống kê và tìm người dùng | D:Admin xem thống kê theo khoảng thời gian và tìm/lọc đúng người dùng. | E:Functional | F:Medium | G:Đã duyệt | H:3 | I:2
+43 A:TR-ADM-02 | B:Quản trị | C:Đổi vai trò có kiểm soát | D:Admin đổi vai trò tài khoản thử nghiệm; quyền UI thay đổi theo vai trò sau đăng nhập lại. | E:Functional / Security UI | F:High | G:Đã duyệt | H:2 | I:2
+44 A:TR-ADM-03 | B:Quản trị nội dung | C:CRUD giáo trình | D:Admin tạo, sửa, tìm/lọc và xóa giáo trình thử nghiệm với xác nhận phù hợp. | E:Functional | F:High | G:Đã duyệt | H:4 | I:4
+45 A:TR-ADM-04 | B:Quản trị nội dung | C:CRUD bài học | D:Admin thêm/sửa/xóa bài vào đúng giáo trình và kiểm tra số bài hợp lệ. | E:Functional / Boundary | F:High | G:Đã duyệt | H:3 | I:3
+46 A:TR-ADM-05 | B:Quản trị nội dung | C:Quản lý câu hỏi và chuyển bài | D:Admin tạo/sửa/lọc/chuyển câu hỏi đúng loại kỹ năng và đúng bài. | E:Functional | F:High | G:Đã duyệt | H:4 | I:4
+47 A:TR-MOD-01 | B:Kiểm duyệt | C:Ẩn bài và khóa bình luận | D:Admin xử lý nội dung vi phạm qua UI; người học thấy đúng trạng thái sau thay đổi. | E:Functional / Security UI | F:High | G:Đã duyệt | H:3 | I:3
+48 A:TR-UX-01 | B:Độ ổn định UI | C:Lỗi mạng và tách dữ liệu user | D:Các thao tác UI xử lý lỗi mạng rõ ràng; đăng nhập tài khoản khác không lẫn dữ liệu cá nhân. | E:UI / Functional | F:High | G:Đã duyệt | H:3 | I:3
+
+SHEET TC 163x17
+2 A:Test Case UI Korean Study
+3 A:Tài khoản, vai trò và nội dung cần chuẩn bị được nêu ngay trong từng TC. Mỗi người tự chuẩn bị cho các ca được giao.
+5 A:TC ID | B:TR ID | C:Module | D:Người kiểm thử | E:Mô tả kịch bản | F:Ưu tiên | G:Kỹ thuật | H:Điều kiện tiên quyết | I:Dữ liệu kiểm thử | J:Các bước thực hiện | K:Kết quả mong đợi | L:Kết quả thực tế | M:Bằng chứng 1 | N:Bằng chứng 2 | O:Trạng thái | P:Ngày chạy | Q:Ghi chú
+6 A:TC-AUTH-01-01 | B:TR-AUTH-01 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra việc đăng ký tài khoản khi tên hiển thị có đúng 2 ký tự, mật khẩu có đúng 8 ký tự và đáp ứng đủ chữ hoa, chữ thường, chữ số; phần xác nhận được nhập trùng với mật khẩu. | F:High | G:BVA | H:Người kiểm thử đang ở màn hình Đăng ký và chưa đăng nhập. Đã chuẩn bị một địa chỉ email chưa đăng ký, có thể mở hộp thư để xác nhận tài khoản khi cần. Các trường không được nêu riêng dùng tên An, email mới hợp lệ và mật khẩu Abcd1234 có xác nhận trùng. | I:Tên: An; mật khẩu và xác nhận: Abcd1234; email mới | J:1. Nhập tên, email mới và mật khẩu.
+2. Nhập xác nhận trùng.
+3. Bấm Đăng ký. | K:Đăng ký thành công; nếu bật xác nhận email thì hiển thị hướng dẫn xác nhận và chưa mở dashboard; nếu tắt thì vào dashboard. | L:Đăng ký thành công và có mail xác nhận | O:Pass | P:2026-10-30 00:00:00
+7 A:TC-AUTH-01-02 | B:TR-AUTH-01 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra phản hồi của form đăng ký khi tên hiển thị chỉ có 1 ký tự, trong khi email, mật khẩu và xác nhận mật khẩu đều hợp lệ. | F:High | G:BVA | H:Người kiểm thử đang ở màn hình Đăng ký và chưa đăng nhập. Đã chuẩn bị một địa chỉ email chưa đăng ký, có thể mở hộp thư để xác nhận tài khoản khi cần. Các trường không được nêu riêng dùng tên An, email mới hợp lệ và mật khẩu Abcd1234 có xác nhận trùng. | I:Tên: A; các trường khác hợp lệ | J:1. Nhập tên A và các trường hợp lệ.
+2. Bấm Đăng ký. | K:Thông báo tên cần ít nhất 2 ký tự; không hoàn tất đăng ký. | L:Báo không đủ kí tự, không hoàn tất đăng ký | O:Pass | P:2026-10-30 00:00:00
+8 A:TC-AUTH-01-03 | B:TR-AUTH-01 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra việc xử lý tên hiển thị chỉ gồm khoảng trắng để xác định form có nhận biết tên rỗng sau khi loại khoảng trắng ở hai đầu hay không. | F:High | G:EP | H:Người kiểm thử đang ở màn hình Đăng ký và chưa đăng nhập. Đã chuẩn bị một địa chỉ email chưa đăng ký, có thể mở hộp thư để xác nhận tài khoản khi cần. Các trường không được nêu riêng dùng tên An, email mới hợp lệ và mật khẩu Abcd1234 có xác nhận trùng. | I:Tên: 3 dấu cách | J:1. Nhập tên chỉ có khoảng trắng.
+2. Nhập các trường còn lại hợp lệ.
+3. Bấm Đăng ký. | K:Từ chối tên rỗng sau khi bỏ khoảng trắng; không tạo tài khoản. | L:Báo không đủ kí tự, không hoàn tất đăng ký | O:Pass | P:2026-10-30 00:00:00
+9 A:TC-AUTH-01-04 | B:TR-AUTH-01 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra giới hạn tối thiểu của mật khẩu bằng cách đăng ký với mật khẩu dài 7 ký tự; mật khẩu vẫn có đủ chữ hoa, chữ thường và chữ số để chỉ kiểm tra điều kiện độ dài. | F:High | G:BVA | H:Người kiểm thử đang ở màn hình Đăng ký và chưa đăng nhập. Đã chuẩn bị một địa chỉ email chưa đăng ký, có thể mở hộp thư để xác nhận tài khoản khi cần. Các trường không được nêu riêng dùng tên An, email mới hợp lệ và mật khẩu Abcd1234 có xác nhận trùng. | I:Mật khẩu và xác nhận: Abcd123 | J:1. Ở form Đăng ký, nhập tên An và email chưa đăng ký đã chuẩn bị.
+2. Nhập cùng mật khẩu được ghi ở cột Dữ liệu kiểm thử vào cả ô Mật khẩu và Xác nhận mật khẩu.
+3. Bấm Đăng ký và đọc thông báo về điều kiện mật khẩu chưa đáp ứng. | K:Hiển thị yêu cầu mật khẩu tối thiểu 8 ký tự; không đăng ký thành công. | L:Báo mật khẩu cần ít nhất 8 kí tự, không hoàn tất đăng ký | O:Pass | P:2026-10-30 00:00:00
+10 A:TC-AUTH-01-05 | B:TR-AUTH-01 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra việc đăng ký với mật khẩu đủ 8 ký tự nhưng không có chữ hoa; các điều kiện còn lại của mật khẩu và các trường khác đều hợp lệ. | F:High | G:EP | H:Người kiểm thử đang ở màn hình Đăng ký và chưa đăng nhập. Đã chuẩn bị một địa chỉ email chưa đăng ký, có thể mở hộp thư để xác nhận tài khoản khi cần. Các trường không được nêu riêng dùng tên An, email mới hợp lệ và mật khẩu Abcd1234 có xác nhận trùng. | I:Mật khẩu và xác nhận: abcd1234 | J:1. Ở form Đăng ký, nhập tên An và email chưa đăng ký đã chuẩn bị.
+2. Nhập cùng mật khẩu được ghi ở cột Dữ liệu kiểm thử vào cả ô Mật khẩu và Xác nhận mật khẩu.
+3. Bấm Đăng ký và đọc thông báo về điều kiện mật khẩu chưa đáp ứng. | K:Thông báo mật khẩu chưa đáp ứng quy tắc; không đăng ký thành công. | L:Báo Mật khẩu cần ít nhất 8 ký tự, gồm chữ hoa, chữ thường và số.
+
+Không hoàn tất đăng ký.
+ | O:Pass | P:2026-10-30 00:00:00
+11 A:TC-AUTH-01-06 | B:TR-AUTH-01 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra việc đăng ký với mật khẩu đủ 8 ký tự nhưng không có chữ thường; phần xác nhận trùng với mật khẩu để không gây nhầm với lỗi xác nhận. | F:High | G:EP | H:Người kiểm thử đang ở màn hình Đăng ký và chưa đăng nhập. Đã chuẩn bị một địa chỉ email chưa đăng ký, có thể mở hộp thư để xác nhận tài khoản khi cần. Các trường không được nêu riêng dùng tên An, email mới hợp lệ và mật khẩu Abcd1234 có xác nhận trùng. | I:Mật khẩu và xác nhận: ABCD1234 | J:1. Ở form Đăng ký, nhập tên An và email chưa đăng ký đã chuẩn bị.
+2. Nhập cùng mật khẩu được ghi ở cột Dữ liệu kiểm thử vào cả ô Mật khẩu và Xác nhận mật khẩu.
+3. Bấm Đăng ký và đọc thông báo về điều kiện mật khẩu chưa đáp ứng. | K:Từ chối mật khẩu thiếu chữ thường. | L:Báo Mật khẩu cần ít nhất 8 ký tự, gồm chữ hoa, chữ thường và số.
+Không hoàn tất đăng ký.
+ | O:Pass | P:2026-10-30 00:00:00
+12 A:TC-AUTH-01-07 | B:TR-AUTH-01 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra việc đăng ký với mật khẩu đủ 8 ký tự, có chữ hoa và chữ thường nhưng không có chữ số, nhằm xác minh quy tắc bảo mật trên form. | F:High | G:EP | H:Người kiểm thử đang ở màn hình Đăng ký và chưa đăng nhập. Đã chuẩn bị một địa chỉ email chưa đăng ký, có thể mở hộp thư để xác nhận tài khoản khi cần. Các trường không được nêu riêng dùng tên An, email mới hợp lệ và mật khẩu Abcd1234 có xác nhận trùng. | I:Mật khẩu và xác nhận: Abcdefgh | J:1. Ở form Đăng ký, nhập tên An và email chưa đăng ký đã chuẩn bị.
+2. Nhập cùng mật khẩu được ghi ở cột Dữ liệu kiểm thử vào cả ô Mật khẩu và Xác nhận mật khẩu.
+3. Bấm Đăng ký và đọc thông báo về điều kiện mật khẩu chưa đáp ứng. | K:Từ chối mật khẩu thiếu chữ số. | L:Báo Mật khẩu cần ít nhất 8 ký tự, gồm chữ hoa, chữ thường và số.
+Không hoàn tất đăng ký.
+ | O:Pass | P:2026-10-30 00:00:00
+13 A:TC-AUTH-01-08 | B:TR-AUTH-01 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra phản hồi khi người dùng nhập hai giá trị khác nhau ở ô Mật khẩu và Xác nhận mật khẩu dù từng giá trị đều đáp ứng quy tắc bảo mật. | F:High | G:EP | H:Người kiểm thử đang ở màn hình Đăng ký và chưa đăng nhập. Đã chuẩn bị một địa chỉ email chưa đăng ký, có thể mở hộp thư để xác nhận tài khoản khi cần. Các trường không được nêu riêng dùng tên An, email mới hợp lệ và mật khẩu Abcd1234 có xác nhận trùng. | I:Mật khẩu: Abcd1234; xác nhận: Abcd1235 | J:1. Nhập tên hiển thị và email hợp lệ trên form Đăng ký.
+2. Nhập Abcd1234 ở Mật khẩu và Abcd1235 ở Xác nhận mật khẩu.
+3. Bấm Đăng ký và đọc thông báo xuất hiện trên form hoặc hộp thoại. | K:Thông báo mật khẩu không khớp; không tạo tài khoản. | L:Báo Vui lòng nhập lại phần xác nhận mật khẩu. | O:Pass | P:2026-10-30 00:00:00
+14 A:TC-AUTH-01-09 | B:TR-AUTH-01 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra khả năng phát hiện email sai định dạng trên form đăng ký khi tên hiển thị, mật khẩu và xác nhận mật khẩu đều hợp lệ. | F:High | G:EP | H:Người kiểm thử đang ở màn hình Đăng ký và chưa đăng nhập. Đã chuẩn bị một địa chỉ email chưa đăng ký, có thể mở hộp thư để xác nhận tài khoản khi cần. Các trường không được nêu riêng dùng tên An, email mới hợp lệ và mật khẩu Abcd1234 có xác nhận trùng. | I:Email: korean-test; mật khẩu hợp lệ | J:1. Nhập email sai định dạng và các trường hợp lệ.
+2. Bấm Đăng ký. | K:Trình duyệt hoặc ứng dụng chặn và báo email không hợp lệ. | L:Unable to validate email address: invalid format
+Thử lại | O:Pass | P:2026-10-30 00:00:00
+15 A:TC-AUTH-01-10 | B:TR-AUTH-01 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra phản hồi khi người dùng đăng ký bằng email đã thuộc một tài khoản hiện có, nhằm tránh tạo tài khoản trùng và hướng người dùng về luồng phù hợp. | F:High | G:EP | H:Người kiểm thử đang ở màn hình Đăng ký và chưa đăng nhập. Email của User1 đã được đăng ký từ trước và vẫn thuộc tài khoản đó. Đã chuẩn bị tên mới, mật khẩu hợp lệ và xác nhận mật khẩu trùng nhau để thử đăng ký lại bằng email User1. | I:Email User1 đã đăng ký; tên mới: An; mật khẩu và xác nhận: Abcd1234. | J:1. Ở form Đăng ký, nhập email đã thuộc User1.
+2. Nhập tên từ 2 ký tự, mật khẩu hợp lệ và phần xác nhận trùng nhau.
+3. Bấm Đăng ký; quan sát thông báo và màn hình được mở tiếp theo. | K:Không tạo thêm tài khoản trùng; hiển thị hướng dẫn đăng nhập hoặc phản hồi bảo vệ tài khoản phù hợp cấu hình. | L:Email này đã có tài khoản. Vui lòng đăng nhập hoặc dùng “Quên mật khẩu” nếu bạn không nhớ mật khẩu. | O:Pass | P:2026-10-30 00:00:00
+16 A:TC-AUTH-02-01 | B:TR-AUTH-02 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra luồng đăng nhập của người học khi nhập đúng email và mật khẩu, bao gồm việc chuyển đến Trang chủ và nhận diện đúng tài khoản vừa đăng nhập. | F:High | G:Use Case | H:Màn hình Đăng nhập đang được mở. Tài khoản người học User1 đã được tạo, xác nhận email nếu có yêu cầu và chưa bị khóa. Người kiểm thử biết thông tin đăng nhập đúng của User1. | I:Email User1; mật khẩu đúng. | J:1. Nhập email và mật khẩu User1.
+2. Bấm Đăng nhập. | K:Vào trang chủ người học; hiển thị đúng tên User1. | L:Đăng nhập thành công | O:Pass | P:2026-10-30 00:00:00
+17 A:TC-AUTH-02-02 | B:TR-AUTH-02 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra phản hồi khi email thuộc tài khoản User1 nhưng mật khẩu không đúng, nhằm xác minh người dùng không thể vào ứng dụng bằng thông tin xác thực sai. | F:High | G:EP | H:Màn hình Đăng nhập đang được mở. Tài khoản người học User1 đã được tạo, xác nhận email nếu có yêu cầu và chưa bị khóa. Người kiểm thử biết thông tin đăng nhập đúng của User1. | I:Email User1; mật khẩu sai. | J:1. Nhập email User1 và mật khẩu sai.
+2. Bấm Đăng nhập. | K:Hiển thị lỗi đăng nhập; không mở dashboard. | L:Báo đăng nhập chưa thành công, sai tài khoản hoặc mật khảu, không đăng nhập được | O:Pass | P:2026-10-30 00:00:00
+18 A:TC-AUTH-02-03 | B:TR-AUTH-02 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra việc đăng nhập bằng một email chưa được đăng ký trong hệ thống và quan sát thông báo phản hồi trên màn hình đăng nhập. | F:High | G:EP | H:Màn hình Đăng nhập đang được mở. Tài khoản người học User1 đã được tạo, xác nhận email nếu có yêu cầu và chưa bị khóa. Người kiểm thử biết thông tin đăng nhập đúng của User1. | I:Email chưa đăng ký; mật khẩu bất kỳ, ví dụ Abcd1234. | J:1. Nhập email chưa đăng ký và mật khẩu bất kỳ.
+2. Bấm Đăng nhập. | K:Không đăng nhập; có phản hồi lỗi rõ ràng. | L:Báo đăng nhập chưa thành công, sai tài khoản hoặc mật khảu, không đăng nhập được | O:Pass | P:2026-10-30 00:00:00
+19 A:TC-AUTH-02-04 | B:TR-AUTH-02 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra validation của form khi người dùng bỏ trống email nhưng đã nhập mật khẩu, trước khi gửi yêu cầu đăng nhập. | F:High | G:EP | H:Màn hình Đăng nhập đang được mở. Tài khoản người học User1 đã được tạo, xác nhận email nếu có yêu cầu và chưa bị khóa. Người kiểm thử biết thông tin đăng nhập đúng của User1. | I:Email để trống; mật khẩu User1. | J:1. Để trống email, nhập mật khẩu.
+2. Bấm Đăng nhập. | K:Yêu cầu nhập đầy đủ thông tin; vẫn ở trang đăng nhập. | L:Thiếu thông tin
+Vui lòng nhập đầy đủ email và mật khẩu. | O:Pass | P:2026-10-30 00:00:00
+20 A:TC-AUTH-02-05 | B:TR-AUTH-02 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra validation của form khi người dùng nhập email hợp lệ nhưng bỏ trống mật khẩu, nhằm tránh thực hiện đăng nhập thiếu thông tin. | F:High | G:EP | H:Màn hình Đăng nhập đang được mở. Tài khoản người học User1 đã được tạo, xác nhận email nếu có yêu cầu và chưa bị khóa. Người kiểm thử biết thông tin đăng nhập đúng của User1. | I:Email User1; mật khẩu để trống. | J:1. Nhập email, để trống mật khẩu.
+2. Bấm Đăng nhập. | K:Yêu cầu nhập mật khẩu; không đăng nhập. | L:Thiếu thông tin
+Vui lòng nhập đầy đủ email và mật khẩu. | O:Pass | P:2026-10-30 00:00:00
+21 A:TC-AUTH-02-06 | B:TR-AUTH-02 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra nút hiện/ẩn mật khẩu trên form đăng nhập, bảo đảm thao tác đổi chế độ hiển thị không làm mất hoặc thay đổi nội dung đã nhập. | F:High | G:Use Case | H:Màn hình Đăng nhập đang được mở. Tài khoản người học User1 đã được tạo, xác nhận email nếu có yêu cầu và chưa bị khóa. Người kiểm thử biết thông tin đăng nhập đúng của User1. | I:Mật khẩu nhập: Abcd1234. | J:1. Nhập mật khẩu.
+2. Bấm biểu tượng hiện mật khẩu.
+3. Bấm lần nữa. | K:Hiện đúng chuỗi rồi che lại; giá trị không thay đổi. | L:Hoạt động đúng mong đợi, có ẩn có hiện mật khẩu và không bị đổi | O:Pass | P:2026-10-30 00:00:00
+22 A:TC-AUTH-03-01 | B:TR-AUTH-03 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra khả năng duy trì phiên người học khi tải lại trang sau khi đăng nhập, đồng thời quan sát tài khoản và dữ liệu học được hiển thị lại. | F:High | G:Use Case | H:Đã chuẩn bị tài khoản User1 có thể đăng nhập. Các ca đóng và mở lại Chrome được thực hiện trong một hồ sơ trình duyệt riêng, đã tắt tùy chọn tự khôi phục các tab của phiên trước để tránh ảnh hưởng kết quả. | I:Email User1; mật khẩu đúng. | J:1. Đăng nhập User1.
+2. Tải lại trang bằng F5. | K:Vẫn nhận diện đúng User1, không mất dữ liệu học đã lưu. | L:Nhận diện đúng U1, không mất dữ liệu đã học | O:Pass | P:2026-10-30 00:00:00
+23 A:TC-AUTH-03-02 | B:TR-AUTH-03 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra lựa chọn Lưu đăng nhập bằng cách đóng hoàn toàn Chrome rồi mở lại cùng hồ sơ trình duyệt trong thời hạn ghi nhớ phiên. | F:High | G:Use Case | H:Đã chuẩn bị tài khoản User1 có thể đăng nhập. Các ca đóng và mở lại Chrome được thực hiện trong một hồ sơ trình duyệt riêng, đã tắt tùy chọn tự khôi phục các tab của phiên trước để tránh ảnh hưởng kết quả. Thực hiện khi chưa quá 7 ngày kể từ lúc tạo phiên lưu đăng nhập. | I:Email User1; mật khẩu đúng; bật Lưu đăng nhập. | J:1. Đăng nhập User1 và chọn Lưu đăng nhập trước khi bấm Đăng nhập.
+2. Chờ Trang chủ hiển thị tên User1, sau đó đóng tất cả cửa sổ Chrome của hồ sơ đang thử.
+3. Mở lại Chrome bằng chính hồ sơ đó và truy cập URL ứng dụng.
+4. Quan sát ứng dụng yêu cầu đăng nhập lại hay tự mở phiên User1. | K:Trong thời hạn ghi nhớ, tiếp tục phiên User1 mà không yêu cầu nhập lại mật khẩu. | L:Vẫn giữ U1 đăng nhập | O:Pass | P:2026-10-30 00:00:00
+24 A:TC-AUTH-03-03 | B:TR-AUTH-03 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra phiên đăng nhập khi người dùng không chọn Lưu đăng nhập, sau đó đóng toàn bộ cửa sổ Chrome và truy cập lại ứng dụng trong một phiên mới. | F:High | G:Use Case | H:Đã chuẩn bị tài khoản User1 có thể đăng nhập. Các ca đóng và mở lại Chrome được thực hiện trong một hồ sơ trình duyệt riêng, đã tắt tùy chọn tự khôi phục các tab của phiên trước để tránh ảnh hưởng kết quả. | I:Email User1; mật khẩu đúng; bỏ chọn Lưu đăng nhập. | J:1. Ở form Đăng nhập, bỏ chọn Lưu đăng nhập rồi đăng nhập User1.
+2. Chờ Trang chủ xuất hiện, sau đó đóng tất cả cửa sổ Chrome của hồ sơ kiểm thử.
+3. Mở lại Chrome với hồ sơ đó và truy cập URL ứng dụng.
+4. Quan sát màn hình mở ra trước khi nhập lại thông tin tài khoản. | K:Hiển thị trang đăng nhập; không mở dashboard User1. | L:Hiện trang đăng nhập chứ không giữ U1 đăng nhập | O:Pass | P:2026-10-30 00:00:00
+25 A:TC-AUTH-03-04 | B:TR-AUTH-03 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra việc kết thúc phiên bằng nút Đăng xuất, sau đó dùng nút Quay lại của trình duyệt và tải lại trang để thử truy cập lại nội dung cần đăng nhập. | F:High | G:Use Case | H:User1 đang đăng nhập và đã mở một màn hình học cần xác thực. Người kiểm thử có thể sử dụng nút Đăng xuất của ứng dụng và nút Quay lại của Chrome. | I:Không nhập dữ liệu; dùng phiên User1 đang đăng nhập. | J:1. Bấm Đăng xuất.
+2. Bấm Back.
+3. Tải lại trang. | K:Không thể tiếp tục thao tác trên dữ liệu User1; trở về đăng nhập. | L:Trở về đăng nhập | O:Pass | P:2026-10-30 00:00:00
+26 A:TC-AUTH-04-01 | B:TR-AUTH-04 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra toàn bộ luồng khôi phục mật khẩu: yêu cầu email, mở liên kết trong thư, đặt mật khẩu mới và dùng mật khẩu mới để đăng nhập lại. | F:High | G:Use Case | H:Đã có tài khoản User1 và quyền truy cập hộp thư của tài khoản này bằng webmail. Ứng dụng đang ở màn hình Đăng nhập. Chức năng gửi thư khôi phục cần hoạt động; nếu không nhận được thư để tiếp tục thì ghi rõ lý do bị chặn. | I:Email User1; mật khẩu mới và xác nhận: Abcd5678. | J:1. Nhập email User1, bấm Quên mật khẩu.
+2. Mở thư nhận được trên webmail và bấm liên kết.
+3. Nhập mật khẩu mới và xác nhận; lưu.
+4. Đăng xuất rồi đăng nhập bằng mật khẩu mới. | K:Mở đúng trang đặt lại mật khẩu; đổi thành công và đăng nhập được bằng mật khẩu mới. | L:Đổi được mật khẩu | O:Pass | P:2026-10-30 00:00:00
+27 A:TC-AUTH-04-02 | B:TR-AUTH-04 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra phản hồi khi người dùng bấm Quên mật khẩu nhưng chưa nhập email, nhằm xác định màn hình có hướng dẫn bổ sung thông tin cần thiết hay không. | F:High | G:EP | H:Đã có tài khoản User1 và quyền truy cập hộp thư của tài khoản này bằng webmail. Ứng dụng đang ở màn hình Đăng nhập. Chức năng gửi thư khôi phục cần hoạt động; nếu không nhận được thư để tiếp tục thì ghi rõ lý do bị chặn. | I:Email để trống. | J:1. Để trống email trên Đăng nhập.
+2. Bấm Quên mật khẩu. | K:Yêu cầu nhập email; không thông báo đã gửi thành công. | L:Nhập email của bạn
+Điền email đã đăng ký, sau đó bấm “Quên mật khẩu” lần nữa để nhận liên kết đặt lại.
+
+ | O:Pass | P:2026-10-30 00:00:00
+28 A:TC-AUTH-04-03 | B:TR-AUTH-04 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra form đặt lại mật khẩu khi ô mật khẩu mới và ô xác nhận không trùng nhau, trong khi người dùng đang mở một liên kết khôi phục còn hiệu lực. | F:High | G:EP | H:Đã có tài khoản User1 và quyền truy cập hộp thư của tài khoản này bằng webmail. Ứng dụng đang ở màn hình Đăng nhập. Chức năng gửi thư khôi phục cần hoạt động; nếu không nhận được thư để tiếp tục thì ghi rõ lý do bị chặn. Đã yêu cầu một thư mới và mở liên kết khôi phục còn hiệu lực để đến form đặt lại mật khẩu. | I:Mật khẩu mới: Abcd5678; xác nhận: Abcd5679. | J:1. Mở liên kết khôi phục mới hợp lệ.
+2. Nhập hai mật khẩu khác nhau.
+3. Bấm cập nhật. | K:Thông báo không khớp; không đổi mật khẩu. | L:Báo mật khẩu không khớp và không cho đổi | O:Pass | P:2026-10-30 00:00:00
+29 A:TC-AUTH-04-04 | B:TR-AUTH-04 | C:Tài khoản | D:Tạ Trần Vinh Quang | E:Kiểm tra cách ứng dụng xử lý liên kết khôi phục đã hết hạn hoặc đã được sử dụng, bao gồm việc ngăn cập nhật mật khẩu từ liên kết không còn hiệu lực. | F:High | G:EP | H:Đã có tài khoản User1 và quyền truy cập hộp thư của tài khoản này bằng webmail. Ứng dụng đang ở màn hình Đăng nhập. Chức năng gửi thư khôi phục cần hoạt động; nếu không nhận được thư để tiếp tục thì ghi rõ lý do bị chặn. Đã có liên kết khôi phục thực sự hết hạn hoặc đã dùng; không tự sửa nội dung token trong URL. | I:Liên kết khôi phục đã dùng hoặc hết hạn; mật khẩu mới: Abcd5678. | J:1. Mở lại liên kết đã hết hiệu lực.
+2. Thử đặt mật khẩu mới trên form nếu còn hiển thị. | K:Không đổi được mật khẩu; có hướng dẫn yêu cầu liên kết mới. | L:Báo liên kết hết hiệu lực yêu cầu liên kết mới, không đổi được mật khẩu | O:Pass | P:2026-10-30 00:00:00
+30 A:TC-ACL-01-01 | B:TR-ACL-01 | C:Phân quyền | D:Tạ Trần Vinh Quang | E:Kiểm tra quyền truy cập trang quản trị bằng cách nhập trực tiếp URL admin trong cửa sổ Chrome ẩn danh khi chưa đăng nhập tài khoản nào. | F:High | G:Decision Table | H:Người kiểm thử biết URL quản trị https://nminmin.github.io/korean.study/#/admin. Đã chuẩn bị tài khoản người học User1 và tài khoản quản trị Admin; sử dụng đúng trạng thái đăng nhập được nêu trong từng ca. Cửa sổ ẩn danh mới chưa có phiên đăng nhập của User1 hoặc Admin. | I:URL: https://nminmin.github.io/korean.study/#/admin; chưa đăng nhập. | J:1. Mở một cửa sổ Chrome ẩn danh mới, chưa đăng nhập ứng dụng.
+2. Nhập https://nminmin.github.io/korean.study/#/admin trên thanh địa chỉ và nhấn Enter.
+3. Quan sát màn hình được chuyển đến; bấm F5 và kiểm tra lại. | K:Chuyển tới đăng nhập; không hiển thị dữ liệu hoặc công cụ quản trị. | L:Chuyển về trang đăng nhập, không vô được trang quản trị | O:Pass | P:2026-10-30 00:00:00
+31 A:TC-ACL-01-02 | B:TR-ACL-01 | C:Phân quyền | D:Tạ Trần Vinh Quang | E:Kiểm tra khả năng vượt quyền qua URL khi người học User1 đã đăng nhập và tự sửa đường dẫn trên thanh địa chỉ thành trang quản trị. | F:High | G:Decision Table | H:Người kiểm thử biết URL quản trị https://nminmin.github.io/korean.study/#/admin. Đã chuẩn bị tài khoản người học User1 và tài khoản quản trị Admin; sử dụng đúng trạng thái đăng nhập được nêu trong từng ca. | I:Email User1; mật khẩu đúng; URL: https://nminmin.github.io/korean.study/#/admin. | J:1. Đăng nhập User1 và chờ Trang chủ hiển thị.
+2. Thay URL trên thanh địa chỉ bằng https://nminmin.github.io/korean.study/#/admin rồi nhấn Enter.
+3. Quan sát màn hình được chuyển đến và thử xem có chức năng quản trị nào sử dụng được hay không. | K:Chuyển về giao diện người học; không xem hay thao tác được chức năng admin. | L:Không vô được trang quản trị, vẫn ở trang học | O:Pass | P:2026-10-30 00:00:00
+32 A:TC-ACL-01-03 | B:TR-ACL-01 | C:Phân quyền | D:Tạ Trần Vinh Quang | E:Kiểm tra quản trị viên Admin truy cập trực tiếp trang admin và tải lại trang, nhằm xác nhận tài khoản đúng quyền vẫn sử dụng được khu vực quản trị. | F:High | G:Decision Table | H:Người kiểm thử biết URL quản trị https://nminmin.github.io/korean.study/#/admin. Đã chuẩn bị tài khoản người học User1 và tài khoản quản trị Admin; sử dụng đúng trạng thái đăng nhập được nêu trong từng ca. | I:Email Admin; mật khẩu đúng; URL: https://nminmin.github.io/korean.study/#/admin. | J:1. Đăng nhập Admin bằng form Đăng nhập.
+2. Nhập https://nminmin.github.io/korean.study/#/admin rồi nhấn Enter.
+3. Bấm F5 và quan sát dashboard quản trị sau khi tải lại. | K:Mở dashboard quản trị, đúng vai trò Admin. | L:Mở được dashboard quản trị với vai admin | O:Pass | P:2026-10-30 00:00:00
+33 A:TC-ACL-01-04 | B:TR-ACL-01 | C:Phân quyền | D:Tạ Trần Vinh Quang | E:Kiểm tra trang quản trị sau khi Admin đăng xuất rồi dùng nút Quay lại và tải lại trang, nhằm phát hiện việc tiếp tục truy cập bằng lịch sử trình duyệt. | F:High | G:Use Case | H:Người kiểm thử biết URL quản trị https://nminmin.github.io/korean.study/#/admin. Đã chuẩn bị tài khoản người học User1 và tài khoản quản trị Admin; sử dụng đúng trạng thái đăng nhập được nêu trong từng ca. | I:Không nhập dữ liệu; dùng phiên Admin đang đăng nhập. | J:1. Đăng nhập Admin và mở danh sách người dùng.
+2. Đăng xuất.
+3. Back rồi F5. | K:Không tiếp tục xem hoặc sửa dữ liệu quản trị; yêu cầu đăng nhập. | L:Không quay lại được trang quản trị, về đăng nhập | O:Pass | P:2026-10-30 00:00:00
+34 A:TC-ACL-02-01 | B:TR-ACL-02 | C:Phân quyền | D:Tạ Trần Vinh Quang | E:Kiểm tra người học có bị từ chối đăng nhập sau khi quản trị viên khóa tài khoản đó qua màn hình Quản lý người dùng hay không. | F:High | G:Use Case | H:Admin đang đăng nhập ở một hồ sơ Chrome và có quyền quản lý người dùng. Tài khoản User2 là tài khoản thử nghiệm có thể khóa hoặc mở khóa, được thao tác ở hồ sơ Chrome khác. Không sử dụng tài khoản cá nhân cần giữ hoạt động. | I:Tài khoản cần khóa: User2; khi đăng nhập dùng email User2 và mật khẩu đúng. | J:1. Tại phiên Admin, mở Người dùng và tìm đúng User2 theo email.
+2. Chọn Khóa tài khoản và xác nhận nếu có hộp thoại.
+3. Ở hồ sơ Chrome khác chưa có phiên User2, nhập email/mật khẩu User2 rồi bấm Đăng nhập.
+4. Ghi lại phản hồi và màn hình mà User2 có thể truy cập. | K:User2 không vào được ứng dụng; Admin thấy trạng thái đã khóa. | L:Đăng nhập chưa thành công
+User is banned | O:Pass | P:2026-10-30 00:00:00
+35 A:TC-ACL-02-02 | B:TR-ACL-02 | C:Phân quyền | D:Tạ Trần Vinh Quang | E:Kiểm tra hiệu lực khóa đối với tài khoản User2 đang có phiên sử dụng, bằng cách khóa từ phía Admin rồi tải lại trang ở phiên người học. | F:High | G:Use Case | H:Admin đang đăng nhập ở một hồ sơ Chrome và có quyền quản lý người dùng. Tài khoản User2 là tài khoản thử nghiệm có thể khóa hoặc mở khóa, được thao tác ở hồ sơ Chrome khác. Không sử dụng tài khoản cá nhân cần giữ hoạt động. User2 đang mở và sử dụng ứng dụng trước khi Admin thực hiện khóa. | I:Tài khoản cần khóa: User2 đang đăng nhập. | J:1. User2 đăng nhập ở cửa sổ B.
+2. Admin khóa User2 ở cửa sổ A.
+3. User2 tải lại trang rồi thử mở nội dung. | K:User2 không tiếp tục truy cập nội dung cần xác thực; hiển thị yêu cầu đăng nhập hoặc thông báo phù hợp. | L:U2 bị đăng xuất ngay lập tức, trở về trang đăng nhập | O:Pass | P:2026-10-30 00:00:00
+36 A:TC-ACL-02-03 | B:TR-ACL-02 | C:Phân quyền | D:Tạ Trần Vinh Quang | E:Kiểm tra người học có thể đăng nhập và sử dụng lại ứng dụng sau khi quản trị viên mở khóa tài khoản thử nghiệm qua giao diện hay không. | F:High | G:Use Case | H:Admin đang đăng nhập ở một hồ sơ Chrome và có quyền quản lý người dùng. Tài khoản User2 là tài khoản thử nghiệm có thể khóa hoặc mở khóa, được thao tác ở hồ sơ Chrome khác. Không sử dụng tài khoản cá nhân cần giữ hoạt động. User2 hiện đang ở trạng thái bị khóa trước khi bắt đầu thao tác mở khóa. | I:Tài khoản cần mở khóa: User2; khi đăng nhập dùng email User2 và mật khẩu đúng. | J:1. Admin mở Người dùng và tìm User2 đang bị khóa.
+2. Chọn Mở khóa và xác nhận nếu được yêu cầu.
+3. Ở hồ sơ Chrome của User2, quay về form Đăng nhập rồi nhập thông tin hợp lệ.
+4. Quan sát trạng thái đăng nhập và trạng thái khóa tại danh sách của Admin. | K:User2 vào được trang chủ; trạng thái quản trị chuyển về không khóa. | L:U2 đăng nhập lại bình thường | O:Pass | P:2026-10-30 00:00:00
+37 A:TC-HOME-01-01 | B:TR-HOME-01 | C:Trang chủ | D:Tạ Trần Vinh Quang | E:Kiểm tra các khu vực tổng quan trên Trang chủ của User1, gồm tên người học, XP, streak, mục tiêu ngày và danh sách giáo trình, để phát hiện dữ liệu thiếu hoặc hiển thị sai tài khoản. | F:High | G:Use Case | H:Đã chuẩn bị User1 có giáo trình giáo trình đã xuất bản thứ nhất và bài học thứ nhất đã chuẩn bị để xem dữ liệu học; đồng thời có User mới là người học mới, chưa thêm giáo trình. Mỗi ca đăng nhập đúng tài khoản được yêu cầu. | I:Không nhập dữ liệu; xem Trang chủ User1. | J:1. Mở Trang chủ.
+2. Quan sát tên, XP, streak, mục tiêu và giáo trình của tôi. | K:Hiển thị đúng user; số liệu không âm/NaN; các khu vực có dữ liệu hoặc trạng thái trống rõ ràng. | L:Đúng số liệu, không NaN | O:Pass | P:2026-10-30 00:00:00
+38 A:TC-HOME-01-02 | B:TR-HOME-01 | C:Trang chủ | D:Tạ Trần Vinh Quang | E:Kiểm tra lối vào Nghe chép từ khu vực truy cập nhanh trên Trang chủ và khả năng quay lại bằng điều hướng trong ứng dụng sau khi chọn bài. | F:High | G:Use Case | H:Đã chuẩn bị User1 có giáo trình giáo trình đã xuất bản thứ nhất và bài bài học thứ nhất đã chuẩn bị để xem dữ liệu học; đồng thời có User mới là người học mới, chưa thêm giáo trình. Mỗi ca đăng nhập đúng tài khoản được yêu cầu. | I:giáo trình đã xuất bản thứ nhất/bài học thứ nhất đã chuẩn bị có audio | J:1. Từ Trang chủ bấm Nghe chép.
+2. Chọn bài có nội dung.
+3. Dùng nút quay lại của app. | K:Đi đúng màn hình chọn bài/nghe chép; quay lại không gây trang trắng. | L:Đi đúng màn hình, không bị trắng trang | O:Pass | P:2026-10-30 00:00:00
+39 A:TC-HOME-01-03 | B:TR-HOME-01 | C:Trang chủ | D:Tạ Trần Vinh Quang | E:Kiểm tra Trang chủ của một người học mới chưa thêm giáo trình, bao gồm trạng thái chưa có dữ liệu và thao tác bắt đầu thêm giáo trình đầu tiên. | F:High | G:Use Case | H:Đã chuẩn bị User1 có giáo trình giáo trình đã xuất bản thứ nhất và bài bài học thứ nhất đã chuẩn bị để xem dữ liệu học; đồng thời có User mới là người học mới, chưa thêm giáo trình. Mỗi ca đăng nhập đúng tài khoản được yêu cầu. Đăng nhập User mới, không sử dụng User1 cho ca này. | I:Email User mới; mật khẩu đúng; chưa thêm giáo trình. | J:1. Đăng nhập User mới.
+2. Xem Trang chủ.
+3. Bấm thêm giáo trình hoặc lối vào tương ứng. | K:Có hướng dẫn bắt đầu; không hiển thị tiến độ của tài khoản khác; mở được danh sách giáo trình. | L:Có hướng dẫn, không có tiến độ từ tài khoản khác, mở được danh sách giáo trình | O:Pass | P:2026-10-30 00:00:00
+40 A:TC-HOME-02-01 | B:TR-HOME-02 | C:Trang chủ | D:Tạ Trần Vinh Quang | E:Kiểm tra thẻ Tiếp tục học có ưu tiên bài bài học thứ hai chưa học mà người dùng vừa chủ động mở, kể cả khi bài này vẫn có tiến độ 0%, thay vì tự quay về bài bài học thứ nhất đã chuẩn bị đang dở. | F:High | G:Use Case | H:User1 đã thêm giáo trình giáo trình đã xuất bản thứ nhất. Trong giáo trình đã xuất bản thứ nhất có bài học thứ nhất đã chuẩn bị đang học dở và bài học thứ hai chưa học chưa bắt đầu nhưng được phép mở. User2 là tài khoản khác có dữ liệu học riêng để kiểm tra việc chuyển tài khoản. | I:bài học thứ hai chưa học | J:1. Mở bài học thứ hai chưa học từ danh sách bài.
+2. Chưa làm hoạt động, về Trang chủ.
+3. Bấm Học ngay trên Tiếp tục học. | K:Thẻ và nút mở bài học thứ hai chưa học, không tự nhảy về bài học thứ nhất đã chuẩn bị. | L:Giáo trình chưa có bài học thứ 2 nên không test được | O:Blocked | P:2026-10-30 00:00:00 | Q:Giáo trình chỉ có 1 bài nên không test được
+41 A:TC-HOME-02-02 | B:TR-HOME-02 | C:Trang chủ | D:Tạ Trần Vinh Quang | E:Kiểm tra việc ghi nhớ lựa chọn bài bài học thứ hai chưa học trên thẻ Tiếp tục học sau khi tải lại Trang chủ và bấm Học ngay. | F:High | G:Use Case | H:User1 đã thêm giáo trình giáo trình đã xuất bản thứ nhất. Trong giáo trình đã xuất bản thứ nhất có bài học thứ nhất đã chuẩn bị đang học dở và bài học thứ hai chưa học chưa bắt đầu nhưng được phép mở. User2 là tài khoản khác có dữ liệu học riêng để kiểm tra việc chuyển tài khoản. Trước ca này, User1 đã chủ động mở bài học thứ hai chưa học và quay về Trang chủ nhưng chưa hoàn thành bài học thứ hai chưa học. | I:bài học thứ hai chưa học đã chọn ở ca trước | J:1. Về Trang chủ sau khi chọn bài học thứ hai chưa học.
+2. F5.
+3. Bấm Học ngay. | K:Vẫn mở đúng bài học thứ hai chưa học. | L:Chưa có giáo trình nào có 2 bài nên không test được | O:Blocked | P:2026-10-30 00:00:00
+42 A:TC-HOME-02-03 | B:TR-HOME-02 | C:Trang chủ | D:Tạ Trần Vinh Quang | E:Kiểm tra thẻ Tiếp tục học sau khi đăng xuất User1 và đăng nhập User2 trên cùng trình duyệt, nhằm bảo đảm lựa chọn bài học của hai tài khoản không bị dùng chung. | F:High | G:Use Case | H:User1 đã thêm giáo trình giáo trình đã xuất bản thứ nhất. Trong giáo trình đã xuất bản thứ nhất có bài học thứ nhất đã chuẩn bị đang học dở và bài học thứ hai chưa học chưa bắt đầu nhưng được phép mở. User2 là tài khoản khác có dữ liệu học riêng để kiểm tra việc chuyển tài khoản. | I:Email User1 và User2; mật khẩu đúng của từng tài khoản. | J:1. User1 mở bài học thứ hai chưa học từ giáo trình đã xuất bản thứ nhất, quay lại Trang chủ và ghi bài đang xuất hiện ở Tiếp tục học.
+2. Đăng xuất User1 rồi đăng nhập User2 ngay trên Chrome đó.
+3. Mở Trang chủ User2 và đối chiếu thẻ Tiếp tục học với tiến độ riêng đã chuẩn bị cho User2. | K:Hiển thị bài theo dữ liệu User2; không lấy lựa chọn bài học thứ hai chưa học của User1 nếu User2 chưa chọn. | L:Chưa có bài học thứ 2 | O:Blocked | P:2026-10-30 00:00:00
+43 A:TC-CUR-01-01 | B:TR-CUR-01 | C:Giáo trình | D:Tạ Trần Vinh Quang | E:Kiểm tra người học thêm một giáo trình đã xuất bản vào Giáo trình của tôi và mở danh sách bài của giáo trình vừa thêm. | F:High | G:Use Case | H:User1 đã đăng nhập và có thể mở khu vực Giáo trình. Giáo trình giáo trình đã xuất bản thứ nhất đã xuất bản và chưa được thêm vào tài khoản này. Có Admin hỗ trợ chuẩn bị một giáo trình nháp riêng khi cần kiểm tra nội dung chưa xuất bản. | I:giáo trình đã xuất bản thứ nhất | J:1. Mở Giáo trình.
+2. Tìm giáo trình đã xuất bản thứ nhất trong danh sách có thể thêm.
+3. Bấm thêm.
+4. Mở Giáo trình của tôi. | K:giáo trình đã xuất bản thứ nhất xuất hiện một lần và mở được danh sách bài. | L:Giáo trình đã xuất bản xuất hiện 1 lần | O:Pass | P:2026-10-30 00:00:00
+44 A:TC-CUR-01-02 | B:TR-CUR-01 | C:Giáo trình | D:Tạ Trần Vinh Quang | E:Kiểm tra trạng thái của giáo trình giáo trình đã xuất bản thứ nhất sau khi đã thêm, bao gồm việc tải lại trang để xác định ứng dụng có tạo hoặc hiển thị các bản trùng nhau hay không. | F:High | G:Use Case | H:User1 đã đăng nhập và đã thêm giáo trình giáo trình đã xuất bản thứ nhất vào Giáo trình của tôi. Người kiểm thử biết tên giáo trình đã xuất bản thứ nhất để đối chiếu trong cả danh sách có thể thêm và danh sách giáo trình cá nhân. | I:giáo trình đã xuất bản thứ nhất đã thêm | J:1. Mở lại danh sách giáo trình.
+2. Kiểm tra giáo trình đã xuất bản thứ nhất.
+3. F5 và kiểm tra Giáo trình của tôi. | K:Không có hai bản giáo trình đã xuất bản thứ nhất; trạng thái đã thêm được giữ. | L:Giáo trình đã xuất bản xuất hiện 1 lần | O:Pass | P:2026-10-30 00:00:00
+45 A:TC-CUR-01-03 | B:TR-CUR-01 | C:Giáo trình | D:Tạ Trần Vinh Quang | E:Kiểm tra một giáo trình thử nghiệm chưa xuất bản từ phía người học, nhằm xác định nội dung nháp hoặc đang khóa có bị mở học như giáo trình sẵn sàng hay không. | F:High | G:Use Case | H:User1 đã đăng nhập và có thể mở khu vực Giáo trình. Giáo trình giáo trình đã xuất bản thứ nhất đã xuất bản và chưa được thêm vào tài khoản này. Có Admin hỗ trợ chuẩn bị một giáo trình nháp riêng khi cần kiểm tra nội dung chưa xuất bản. Admin và User1 sử dụng hai hồ sơ Chrome riêng; chỉ thay trạng thái giáo trình thử. | I:giáo trình thử đang ở trạng thái nháp do Admin chuẩn bị | J:1. Admin đặt giáo trình thử nghiệm ở nháp/khóa.
+2. User1 mở danh sách giáo trình và tìm mục này. | K:Không có đường thao tác thêm/học giáo trình chưa được xuất bản; ẩn hoặc khóa rõ ràng. | L:Ở học viên không thấy giáo trình được khóa hay chưa xuất bản | O:Pass | P:2026-10-30 00:00:00
+46 A:TC-CUR-02-01 | B:TR-CUR-02 | C:Giáo trình | D:Tạ Trần Vinh Quang | E:Kiểm tra màn hình chi tiết của bài bài học thứ nhất đã chuẩn bị sau khi mở từ giáo trình, bao gồm tên bài, các nhóm hoạt động và phần trăm tiến độ của từng nhóm. | F:High | G:Use Case | H:User1 đã thêm giáo trình đã xuất bản thứ nhất. Bài bài học thứ nhất đã chuẩn bị có đủ nội dung cho các hoạt động học; bài chưa có nội dung là bài thử được chuẩn bị riêng để kiểm tra trường hợp chưa có nội dung. Có thể nhận diện từng bài bằng tên trên giao diện. | I:bài học thứ nhất đã chuẩn bị | J:1. Mở giáo trình đã xuất bản thứ nhất.
+2. Chọn bài học thứ nhất đã chuẩn bị.
+3. Quan sát các khu vực hoạt động. | K:Tên bài đúng; có từ vựng/ngữ pháp, nghe chép, Shadowing và ôn tập cùng tiến độ. | L:Đúng tên bài, đầy đủ 4 kĩ năng | O:Pass | P:2026-10-30 00:00:00
+47 A:TC-CUR-02-02 | B:TR-CUR-02 | C:Giáo trình | D:Tạ Trần Vinh Quang | E:Kiểm tra cách hiển thị và phản hồi khi người học chọn bài hoặc hoạt động chưa có nội dung, nhằm tránh điều hướng đến màn hình trống hoặc báo hoàn thành sai. | F:High | G:Use Case | H:User1 đã thêm giáo trình đã xuất bản thứ nhất. Bài bài học thứ nhất đã chuẩn bị có đủ nội dung cho các hoạt động học; bài chưa có nội dung là bài thử được chuẩn bị riêng để kiểm tra trường hợp chưa có nội dung. Có thể nhận diện từng bài bằng tên trên giao diện. | I:bài chưa có nội dung | J:1. Mở danh sách bài.
+2. Thử chọn bài chưa có nội dung hoặc hoạt động chưa sẵn sàng. | K:Ẩn/khóa hoặc giải thích chưa có nội dung; không vào màn hình lỗi hay bài rỗng giả hoàn thành. | L:Bị mờ, không cho truy cập | O:Pass | P:2026-10-30 00:00:00
+48 A:TC-CUR-02-03 | B:TR-CUR-02 | C:Giáo trình | D:Tạ Trần Vinh Quang | E:Kiểm tra khả năng lưu tiến độ của một hoạt động trong bài học thứ nhất đã chuẩn bị bằng cách quay về chi tiết bài, ghi lại tiến độ rồi tải lại và mở bài lần nữa. | F:High | G:Use Case | H:User1 đã thêm giáo trình đã xuất bản thứ nhất. Bài bài học thứ nhất đã chuẩn bị có đủ nội dung cho các hoạt động học; bài chưa có nội dung là bài thử được chuẩn bị riêng để kiểm tra trường hợp chưa có nội dung. Có thể nhận diện từng bài bằng tên trên giao diện. | I:bài học thứ nhất đã chuẩn bị | J:1. Mở bài học thứ nhất đã chuẩn bị và thực hiện một phần của một hoạt động để có tiến độ được lưu.
+2. Quay về chi tiết bài học thứ nhất đã chuẩn bị, ghi phần trăm tiến độ của hoạt động vừa làm.
+3. Bấm F5, mở lại bài học thứ nhất đã chuẩn bị và đối chiếu tiến độ với số vừa ghi. | K:Tiến độ đã lưu vẫn được hiển thị; không trở về 0 vô cớ. | L:Có lưu tiến độ | O:Pass | P:2026-10-30 00:00:00
+49 A:TC-VOC-01-01 | B:TR-VOC-01 | C:Từ vựng | D:Tạ Trần Vinh Quang | E:Kiểm tra nội dung hai mặt của Flashcard và nút phát âm bằng cách nghe từ, lật sang mặt nghĩa rồi quay lại mặt trước của cùng thẻ. | F:High | G:Use Case | H:User1 đang đăng nhập và đã mở bài bài học thứ nhất đã chuẩn bị. Bài có ít nhất 3 từ, kèm nghĩa và dữ liệu phát âm sử dụng được. Loa của máy đã bật và không bị tắt tiếng trong Chrome. | I:Từ đầu tiên của bài học thứ nhất đã chuẩn bị | J:1. Mở Flashcard bài học thứ nhất đã chuẩn bị.
+2. Bấm loa.
+3. Lật thẻ.
+4. Lật lại. | K:Phát âm đúng từ; hai mặt thể hiện đúng từ/nghĩa; không làm đổi thẻ ngoài ý muốn. | L:Phát âm đúng, hai mặt đúng từ và nghĩa | O:Pass | P:2026-10-30 00:00:00
+50 A:TC-VOC-01-02 | B:TR-VOC-01 | C:Từ vựng | D:Tạ Trần Vinh Quang | E:Kiểm tra phản hồi khi người học đánh giá một từ là Đã thuộc, bao gồm việc chuyển thẻ và cập nhật bộ đếm hoặc tiến độ đang hiển thị. | F:High | G:Use Case | H:User1 đang đăng nhập và đã mở bài bài học thứ nhất đã chuẩn bị. Bài có ít nhất 3 từ, kèm nghĩa và dữ liệu phát âm sử dụng được. Loa của máy đã bật và không bị tắt tiếng trong Chrome. | I:Một từ chưa đánh giá | J:1. Mở một thẻ chưa đánh giá và ghi số thẻ/vị trí hiện tại.
+2. Lật sang mặt sau rồi bấm Đã thuộc.
+3. Quan sát thẻ tiếp theo, bộ đếm từ đã học và tiến độ đang hiển thị. | K:Chuyển thẻ, ghi nhận từ đã học; bộ đếm/tiến độ cập nhật tương ứng. | L:Có chuyển thẻ, ghi nhận đã học và bộ đếm tiến độ cập nhật đúng | O:Pass | P:2026-10-30 00:00:00
+51 A:TC-VOC-01-03 | B:TR-VOC-01 | C:Từ vựng | D:Tạ Trần Vinh Quang | E:Kiểm tra xử lý đối với từ được đánh giá Chưa thuộc, bằng cách đi tiếp qua bộ thẻ để quan sát từ đó có được đưa vào lượt luyện lại hay không. | F:High | G:Use Case | H:User1 đang đăng nhập và đã mở bài bài học thứ nhất đã chuẩn bị. Bài có ít nhất 3 từ, kèm nghĩa và dữ liệu phát âm sử dụng được. Loa của máy đã bật và không bị tắt tiếng trong Chrome. | I:Một từ chưa thuộc | J:1. Lật thẻ.
+2. Bấm Chưa thuộc.
+3. Tiếp tục qua các thẻ còn lại. | K:Từ chưa thuộc được đưa vào lượt luyện lại; không tính như từ đã thuộc. | L:Từ chưa thuộc có tính luyện lại, không tính là đã thuộc | O:Pass | P:2026-10-30 00:00:00
+52 A:TC-VOC-02-01 | B:TR-VOC-02 | C:Từ vựng | D:Tạ Trần Vinh Quang | E:Kiểm tra việc thêm từ từ vựng thứ nhất vào Sổ tay bằng dấu sao, sau đó mở lại và tải lại trang để xác minh trạng thái đánh dấu được lưu. | F:High | G:Use Case | H:User1 có thể mở từ vựng và Sổ tay. Đã chọn từ vựng thứ nhất, từ trùng chữ tiếng Hàn ở bài khác là hai mục từ có cùng chữ tiếng Hàn nhưng nằm ở hai bài hoặc vị trí khác nhau; ghi lại nơi xuất hiện để phân biệt. User mới chưa có từ được đánh dấu để kiểm tra sổ tay trống. | I:từ vựng thứ nhất | J:1. Bấm sao từ vựng thứ nhất.
+2. Mở Sổ tay.
+3. Tìm từ vựng thứ nhất.
+4. F5 và xem lại. | K:từ vựng thứ nhất có trong sổ tay, vẫn giữ dấu sao sau tải lại. | L:Có giữ từ vựng đánh dấu sao, không bị mất khi F5/reload | O:Pass | P:2026-10-30 00:00:00
+53 A:TC-VOC-02-02 | B:TR-VOC-02 | C:Từ vựng | D:Tạ Trần Vinh Quang | E:Kiểm tra ghi chú cá nhân của từ vựng thứ nhất không bị gắn sang từ trùng chữ tiếng Hàn ở bài khác dù hai mục từ có cùng chữ tiếng Hàn; đồng thời kiểm tra ghi chú được giữ sau khi tải lại. | F:High | G:Use Case | H:User1 có thể mở từ vựng và Sổ tay. Đã chọn từ vựng thứ nhất, từ trùng chữ tiếng Hàn ở bài khác là hai mục từ có cùng chữ tiếng Hàn nhưng nằm ở hai bài hoặc vị trí khác nhau; ghi lại nơi xuất hiện để phân biệt. User mới chưa có từ được đánh dấu để kiểm tra sổ tay trống. | I:từ vựng thứ nhất và từ trùng chữ tiếng Hàn ở bài khác trùng chữ Hàn; ghi chú: Ghi chú từ vựng thứ nhất | J:1. Mở đúng từ vựng thứ nhất theo bài/vị trí đã ghi và nhập ghi chú Ghi chú từ vựng thứ nhất vào ô ghi chú cá nhân.
+2. Thực hiện thao tác lưu nếu giao diện có nút Lưu, sau đó chuyển sang từ trùng chữ tiếng Hàn ở bài khác ở bài/vị trí còn lại.
+3. Kiểm tra ô ghi chú của từ trùng chữ tiếng Hàn ở bài khác.
+4. Bấm F5, mở lại từ vựng thứ nhất và đối chiếu ghi chú đã nhập. | K:từ trùng chữ tiếng Hàn ở bài khác không nhận ghi chú từ vựng thứ nhất; từ vựng thứ nhất giữ ghi chú đã lưu. | L:Không bị trùng | O:Pass | P:2026-10-30 00:00:00
+54 A:TC-VOC-02-03 | B:TR-VOC-02 | C:Từ vựng | D:Tạ Trần Vinh Quang | E:Kiểm tra thao tác bỏ sao một từ ngay trong Sổ tay và quan sát danh sách sau khi mở lại, bảo đảm chỉ bỏ đánh dấu mà không xóa nội dung từ gốc. | F:High | G:Use Case | H:User1 có thể mở từ vựng và Sổ tay. Đã chọn từ vựng thứ nhất, từ trùng chữ tiếng Hàn ở bài khác là hai mục từ có cùng chữ tiếng Hàn nhưng nằm ở hai bài hoặc vị trí khác nhau; ghi lại nơi xuất hiện để phân biệt. User mới chưa có từ được đánh dấu để kiểm tra sổ tay trống. từ vựng thứ nhất đã được đánh dấu sao và có thể tìm thấy trong Sổ tay trước khi bỏ sao. | I:từ vựng thứ nhất đã đánh dấu | J:1. Mở sổ tay và tìm từ vựng thứ nhất.
+2. Bỏ sao.
+3. Mở lại sổ tay. | K:từ vựng thứ nhất không còn trong danh sách đã lưu; không xóa từ gốc. | L:Từ trong sổ tay mấy, không xóa từ gốc | O:Pass | P:2026-10-30 00:00:00
+55 A:TC-VOC-02-04 | B:TR-VOC-02 | C:Từ vựng | D:Tạ Trần Vinh Quang | E:Kiểm tra hai trạng thái không có dữ liệu trong Sổ tay: tài khoản chưa lưu từ nào và tìm kiếm bằng từ khóa không khớp từ đã lưu. | F:High | G:Use Case | H:User1 có thể mở từ vựng và Sổ tay. Đã chọn từ vựng thứ nhất, từ trùng chữ tiếng Hàn ở bài khác là hai mục từ có cùng chữ tiếng Hàn nhưng nằm ở hai bài hoặc vị trí khác nhau; ghi lại nơi xuất hiện để phân biệt. User mới chưa có từ được đánh dấu để kiểm tra sổ tay trống. | I:Từ khóa tìm kiếm: zzz-no-word; kiểm tra sổ tay trống bằng User mới. | J:1. Đăng nhập User mới, mở Sổ tay và đọc hướng dẫn khi chưa có từ được lưu.
+2. Đăng xuất User mới rồi đăng nhập User1 có từ đã lưu.
+3. Mở Sổ tay User1, nhập zzz-no-word vào ô tìm kiếm và quan sát danh sách. | K:Hiển thị trạng thái trống/không tìm thấy rõ ràng; không lỗi hoặc mượn dữ liệu user khác. | L:Hiện trống, không có từ vựng từ user khác | O:Pass | P:2026-10-30 00:00:00
+56 A:TC-GRAM-01-01 | B:TR-GRAM-01 | C:Ngữ pháp | D:Nguyễn Danh Nghĩa | E:Kiểm tra nội dung chi tiết ngữ pháp trong hoạt động học của bài. | F:Medium | G:Use Case | H:User1 đã thêm giáo trình có bài chứa ngữ pháp. Đã chuẩn bị mẫu, cấu trúc, nghĩa, cách dùng và ví dụ để đối chiếu. | I:Bài học và mẫu ngữ pháp đã ghi nhận. | J:1. Mở giáo trình và chọn bài có ngữ pháp.
+2. Vào hoạt động Từ vựng & Ngữ pháp, chọn tab Ngữ pháp.
+3. Chuyển tới mẫu đã chuẩn bị; xem nội dung hai mặt thẻ. | K:Mẫu ngữ pháp, nghĩa, cấu trúc/cách dùng và ví dụ được cung cấp khớp dữ liệu của bài; không hiển thị nội dung bài khác. | L:Hiển thị chính xác mẫu ngữ pháp, bối cảnh, tạm dịch, công thức và lưu ý đúng với nội dung dữ liệu của bài học; không hiển thị nội dung của bài khác | O:Pass | P:2026-10-30 00:00:00
+57 A:TC-GRAM-01-02 | B:TR-GRAM-01 | C:Ngữ pháp | D:Nguyễn Danh Nghĩa | E:Kiểm tra lật và chuyển thẻ ở tab Ngữ pháp của bài. | F:Medium | G:Use Case | H:User1 đã thêm giáo trình có bài chứa ngữ pháp. Đã chuẩn bị mẫu, cấu trúc, nghĩa, cách dùng và ví dụ để đối chiếu. Bài có ít nhất hai mẫu ngữ pháp. | I:Hai mẫu ngữ pháp của cùng bài. | J:1. Vào hoạt động Từ vựng & Ngữ pháp của bài, chọn tab Ngữ pháp.
+2. Lật thẻ để xem mặt còn lại.
+3. Chuyển sang mẫu khác bằng điều khiển thẻ.
+4. Dùng nút quay lại của app. | K:Hai mặt và mẫu đang chọn khớp dữ liệu bài; chuyển mẫu hoạt động; quay lại màn hợp lệ của luồng học. | L:Hai mặt thẻ và mẫu đang chọn khớp dữ liệu bài; chuyển mẫu hoạt động mượt mà; nút quay lại điều hướng về đúng màn hình giao diện của luồng học. | O:Pass | P:2026-10-30 00:00:00
+58 A:TC-GRAM-01-03 | B:TR-GRAM-01 | C:Ngữ pháp | D:Nguyễn Danh Nghĩa | E:Kiểm tra trạng thái không có ngữ pháp ở danh sách tra cứu. | F:Medium | G:Use Case | H:User1 đã thêm một giáo trình thử không có mẫu ngữ pháp; có giáo trình khác chứa mẫu để đối chiếu. | I:Giáo trình thử không có ngữ pháp; bộ lọc giáo trình. | J:1. Mở Từ vựng & Ngữ pháp tại khu vực tra cứu.
+2. Chọn giáo trình thử ở bộ lọc và chuyển sang tab Ngữ pháp.
+3. Xem trạng thái trống, sau đó chọn giáo trình có mẫu. | K:Có thông báo không tìm thấy mẫu phù hợp khi giáo trình không có ngữ pháp; không lấy mẫu của giáo trình khác. Đổi lại bộ lọc thì hiển thị đúng mẫu tương ứng. | L:Không tìm thấy mẫu phù hợp khi giáo trình không có ngữ pháp; không lấy mẫu giáo trình khác. Đổi lại bộ lọc thì hiển thị đúng mẫu tương ứng. | O:Pass | P:2026-10-30 00:00:00
+59 A:TC-DICT-01-01 | B:TR-DICT-01 | C:Nghe chép | D:Nguyễn Danh Nghĩa | E:Kiểm tra các thao tác phát, tạm dừng và phát tiếp audio của một câu nghe, nhằm xác định trạng thái điều khiển khớp âm thanh thực tế. | F:High | G:Use Case | H:User1 đã mở Nghe chép của bài học thứ nhất đã chuẩn bị ở chế độ Luyện tập. Bài có ít nhất 2 câu với audio phát được. Máy đã bật loa và Chrome được phép phát âm thanh. | I:Câu nghe đầu bài học thứ nhất đã chuẩn bị | J:1. Mở Nghe chép ở chế độ Luyện tập.
+2. Bấm phát.
+3. Tạm dừng.
+4. Phát tiếp. | K:Audio phát/dừng đúng thao tác; không có nhiều audio phát chồng. | L:Bắt đầu phát, tạm dừng và tiếp tục phát âm thanh hoạt động chính xác; thanh tiến trình và trạng thái audio cập nhật đúng theo thao tác. | O:Pass | P:2026-10-30 00:00:00
+60 A:TC-DICT-01-02 | B:TR-DICT-01 | C:Nghe chép | D:Nguyễn Danh Nghĩa | E:Kiểm tra phát lại sau khi audio kết thúc và đổi tốc độ nghe. | F:High | G:Use Case | H:User1 mở Nghe chép, chế độ Luyện tập; câu có audio hoạt động. | I:Cùng một câu nghe; tốc độ 0.75x, 1x và 1.25x. | J:1. Phát một phần câu.
+2. Bấm nghe lại từ đầu.
+3. Đổi lần lượt mức tốc độ hiển thị rồi phát. | K:Nghe lại bắt đầu từ đầu; tốc độ thay đổi theo lựa chọn, nội dung không đổi. | L:Hệ thống phát âm thanh câu hiện tại theo đúng mức tốc độ được chọn (0.75x, 1x, 1.25x); tua về đầu câu khi bấm nghe lại và điều hướng chuyển câu mượt mà. | O:Pass | P:2026-10-30 00:00:00
+61 A:TC-DICT-01-03 | B:TR-DICT-01 | C:Nghe chép | D:Nguyễn Danh Nghĩa | E:Kiểm tra âm thanh khi chuyển từ câu 1 sang câu 2 trong lúc câu trước đang phát, nhằm phát hiện audio cũ tiếp tục chạy chồng với câu mới. | F:High | G:Use Case | H:User1 đã mở Nghe chép của bài học thứ nhất đã chuẩn bị ở chế độ Luyện tập. Bài có ít nhất 2 câu với audio phát được. Máy đã bật loa và Chrome được phép phát âm thanh. | I:Câu 1 và câu 2 | J:1. Phát câu và chờ audio kết thúc.
+2. Bấm phát lại, kiểm tra thời gian bắt đầu từ 0.
+3. Chọn lần lượt 0.75x, 1x, 1.25x và nghe cùng câu. | K:Sau khi audio kết thúc, bấm phát sẽ nghe từ đầu; tốc độ thay đổi theo lựa chọn, nội dung câu không đổi. | L:Hệ thống bắt đầu phát đoạn âm thanh đến khi kết thúc; bấm phát lại thì thời gian tính từ 0; đổi tốc độ lần lượt (0.75x, 1x, 1.25x) và nghe thử thì tốc độ phát thay đổi chính xác. | O:Pass | P:2026-10-30 00:00:00
+62 A:TC-DICT-02-01 | B:TR-DICT-02 | C:Nghe chép | D:Nguyễn Danh Nghĩa | E:Kiểm tra cách chấm và hiển thị kết quả khi người học nhập đúng toàn bộ câu tiếng Hàn chuẩn rồi bấm Kiểm tra. | F:High | G:Use Case | H:User1 đang ở một câu Nghe chép của bài học thứ nhất đã chuẩn bị trong chế độ Luyện tập. Đã xác định câu tiếng Hàn chuẩn và bản dịch từ nội dung bài để có căn cứ đối chiếu câu trả lời. | I:Câu chuẩn của câu nghe | J:1. Nghe câu.
+2. Nhập đúng câu chuẩn.
+3. Bấm Kiểm tra. | K:Hiển thị kết quả đúng phù hợp, điểm nằm trong thang hiển thị. | L:Hệ thống phát âm thanh; người dùng nhập chính xác câu chuẩn và bấm Kiểm tra thì hệ thống ghi nhận kết quả đúng, cộng điểm XP và chuyển sang câu tiếp theo. | O:Pass | P:2026-10-30 00:00:00
+63 A:TC-DICT-02-02 | B:TR-DICT-02 | C:Nghe chép | D:Nguyễn Danh Nghĩa | E:Kiểm tra phản hồi khi câu trả lời là một câu tiếng Hàn khác hoàn toàn với câu gốc, nhằm xác định giao diện thể hiện phần trả lời sai. | F:High | G:EP | H:User1 đang ở một câu Nghe chép của bài học thứ nhất đã chuẩn bị trong chế độ Luyện tập. Đã xác định câu tiếng Hàn chuẩn và bản dịch từ nội dung bài để có căn cứ đối chiếu câu trả lời. | I:Một câu tiếng Hàn khác hoàn toàn | J:1. Ở câu nghe đang mở, nhập câu tiếng Hàn khác hoàn toàn với đáp án chuẩn đã chuẩn bị.
+2. Bấm Kiểm tra.
+3. Đối chiếu thông báo, phần đánh dấu từ sai và điểm nếu có trên giao diện. | K:Thông báo/đánh dấu sai rõ ràng; không ghi là đúng toàn bộ. | L:Thông báo lỗi hoặc đánh dấu từ sai rõ ràng; không ghi nhận là đúng toàn bộ. | O:Pass | P:2026-10-30 00:00:00
+64 A:TC-DICT-02-03 | B:TR-DICT-02 | C:Nghe chép | D:Nguyễn Danh Nghĩa | E:Kiểm tra ô đáp án Nghe chép khi chỉ nhập khoảng trắng, nhằm bảo đảm đầu vào rỗng về nội dung không được ghi nhận như một câu trả lời đúng. | F:High | G:EP | H:User1 đang ở một câu Nghe chép của bài học thứ nhất đã chuẩn bị trong chế độ Luyện tập. Đã xác định câu tiếng Hàn chuẩn và bản dịch từ nội dung bài để có căn cứ đối chiếu câu trả lời. | I:3 dấu cách | J:1. Xóa nội dung hiện có trong ô trả lời của câu nghe.
+2. Nhập 3 dấu cách rồi bấm Kiểm tra nếu nút cho phép.
+3. Quan sát thông báo hoặc trạng thái chấm cho đầu vào chỉ có khoảng trắng. | K:Không được chấm thành đúng; có phản hồi cần nhập hoặc kết quả sai rõ ràng. | L:Hệ thống thông báo lỗi hoặc nhắc nhở nhập nội dung hợp lệ; không ghi nhận là đúng cho đầu vào chỉ chứa khoảng trắng. | O:Pass | P:2026-10-30 00:00:00
+65 A:TC-DICT-02-04 | B:TR-DICT-02 | C:Nghe chép | D:Nguyễn Danh Nghĩa | E:Kiểm tra gợi ý, bật/tắt bản dịch và chỉnh sửa nội dung trả lời. | F:High | G:Use Case | H:User1 mở câu Nghe chép ở Luyện tập, còn lượt gợi ý; câu có bản dịch và chưa được chấm đúng. | I:Một câu có audio và bản dịch; văn bản nhập thử bất kỳ. | J:1. Bấm Gợi ý, đối chiếu gợi ý với câu chuẩn.
+2. Bấm Hiện bản dịch rồi Ẩn bản dịch.
+3. Nhập văn bản thử; dùng Ctrl+A trong ô trả lời rồi Backspace để xóa.
+4. Quan sát ô nhập và tiến độ. | K:Gợi ý và bản dịch thuộc đúng câu; bật/tắt bản dịch được. Văn bản được xóa bằng bàn phím; các thao tác này không tự hoàn thành câu. | L:Hệ thống hiển thị từ tiếp theo đúng với đáp án chuẩn và cập nhật số lượt gợi ý đã dùng (ví dụ: Gợi ý (1)). | O:Pass | P:2026-10-30 00:00:00
+66 A:TC-DICT-03-01 | B:TR-DICT-03 | C:Nghe chép | D:Nguyễn Danh Nghĩa | E:Kiểm tra điều kiện mở chế độ Kiểm tra Nghe chép khi người học chưa hoàn tất phần Luyện tập của bài, bằng cách thử chọn chế độ này từ màn hình lựa chọn. | F:High | G:Use Case | H:User1 có thể mở lựa chọn chế độ Nghe chép của bài học thứ nhất đã chuẩn bị. Bài có đủ câu hỏi để luyện tập và kiểm tra. Trạng thái bài trước khi chạy phải đúng với từng ca: chưa luyện xong, đã mở Kiểm tra hoặc vừa có lượt kiểm tra chưa đạt. bài học thứ nhất đã chuẩn bị chưa hoàn tất Luyện tập tại thời điểm bắt đầu ca. | I:bài học thứ nhất đã chuẩn bị chưa hoàn tất luyện tập | J:1. Mở chọn chế độ Nghe chép.
+2. Thử chọn Kiểm tra. | K:Nút khóa hoặc thông báo yêu cầu hoàn tất luyện tập; không bỏ qua điều kiện. | L:Mục Kiểm tra hiển thị trạng thái khóa (chưa mở khóa) kèm thông báo cần hoàn thành tuyến Luyện tập trước. | O:Pass | P:2026-10-30 00:00:00
+67 A:TC-DICT-03-02 | B:TR-DICT-03 | C:Nghe chép | D:Nguyễn Danh Nghĩa | E:Kiểm tra luồng làm bài Nghe chép ở chế độ Kiểm tra sau khi đã đủ điều kiện, từ trả lời các câu đến xem tổng kết và tiến độ được ghi nhận. | F:High | G:Use Case | H:User1 có thể mở lựa chọn chế độ Nghe chép của bài học thứ nhất đã chuẩn bị. Bài có đủ câu hỏi để luyện tập và kiểm tra. Trạng thái bài trước khi chạy phải đúng với từng ca: chưa luyện xong, đã mở Kiểm tra hoặc vừa có lượt kiểm tra chưa đạt. bài học thứ nhất đã chuẩn bị đã hoàn tất Luyện tập và nút Kiểm tra đã được mở. | I:Hoàn tất luyện tập bài học thứ nhất đã chuẩn bị trước | J:1. Hoàn tất Luyện tập qua UI nếu bài chưa đủ điều kiện, sau đó quay về chọn chế độ.
+2. Chọn Kiểm tra và ghi tổng số câu cùng giới hạn nghe được hiển thị.
+3. Làm lần lượt các câu bằng dữ liệu đã chuẩn bị, ghi lại câu đúng/sai.
+4. Bấm nộp hoặc xem kết quả ở câu cuối; đối chiếu số đúng/tổng và điểm.
+5. Quay về chi tiết bài để xem tiến độ Nghe chép. | K:Hiển thị số câu đúng/tổng và kết quả đúng dữ liệu đã làm; tiến độ theo ngưỡng 80% của hoạt động. | L:Mở khóa thành công phần Kiểm tra sau khi hoàn thành phần Luyện tập; hiển thị đầy đủ quy định (mỗi câu tối đa 2 lần nghe, đạt từ 80% trở lên để hoàn thành) và sẵn sàng bấm nút "Vào kiểm tra". | O:Pass | P:2026-10-30 00:00:00
+68 A:TC-DICT-03-03 | B:TR-DICT-03 | C:Nghe chép | D:Nguyễn Danh Nghĩa | E:Kiểm tra chức năng Làm lại sau một lượt Kiểm tra Nghe chép chưa đạt, tập trung vào việc xóa đáp án của lượt cũ nhưng vẫn giữ tiến độ Luyện tập đã hoàn thành. | F:High | G:Use Case | H:User1 có thể mở lựa chọn chế độ Nghe chép của bài học thứ nhất đã chuẩn bị. Bài có đủ câu hỏi để luyện tập và kiểm tra. Trạng thái bài trước khi chạy phải đúng với từng ca: chưa luyện xong, đã mở Kiểm tra hoặc vừa có lượt kiểm tra chưa đạt. Đã có một lượt Kiểm tra chưa đạt và đang mở màn hình tổng kết của lượt đó. | I:Lượt kiểm tra vừa không đạt | J:1. Từ tổng kết của lượt Kiểm tra chưa đạt, bấm Làm lại.
+2. Mở các câu ở đầu và cuối lượt mới, kiểm tra ô trả lời và kết quả cũ có còn được điền sẵn hay không.
+3. Quay về màn hình chọn chế độ và xem trạng thái hoàn thành Luyện tập. | K:Đáp án/lượt kiểm tra cũ không tự điền vào lượt mới; tiến độ luyện tập đã lưu không bị xóa. | L:Hoàn thành thành công bài Kiểm tra nghe chép (đạt 6/6 câu đúng, tiến trình tính 100%); hiển thị thông báo chúc mừng và các tùy chọn "Về bài học" hoặc "Kiểm tra lại". | O:Pass | P:2026-10-30 00:00:00
+69 A:TC-SHAD-01-01 | B:TR-SHAD-01 | C:Shadowing | D:Nguyễn Danh Nghĩa | E:Kiểm tra luồng ghi âm Shadowing khi người dùng cho phép microphone, đọc câu mẫu, dừng ghi và nghe lại bản thu trước hoặc sau khi có kết quả xử lý. | F:High | G:Use Case | H:User1 đã mở một bài Shadowing có câu mẫu và audio. Chrome chạy trên địa chỉ HTTPS của ứng dụng, máy có microphone hoạt động. Người kiểm thử có thể thay đổi quyền microphone của trang bằng cài đặt trình duyệt. | I:Một câu mẫu bài học thứ nhất đã chuẩn bị | J:1. Mở Shadowing.
+2. Bấm ghi âm và cho phép mic.
+3. Đọc câu mẫu rồi dừng.
+4. Nghe lại bản ghi. | K:Ghi/dừng được; nghe đúng bản thu; hiển thị trạng thái xử lý và transcript hoặc kết quả phù hợp. | L:Hệ thống ghi nhận điểm độ khớp, hiển thị đánh giá kèm nhận xét phát âm của AI và trạng thái hoàn thành câu. | O:Pass | P:2026-10-30 00:00:00
+70 A:TC-SHAD-01-02 | B:TR-SHAD-01 | C:Shadowing | D:Nguyễn Danh Nghĩa | E:Kiểm tra phản hồi của màn hình Shadowing khi người dùng từ chối quyền microphone ở hộp thoại của Chrome, tránh trạng thái ghi âm bị treo. | F:High | G:EP | H:User1 đã mở một bài Shadowing có câu mẫu và audio. Chrome chạy trên địa chỉ HTTPS của ứng dụng, máy có microphone hoạt động. Người kiểm thử có thể thay đổi quyền microphone của trang bằng cài đặt trình duyệt. Quyền microphone của trang được đặt về Hỏi trước khi bắt đầu để Chrome có thể hiện hộp thoại cấp quyền. | I:Chọn Chặn khi trình duyệt hỏi quyền | J:1. Đặt quyền mic về hỏi bằng cài đặt trình duyệt.
+2. Bấm ghi âm.
+3. Chọn Chặn. | K:Có hướng dẫn/lỗi rõ ràng; không kẹt ở Đang ghi âm; vẫn quay lại được. | L:Hệ thống ghi nhận điểm độ khớp 0%, hiển thị thông báo lỗi/chưa đạt rõ ràng, không bị kẹt ở trạng thái ghi âm và cho phép người dùng tiếp tục thao tác hoặc chuyển câu. | O:Pass | P:2026-10-30 00:00:00
+71 A:TC-SHAD-01-03 | B:TR-SHAD-01 | C:Shadowing | D:Nguyễn Danh Nghĩa | E:Kiểm tra việc xử lý một bản ghi Shadowing chỉ có khoảng im lặng, nhằm xác định giao diện không nhận diện hoặc chấm đạt một câu chưa được đọc. | F:High | G:EP | H:User1 đã mở một bài Shadowing có câu mẫu và audio. Chrome chạy trên địa chỉ HTTPS của ứng dụng, máy có microphone hoạt động. Người kiểm thử có thể thay đổi quyền microphone của trang bằng cài đặt trình duyệt. | I:Không nói trong bản ghi | J:1. Mở một câu Shadowing chưa hoàn thành rồi bấm ghi âm.
+2. Cho phép microphone nếu Chrome hỏi quyền; giữ im lặng trong khoảng ghi được giao diện cho phép.
+3. Dừng ghi và chờ phản hồi xử lý.
+4. Ghi lại transcript, điểm hoặc thông báo không nhận diện nếu xuất hiện. | K:Thông báo không nhận diện hoặc kết quả không đạt; không tự chấm đạt/100%. | L:Hệ thống ghi nhận điểm 0%, hiển thị thông báo "Không thể nhận diện giọng nói lúc này", không bị kẹt trạng thái và hiển thị đầy đủ các nút điều hướng. | O:Pass | P:2026-10-30 00:00:00
+72 A:TC-SHAD-02-01 | B:TR-SHAD-02 | C:Shadowing | D:Nguyễn Danh Nghĩa | E:Kiểm tra transcript, điểm và nhận xét sau khi người học đọc gần đúng câu mẫu, đồng thời đối chiếu trạng thái đạt với điểm thực tế do giao diện hiển thị. | F:High | G:Use Case | H:User1 đang mở Shadowing của bài học thứ nhất đã chuẩn bị. Microphone, audio mẫu và dịch vụ nhận dạng đang sử dụng được. Người kiểm thử có thể ghi âm qua UI; các ca cần câu đạt chỉ thực hiện sau khi giao diện chấm được ít nhất một câu từ 80 điểm. | I:Câu mẫu và bản thu rõ | J:1. Nghe câu mẫu.
+2. Ghi lại câu bằng giọng rõ.
+3. Chờ chấm và đọc kết quả. | K:Có transcript, điểm trong 0–100 và nhận xét; trạng thái đạt tương ứng điểm hiển thị, không khẳng định phân tích âm vị. | L:Hệ thống ghi nhận điểm độ khớp 85%, hiển thị đánh giá kèm nhận xét và gợi ý từ AI, cùng trạng thái hoàn thành câu để tiếp tục chuyển sang câu tiếp theo. | O:Pass | P:2026-10-30 00:00:00
+73 A:TC-SHAD-02-02 | B:TR-SHAD-02 | C:Shadowing | D:Nguyễn Danh Nghĩa | E:Kiểm tra tổng kết Shadowing khi người học bỏ qua một câu chưa đạt rồi tiếp tục các câu còn lại, nhằm xác định câu bỏ qua không bị tính như đã đạt. | F:High | G:Use Case | H:User1 đang mở Shadowing của bài học thứ nhất đã chuẩn bị. Microphone, audio mẫu và dịch vụ nhận dạng đang sử dụng được. Người kiểm thử có thể ghi âm qua UI; các ca cần câu đạt chỉ thực hiện sau khi giao diện chấm được ít nhất một câu từ 80 điểm. Có một câu chưa được chấm đạt để thử thao tác Bỏ qua. | I:Một câu chưa chấm đạt | J:1. Ở một câu Shadowing chưa đạt, chọn Bỏ qua.
+2. Tiếp tục các câu còn lại bằng cách ghi âm hoặc bỏ qua theo thao tác mà giao diện cho phép.
+3. Đến tổng kết, đối chiếu câu đã bỏ qua với số câu đạt và phần trăm hoàn thành. | K:Câu bỏ qua không được tính là đạt; tổng kết thể hiện đúng số câu đạt. | L:Hệ thống hiển thị màn hình tổng kết "Chưa hoàn thành hết Shadowing" với thông báo đã luyện đạt 4/6 câu (67%), điểm trung bình, cùng các tùy chọn "Về bài học" hoặc "Kiểm tra lại" | O:Pass | P:2026-10-30 00:00:00
+74 A:TC-SHAD-02-03 | B:TR-SHAD-02 | C:Shadowing | D:Nguyễn Danh Nghĩa | E:Kiểm tra việc khôi phục kết quả câu Shadowing đã đạt sau khi quay về bài học, tải lại trang và mở lại hoạt động. | F:High | G:Use Case | H:User1 đang mở Shadowing của bài học thứ nhất đã chuẩn bị. Microphone, audio mẫu và dịch vụ nhận dạng đang sử dụng được. Người kiểm thử có thể ghi âm qua UI; các ca cần câu đạt chỉ thực hiện sau khi giao diện chấm được ít nhất một câu từ 80 điểm. Đã có ít nhất một câu thực sự được giao diện chấm từ 80 điểm; nếu chưa tạo được kết quả này thì ghi Blocked. | I:Ít nhất một câu được UI chấm >=80 | J:1. Ghi nhận câu được chấm đạt.
+2. Quay về chi tiết bài.
+3. F5 rồi mở lại Shadowing. | K:Câu đạt và tiến độ đã lưu được khôi phục; không tăng trùng chỉ do tải lại. | L:Hệ thống ghi nhận và lưu lại tiến độ hoàn thành của phần Shadowing (67%) trên màn hình chi tiết bài học Korean Study sau khi tải lại trang (F5). | O:Pass | P:2026-10-30 00:00:00
+75 A:TC-SHAD-02-04 | B:TR-SHAD-02 | C:Shadowing | D:Nguyễn Danh Nghĩa | E:Kiểm tra câu Shadowing dưới ngưỡng đạt và thao tác ghi âm lại. | F:High | G:Use Case | H:User1 mở câu Shadowing chưa hoàn thành; microphone và dịch vụ chấm hoạt động. Chuẩn bị bản nói khác nội dung mẫu để thử nhận điểm dưới 80. | I:1. Ghi âm câu khác nội dung mẫu, dừng và chờ chấm; ghi transcript và điểm.
+2. Khi điểm dưới 80, kiểm tra trạng thái câu và nút Câu tiếp trước khi bấm Bỏ qua.
+3. Bấm nút mic để Ghi âm lại; đọc câu mẫu rồi dừng và chờ kết quả mới.
+4. Đối chiếu transcript/điểm và khả năng đi tiếp với kết quả mới. | J:1. Mở lựa chọn chế độ Shadowing.
+2. Thử chọn Kiểm tra khi chưa đủ điều kiện. | K:Kết quả dưới 80 không tính câu đạt và không cho chuyển tiếp khi chưa Bỏ qua. Ghi âm lại tạo kết quả mới thay kết quả cũ. Nếu điểm mới >=80 thì câu đạt và được đi tiếp; nếu vẫn dưới 80 thì vẫn chưa đạt. | L:Hệ thống hiển thị kết quả 75%, thông báo "Gần đúng — nghe lại và ghi âm thêm một lần nhé", nút "Câu tiếp" mờ, cho phép bấm "Bỏ qua" hoặc ghi âm lại | O:Pass | P:2026-10-30 00:00:00
+76 A:TC-REV-01-01 | B:TR-REV-01 | C:Ôn tập | D:Nguyễn Danh Nghĩa | E:Kiểm tra luồng Ôn tập theo bài khi chỉ chọn bài học thứ nhất đã chuẩn bị và một mức độ khả dụng, nhằm xác định bộ câu hỏi được tạo đúng phạm vi bài đã chọn. | F:High | G:Use Case | H:User1 đã đăng nhập và có giáo trình đã xuất bản thứ nhất với ít nhất một bài đủ dữ liệu ôn tập. Màn hình Ôn tập hoặc Thi thử có thể mở từ điều hướng của ứng dụng. Khi kiểm tra theo bài, chỉ chọn bài bài học thứ nhất đã chuẩn bị để dễ đối chiếu phạm vi câu hỏi. | I:Chỉ chọn bài học thứ nhất đã chuẩn bị | J:1. Mở Ôn tập theo bài.
+2. Chọn bài học thứ nhất đã chuẩn bị và mức độ khả dụng.
+3. Bắt đầu. | K:Tên/bộ câu hỏi thuộc phạm vi bài học thứ nhất đã chuẩn bị; không trộn bài chưa chọn. | L:Hệ thống hiển thị tên bài học và bộ câu hỏi đúng phạm vi Bài 1, với cơ chế AI tự tạo câu hỏi bám sát từ vựng và ngữ pháp của bài mà không lặp đề. | O:Pass | P:2026-10-30 00:00:00
+77 A:TC-REV-01-02 | B:TR-REV-01 | C:Ôn tập | D:Nguyễn Danh Nghĩa | E:Kiểm tra việc bắt đầu Ôn tập ngẫu nhiên sau khi chọn mức độ, bao gồm khả năng tải nội dung và sử dụng các điều khiển trả lời. | F:High | G:Use Case | H:User1 đã đăng nhập và có giáo trình đã xuất bản thứ nhất với ít nhất một bài đủ dữ liệu ôn tập. Màn hình Ôn tập hoặc Thi thử có thể mở từ điều hướng của ứng dụng. Khi kiểm tra theo bài, chỉ chọn bài bài học thứ nhất đã chuẩn bị để dễ đối chiếu phạm vi câu hỏi. | I:Bộ bài khả dụng của User1 | J:1. Mở Ôn tập ngẫu nhiên.
+2. Chọn mức độ.
+3. Bắt đầu. | K:Mở bộ ôn có nội dung và thông tin độ khó; các nút trả lời hoạt động. | L:Hệ thống hiển thị đúng tên bài học và bộ câu hỏi thuộc phạm vi Bài 1, với tính năng AI tự tạo câu hỏi bám sát từ vựng và ngữ pháp của bài, đảm bảo không lặp đề và nằm đúng phạm vi ôn tập | O:Pass | P:2026-10-30 00:00:00
+78 A:TC-REV-01-03 | B:TR-REV-01 | C:Ôn tập | D:Nguyễn Danh Nghĩa | E:Kiểm tra luồng mở Thi thử, chọn các tùy chọn đang được giao diện hỗ trợ, bắt đầu làm bài rồi quay về màn hình chọn thi thử. | F:High | G:Use Case | H:User1 đã đăng nhập và có giáo trình đã xuất bản thứ nhất với ít nhất một bài đủ dữ liệu ôn tập. Màn hình Ôn tập hoặc Thi thử có thể mở từ điều hướng của ứng dụng. Khi kiểm tra theo bài, chỉ chọn bài bài học thứ nhất đã chuẩn bị để dễ đối chiếu phạm vi câu hỏi. | I:Bài có dữ liệu đủ để thi thử | J:1. Mở Thi thử.
+2. Chọn bộ bài và cấu hình mà UI cho phép.
+3. Bắt đầu rồi quay lại. | K:Vào luồng làm bài tương ứng; quay lại đúng nơi chọn thi thử, không trang trắng. | L:Hệ thống hiển thị màn hình Thi thử với các tùy chọn cấu hình đề thi (chọn mức độ khó "Trung bình", tổng số 20 câu hỏi bao gồm từ vựng, nghe hiểu, hội thoại, ngữ pháp, câu ứng dụng AI và shadowing phản xạ) cùng nút Bắt đầu thi thử. | O:Pass | P:2026-10-30 00:00:00
+79 A:TC-REV-02-01 | B:TR-REV-02 | C:Ôn tập | D:Nguyễn Danh Nghĩa | E:Kiểm tra tổng kết của một lượt ôn có cả đáp án đúng và sai, đối chiếu số lượng câu, đánh dấu từng câu và điểm với các lựa chọn đã thực hiện. | F:High | G:Use Case | H:User1 đã bắt đầu một bộ ôn có ít nhất 2 câu. Người kiểm thử biết đáp án chuẩn của các câu được chọn để chủ động tạo một câu đúng và một câu sai. Các ca luyện lại cần có kết quả của lượt trước. | I:Ít nhất 1 đúng và 1 sai | J:1. Ghi tổng số câu của bộ ôn và xác định một câu có đáp án chuẩn đã biết.
+2. Trả lời đúng câu đó, sau đó chủ động chọn đáp án sai ở một câu khác và ghi lại lựa chọn.
+3. Hoàn tất những câu còn lại và mở tổng kết.
+4. Đối chiếu số đúng/sai, dấu đánh giá từng câu và điểm với các lựa chọn đã ghi. | K:Số đúng/sai và đánh dấu từng câu khớp thao tác; điểm nằm trong thang hiển thị. | L:Hệ thống hiển thị màn hình tổng kết với thông báo "Chưa hoàn thành hết Shadowing", thống kê kết quả luyện đạt 4/6 câu (67%), kèm phần nhận xét chi tiết của AI ở cấp độ Sơ cấp, điểm lại các điểm cần cải thiện cùng hai nút chức năng "Về bài học" và "Kiểm tra lại". | O:Pass | P:2026-10-30 00:00:00
+80 A:TC-REV-02-02 | B:TR-REV-02 | C:Ôn tập | D:Nguyễn Danh Nghĩa | E:Kiểm tra bắt đầu lượt ôn mới bằng Ôn lại lần nữa. | F:High | G:Use Case | H:User1 đã hoàn tất một lượt ôn tập chung có ít nhất một câu sai và đang xem tổng kết. | I:Một lượt ôn có kết quả đúng/sai đã ghi nhận. | J:1. Ghi lại kết quả lượt hiện tại.
+2. Bấm Ôn lại lần nữa.
+3. Kiểm tra lượt mới chưa chọn sẵn đáp án và bộ đếm được bắt đầu lại.
+4. Trả lời rồi hoàn tất để đối chiếu kết quả lượt mới. | K:Mở lượt ôn mới, không tự chọn đáp án của lượt cũ; kết quả lượt mới phản ánh thao tác mới. | L:Hệ thống hiển thị màn hình tổng kết "Chưa hoàn thành hết Shadowing", thống kê đạt 4/6 câu (67%), kèm nhận xét chi tiết và hai nút "Về bài học", "Kiểm tra lại". | O:Pass | P:2026-10-30 00:00:00
+81 A:TC-REV-02-03 | B:TR-REV-02 | C:Ôn tập | D:Nguyễn Danh Nghĩa | E:Kiểm tra bỏ qua câu Shadowing phản xạ trong một lượt ôn tập. | F:High | G:Use Case | H:User1 chọn mức từ 3 sao có cấu hình Shadowing và bài có đủ câu nói; đang làm lượt ôn tập chung. | I:Bộ ôn từ 3 sao; một câu Shadowing phản xạ sẽ bỏ qua. | J:1. Hoàn tất các phần trước để đến Shadowing phản xạ.
+2. Bấm Bỏ qua câu này ở một câu và ghi nhận câu đó.
+3. Hoàn tất những câu còn lại rồi xem tổng kết. | K:Câu bỏ qua được ghi 0 điểm trong phần phản xạ, không tính đạt; tổng hợp điểm phản ánh cả câu bỏ qua. | L:Hệ thống hiển thị màn hình tổng kết "Chưa hoàn thành hết Shadowing", thống kê đạt 4/6 câu (67%), kèm nhận xét chi tiết và hai nút "Về bài học", "Kiểm tra lại". | O:Pass | P:2026-10-30 00:00:00
+82 A:TC-SCHED-01-01 | B:TR-SCHED-01 | C:Lịch ôn | D:Nguyễn Danh Nghĩa | E:Kiểm tra nút Ôn ngay trên lịch ôn Trang chủ có mở đúng bộ từ và số lượng từ của ngày hiện tại, thay vì một nhóm thuộc ngày khác. | F:High | G:Use Case | H:User1 có ít nhất một bài đã hoàn thành và có từ vựng được đưa vào lịch ôn. Đã ghi lại lịch học đang có hiệu lực và bộ từ đến lượt trong ngày trên giao diện. Ca ngày nghỉ cần chạy vào ngày nghỉ thật theo lịch này. | I:Ngày học có bộ từ đến lượt ôn | J:1. Xem lịch ôn Trang chủ và ghi danh sách/số từ hôm nay.
+2. Bấm Ôn ngay.
+3. Đối chiếu bộ mở ra. | K:Bộ ôn khớp ngày và số từ hiển thị, tối đa 10 từ/nhóm theo code hiện tại. | L:Hệ thống hiển thị màn hình chi tiết Bài 1 với đầy đủ các phần học và mục "Luyện tập với AI" sẵn sàng tạo câu hỏi mới | O:Pass | P:2026-10-30 00:00:00
+83 A:TC-SCHED-01-02 | B:TR-SCHED-01 | C:Lịch ôn | D:Nguyễn Danh Nghĩa | E:Kiểm tra tính ổn định của nhóm từ đến lượt ôn khi tải lại Trang chủ trong cùng một ngày mà chưa thực hiện lượt ôn mới. | F:High | G:Use Case | H:User1 có ít nhất một bài đã hoàn thành và có từ vựng được đưa vào lịch ôn. Đã ghi lại lịch học đang có hiệu lực và bộ từ đến lượt trong ngày trên giao diện. Ca ngày nghỉ cần chạy vào ngày nghỉ thật theo lịch này. | I:Ngày có bộ ôn; không hoàn tất lượt mới giữa hai lần xem | J:1. Ghi bộ từ đang đến lượt.
+2. F5.
+3. Mở lại lịch và bộ từ. | K:Nhóm từ không đổi chỉ vì tải lại trang. | L:Hệ thống tải lại trang (F5) và hiển thị lại lịch ôn tập cùng bộ từ vựng chính xác như trạng thái trước khi tải lại. | O:Pass | P:2026-10-30 00:00:00
+84 A:TC-SCHED-01-03 | B:TR-SCHED-01 | C:Lịch ôn | D:Nguyễn Danh Nghĩa | E:Kiểm tra lịch ôn vào một ngày nghỉ theo kế hoạch đang có hiệu lực, bao gồm việc không phân thêm nhóm từ mới và giữ thứ tự các ngày học tiếp theo. | F:High | G:Use Case | H:User1 có ít nhất một bài đã hoàn thành và có từ vựng được đưa vào lịch ôn. Đã ghi lại lịch học đang có hiệu lực và bộ từ đến lượt trong ngày trên giao diện. Ca ngày nghỉ cần chạy vào ngày nghỉ thật theo lịch này. Chỉ chạy vào ngày nghỉ thật của lịch hiện hành; nếu chưa đến ngày thì ghi Blocked. | I:Ngày không thuộc lịch hiện hành | J:1. Mở app vào ngày nghỉ thật theo lịch hiệu lực.
+2. Xem lịch ôn của ngày. | K:Không phân thêm nhóm ôn mới cho ngày nghỉ; lịch các ngày học tiếp theo vẫn có thứ tự hợp lý. | L:Hệ thống hiển thị Trang chủ Korean Study với lịch ôn từ vựng ngày 30-10 hiển thị trạng thái "Nghỉ ngơi" kèm biểu tượng cốc nước và dòng thông báo "Ngày nghỉ — không có từ nào cần ôn". | O:Pass | P:2026-10-30 00:00:00
+85 A:TC-SCHED-02-01 | B:TR-SCHED-02 | C:Lịch ôn | D:Nguyễn Danh Nghĩa | E:Kiểm tra việc lưu một lượt ôn theo lịch có đáp án đúng và sai, rồi tải lại để đối chiếu tổng kết và dấu đúng/sai của từng từ. | F:Medium | G:Use Case | H:User1 có bộ từ ôn trong ngày và có thể mở bộ này bằng nút Ôn ngay. Người kiểm thử biết một số đáp án để tạo lượt ôn có cả câu đúng và sai. Ca xem lại cần có kết quả đã lưu trước đó. | I:Bộ ôn hôm nay | J:1. Mở Ôn ngay.
+2. Trả lời gồm đúng và sai.
+3. Hoàn tất.
+4. F5 xem lại kết quả ngày. | K:Giữ số đúng/tổng và dấu đúng/sai từng từ; đánh giá tổng nhất quán. | L:Hệ thống hiển thị màn hình chi tiết Bài 1 với đầy đủ các phần học như "Từ vựng & Ngữ pháp", "Nghe chép chính tả", "Shadowing", "Ôn tập" cùng mục "Luyện tập với AI" sẵn sàng tạo câu hỏi mới. | O:Pass | P:2026-10-30 00:00:00
+86 A:TC-SCHED-02-02 | B:TR-SCHED-02 | C:Lịch ôn | D:Nguyễn Danh Nghĩa | E:Kiểm tra việc mở lại kết quả ôn đã lưu nhiều lần có làm phát sinh thêm lượt hoàn thành hoặc tăng phần thưởng đang hiển thị mà không thực sự làm bài mới hay không. | F:Medium | G:Use Case | H:User1 có bộ từ ôn trong ngày và có thể mở bộ này bằng nút Ôn ngay. Người kiểm thử biết một số đáp án để tạo lượt ôn có cả câu đúng và sai. Ca xem lại cần có kết quả đã lưu trước đó. Đã hoàn thành và lưu một lượt ôn của ngày hiện tại; không làm thêm lượt mới trong khi đối chiếu. | I:Lượt ôn đã lưu | J:1. Mở kết quả ôn đã hoàn thành của ngày hiện tại và ghi số đúng/tổng; ghi số lượt hoặc phần thưởng nếu giao diện hiển thị.
+2. Đóng rồi mở lại đúng kết quả đó hai lần mà không bắt đầu bài mới.
+3. Bấm F5, mở lại kết quả và so sánh các giá trị đã ghi. | K:Không sinh thêm kết quả hoàn thành hoặc cộng thưởng nhìn thấy chỉ vì mở lại. | L:Hệ thống hiển thị màn hình chi tiết Bài 1 với đầy đủ các phần học như "Từ vựng & Ngữ pháp", "Nghe chép chính tả", "Shadowing", "Ôn tập" cùng mục "Luyện tập với AI" ở trạng thái sẵn sàng để tạo câu hỏi mới. | O:Pass | P:2026-10-30 00:00:00
+87 A:TC-AI-01-01 | B:TR-AI-01 | C:AI | D:Nguyễn Danh Nghĩa | E:Kiểm tra bộ AI luyện tập tự được tạo khi mở màn hình. | F:Medium | G:Use Case | H:User1 mở bài đã tải được từ vựng/ngữ pháp khi có mạng; chức năng AI luyện tập của bài khả dụng. | I:Một bài có nguồn từ vựng/ngữ pháp. | J:1. Từ bài học mở AI luyện tập.
+2. Quan sát màn chờ và đợi bộ câu hỏi tự xuất hiện.
+3. Làm lần lượt 20 câu; ghi các đáp án đúng/sai.
+4. Xem kết quả ở cuối lượt. | K:Có trạng thái chờ và bộ 20 câu thuộc nguồn bài; đáp án thao tác được; tổng kết đúng số câu đã trả lời đúng trên tổng số câu; không hiện JSON thô hoặc trang trắng. | L:Hệ thống hiển thị màn hình kết quả hoàn thành bộ luyện tập AI với thông báo "Hoàn thành bộ 1", thống kê kết quả đạt "19/20 câu đúng", kèm các nút chức năng "Về bài học", "Ôn 1 câu sai" và "AI tạo bộ mới". | O:Pass | P:2026-10-30 00:00:00
+88 A:TC-AI-01-02 | B:TR-AI-01 | C:AI | D:Nguyễn Danh Nghĩa | E:Kiểm tra tạo bộ mới và ngăn tương tác tạo lặp khi đang chờ. | F:Medium | G:Use Case | H:User1 mở bài đã tải được từ vựng/ngữ pháp khi có mạng; chức năng AI luyện tập của bài khả dụng. Đã hoàn tất một lượt và đang ở tổng kết. | I:Nút AI tạo bộ mới tại tổng kết. | J:1. Bấm AI tạo bộ mới một lần.
+2. Khi loader xuất hiện, kiểm tra nút tạo bộ không còn khả dụng để gửi lặp.
+3. Đợi bộ mới xuất hiện và thử chọn đáp án. | K:Trong lúc chờ không có nút tạo bộ khả dụng để bấm lặp; sau khi tải chỉ hiển thị một bộ câu hỏi và điều khiển hoạt động bình thường. | L:Hệ thống chuyển sang màn hình bài tập AI luyện tập của Bài 1, hiển thị tiến độ ở câu 5/20 với dạng bài "Điền từ" gồm câu hỏi tiếng Hàn và 4 lựa chọn đáp án (A, B, C, D). | O:Pass | P:2026-10-30 00:00:00
+89 A:TC-AI-01-03 | B:TR-AI-01 | C:AI | D:Nguyễn Danh Nghĩa | E:Kiểm tra bộ câu hỏi dự phòng khi tạo lượt AI mới trong lúc mất mạng. | F:Medium | G:Use Case | H:User1 mở bài đã tải được từ vựng/ngữ pháp khi có mạng; chức năng AI luyện tập của bài khả dụng. Đã hoàn tất một lượt và vẫn giữ màn tổng kết mở; không F5 khi mất mạng. | I:Nguồn bài đã tải; ngắt/kết nối mạng qua cài đặt Windows. | J:1. Ở tổng kết, ngắt kết nối mạng bằng cài đặt Windows.
+2. Bấm AI tạo bộ mới và đợi yêu cầu AI kết thúc hoặc hết thời gian chờ.
+3. Kiểm tra bộ câu hỏi dự phòng; chọn đáp án và hoàn tất lượt.
+4. Nối mạng, từ tổng kết tạo bộ mới lần nữa. | K:Khi AI không truy cập được, nguồn đã tải vẫn tạo bộ dự phòng 20 câu với nội dung/đáp án hợp lệ và làm bài được. Nối mạng rồi tạo tiếp không kẹt UI. Không bắt buộc xuất hiện thông báo lỗi AI. | L:Hệ thống yêu cầu người dùng đăng nhập lại, hiển thị màn hình Đăng nhập do kết nối mạng đã bị ngắt | O:Pass | P:2026-10-30 00:00:00
+90 A:TC-COM-01-01 | B:TR-COM-01 | C:Cộng đồng | D:Võ Nhạc Phước | E:Kiểm tra việc đăng một bài văn bản hợp lệ trong Cộng đồng và tải lại bảng tin để đối chiếu nội dung cùng tài khoản tác giả. | F:High | G:Use Case | H:Đã chuẩn bị User1 và User2 trong hai hồ sơ Chrome riêng. Cả hai có quyền mở Cộng đồng. Chỉ dùng bài có tiền tố [UI-TEST]; những ca xóa hoặc hủy xóa cần có sẵn một bài do User1 đăng. | I:Nội dung: [UI-TEST] Xin chào cộng đồng | J:1. User1 mở Cộng đồng.
+2. Nhập nội dung và đăng.
+3. F5. | K:Bài xuất hiện đúng nội dung và tác giả; vẫn thấy sau tải lại. | L:Bài xuất hiện đúng nội dung và tác giả; vẫn thấy sau tải lại. | O:Pass | P:2026-10-30 00:00:00
+91 A:TC-COM-01-02 | B:TR-COM-01 | C:Cộng đồng | D:Võ Nhạc Phước | E:Kiểm tra ô soạn bài khi chỉ nhập khoảng trắng, nhằm xác định người dùng không thể tạo một bài đăng không có nội dung thực tế. | F:High | G:EP | H:Đã chuẩn bị User1 và User2 trong hai hồ sơ Chrome riêng. Cả hai có quyền mở Cộng đồng. Chỉ dùng bài có tiền tố [UI-TEST]; những ca xóa hoặc hủy xóa cần có sẵn một bài do User1 đăng. Đang mở ô soạn bài mới và chưa nhập nội dung nào. | I:3 dấu cách | J:1. Nhập khoảng trắng vào ô bài viết.
+2. Quan sát/thử nút Đăng. | K:Nút vô hiệu hoặc thông báo yêu cầu nội dung; không tạo bài rỗng. | L:Không cho đăng bài | O:Pass | P:2026-10-30 00:00:00
+92 A:TC-COM-01-03 | B:TR-COM-01 | C:Cộng đồng | D:Võ Nhạc Phước | E:Kiểm tra quyền sở hữu bài đăng qua giao diện: User2 xem bài của User1 nhưng không được xóa, còn User1 có thể xác nhận xóa bài do mình tạo. | F:High | G:Use Case | H:Đã chuẩn bị User1 và User2 trong hai hồ sơ Chrome riêng. Cả hai có quyền mở Cộng đồng. Chỉ dùng bài có tiền tố [UI-TEST]; những ca xóa hoặc hủy xóa cần có sẵn một bài do User1 đăng. | I:Bài thử của User1 | J:1. User2 xem bài User1 và kiểm tra thao tác quản lý.
+2. User1 chọn xóa bài của mình và xác nhận.
+3. User2 tải lại. | K:User2 không có nút xóa bài User1; sau User1 xóa, bài không còn hiển thị. | L:User 2 không có nút xóa bài User 1 chỉ có nút "Report" bài của User 1 | O:Pass | P:2026-10-30 00:00:00
+93 A:TC-COM-01-04 | B:TR-COM-01 | C:Cộng đồng | D:Võ Nhạc Phước | E:Kiểm tra thao tác Hủy trong hộp thoại xóa bài của chính người dùng, bao gồm việc tải lại bảng tin để xác định bài chưa bị xóa. | F:High | G:Use Case | H:Đã chuẩn bị User1 và User2 trong hai hồ sơ Chrome riêng. Cả hai có quyền mở Cộng đồng. Chỉ dùng bài có tiền tố [UI-TEST]; những ca xóa hoặc hủy xóa cần có sẵn một bài do User1 đăng. | I:Bài thử còn tồn tại của User1 | J:1. User1 chọn Xóa bài.
+2. Bấm Hủy trong xác nhận.
+3. F5. | K:Bài vẫn tồn tại; không bị xóa khi hủy. | L:Bài vẫn giữ lại | O:Pass | P:2026-10-30 00:00:00
+94 A:TC-COM-02-01 | B:TR-COM-02 | C:Cộng đồng | D:Võ Nhạc Phước | E:Kiểm tra việc thích rồi bỏ thích một bài viết bằng cùng tài khoản, đồng thời đối chiếu trạng thái biểu tượng và số lượt thích sau khi tải lại. | F:Medium | G:Use Case | H:User1 có một bài thử đang hiển thị trên Cộng đồng. User2 đã đăng nhập ở hồ sơ Chrome khác để tương tác. Có Admin hỗ trợ xem danh sách báo cáo đối với ca gửi báo cáo; ghi lại bài và tác giả để đối chiếu đúng nội dung. | I:Bài của User1 | J:1. User2 ghi số lượt thích.
+2. Bấm thích một lần.
+3. Bấm bỏ thích.
+4. F5. | K:Trạng thái tăng rồi trở lại ban đầu; không tăng trùng do tải lại. | L:Bấm 1 lần là thích bài, lần 2 là bỏ thích | O:Pass | P:2026-10-30 00:00:00
+95 A:TC-COM-02-02 | B:TR-COM-02 | C:Cộng đồng | D:Võ Nhạc Phước | E:Kiểm tra một tài khoản bình luận vào bài và tài khoản tác giả trả lời bình luận đó, bao gồm nội dung, người gửi và quan hệ giữa bình luận với câu trả lời. | F:Medium | G:Use Case | H:User1 có một bài thử đang hiển thị trên Cộng đồng. User2 đã đăng nhập ở hồ sơ Chrome khác để tương tác. Có Admin hỗ trợ xem danh sách báo cáo đối với ca gửi báo cáo; ghi lại bài và tác giả để đối chiếu đúng nội dung. | I:Bình luận: [UI-TEST] Bình luận; trả lời: Đã nhận | J:1. User2 bình luận bài User1.
+2. User1 mở bình luận và trả lời.
+3. F5 ở hai cửa sổ. | K:Đúng nội dung/tác giả, trả lời gắn đúng bình luận; dữ liệu vẫn còn. | L:Đúng nội dung/tác giả, trả lời gắn đúng bình luận; dữ liệu vẫn còn. | O:Pass | P:2026-10-30 00:00:00
+96 A:TC-COM-02-03 | B:TR-COM-02 | C:Cộng đồng | D:Võ Nhạc Phước | E:Kiểm tra luồng báo cáo bài từ cửa sổ báo cáo của người học đến danh sách báo cáo của admin, nhằm đối chiếu đúng bài và lý do gửi. | F:Medium | G:Use Case | H:User1 có một bài thử đang hiển thị trên Cộng đồng. User2 đã đăng nhập ở hồ sơ Chrome khác để tương tác. Có Admin hỗ trợ xem danh sách báo cáo đối với ca gửi báo cáo; ghi lại bài và tác giả để đối chiếu đúng nội dung. Chuẩn bị thêm một bài của User2 để User1 gửi báo cáo đúng vai trò người xem. | I:Bài thử User2; lý do chọn từ UI | J:1. User2 mở Báo cáo bài.
+2. Chọn lý do và gửi.
+3. Admin mở danh sách báo cáo. | K:UI phản hồi đã gửi; Admin thấy báo cáo gắn đúng bài và lý do. | L:UI phản hồi đã gửi; Admin thấy báo cáo gắn đúng bài và lý do. | O:Pass | P:2026-10-30 00:00:00
+97 A:TC-COM-02-04 | B:TR-COM-02 | C:Cộng đồng | D:Võ Nhạc Phước | E:Kiểm tra thông báo của tác giả khi tài khoản khác gửi bình luận mới vào bài viết, bao gồm nội dung thông báo và lối mở nội dung liên quan nếu có. | F:Medium | G:Use Case | H:User1 có một bài thử đang hiển thị trên Cộng đồng. User2 đã đăng nhập ở hồ sơ Chrome khác để tương tác. Có Admin hỗ trợ xem danh sách báo cáo đối với ca gửi báo cáo; ghi lại bài và tác giả để đối chiếu đúng nội dung. User1 là tác giả bài sẽ nhận bình luận mới và đang mở ứng dụng trước khi User2 bình luận. | I:User2 bình luận bài User1 | J:1. User1 mở app.
+2. User2 gửi bình luận mới vào bài User1.
+3. User1 mở biểu tượng thông báo. | K:Hiển thị thông báo liên quan đúng tương tác và user; mở được nội dung tương ứng nếu có nút điều hướng. | L:Hiển thị thông báo liên quan đúng tương tác và user; mở được nội dung tương ứng nếu có nút điều hướng. | O:Pass | P:2026-10-30 00:00:00
+98 A:TC-CUS-01-01 | B:TR-CUS-01 | C:Bộ từ tùy chỉnh | D:Võ Nhạc Phước | E:Kiểm tra tạo bộ từ tại giới hạn tối thiểu 2 cặp từ hợp lệ, xem trước nội dung được tạo rồi lưu và nhận mã chia sẻ của bộ. | F:Medium | G:BVA | H:User1 đã đăng nhập và mở được chức năng tạo bộ từ tùy chỉnh. Dịch vụ tạo nội dung đang sử dụng được. Đã chuẩn bị các cặp từ tiếng Hàn/nghĩa tiếng Việt đã nêu tại cột Dữ liệu kiểm thử; đặt tiêu đề có tiền tố [UI-TEST] khi cần lưu. | I:Tiêu đề [UI-TEST] Chào hỏi; 안녕 / Xin chào; 감사 / Cảm ơn | J:1. Mở chức năng Tạo bộ từ trong khu vực bộ từ tùy chỉnh.
+2. Nhập tiêu đề [UI-TEST] Chào hỏi và đúng 2 cặp: 안녕 / Xin chào; 감사 / Cảm ơn.
+3. Bấm tạo nội dung xem trước và chờ xử lý.
+4. Đối chiếu nội dung xem trước với 2 cặp từ đã nhập, sau đó bấm Lưu & lấy mã chia sẻ.
+5. Ghi lại mã và tìm bộ vừa tạo trong thư viện. | K:Có bản xem trước tương ứng 2 từ; lưu thành công, hiện mã chia sẻ và bộ trong thư viện. | L:Có bản xem trước tương ứng 2 từ; lưu thành công, hiện mã chia sẻ và bộ trong thư viện. | O:Pass | P:2026-10-30 00:00:00
+99 A:TC-CUS-01-02 | B:TR-CUS-01 | C:Bộ từ tùy chỉnh | D:Võ Nhạc Phước | E:Kiểm tra chức năng tạo bộ từ khi chỉ có 1 cặp từ đầy đủ nghĩa, trong khi tiêu đề hợp lệ, nhằm xác minh điều kiện tối thiểu về số lượng từ. | F:Medium | G:BVA | H:User1 đã đăng nhập và mở được chức năng tạo bộ từ tùy chỉnh. Dịch vụ tạo nội dung đang sử dụng được. Đã chuẩn bị các cặp từ tiếng Hàn/nghĩa tiếng Việt đã nêu tại cột Dữ liệu kiểm thử; đặt tiêu đề có tiền tố [UI-TEST] khi cần lưu. | I:Tiêu đề hợp lệ; 1 từ đủ Hàn/Việt | J:1. Điền tiêu đề và 1 cặp từ.
+2. Thử tạo xem trước. | K:Nút vô hiệu hoặc yêu cầu ít nhất 2 cặp; không tạo thành công. | L:Nút vô hiệu hoặc yêu cầu ít nhất 2 cặp; không tạo thành công. | O:Pass | P:2026-10-30 00:00:00
+100 A:TC-CUS-01-03 | B:TR-CUS-01 | C:Bộ từ tùy chỉnh | D:Võ Nhạc Phước | E:Kiểm tra chức năng tạo bộ từ khi bỏ trống tiêu đề nhưng đã nhập đủ 2 cặp từ hợp lệ, nhằm xác minh yêu cầu nhập tên bộ trước khi tạo. | F:Medium | G:EP | H:User1 đã đăng nhập và mở được chức năng tạo bộ từ tùy chỉnh. Dịch vụ tạo nội dung đang sử dụng được. Đã chuẩn bị các cặp từ tiếng Hàn/nghĩa tiếng Việt đã nêu tại cột Dữ liệu kiểm thử; đặt tiêu đề có tiền tố [UI-TEST] khi cần lưu. | I:Tiêu đề rỗng; 2 cặp từ hợp lệ | J:1. Để trống tiêu đề.
+2. Nhập 2 cặp từ.
+3. Thử tạo xem trước. | K:Không tạo/lưu bộ không có tiêu đề. | L:Không tạo/lưu bộ không có tiêu đề. | O:Pass | P:2026-10-30 00:00:00
+101 A:TC-CUS-02-01 | B:TR-CUS-02 | C:Bộ từ tùy chỉnh | D:Võ Nhạc Phước | E:Kiểm tra User2 nhập mã chia sẻ của bộ do User1 tạo, rồi mở bộ vừa thêm để đối chiếu tên, từ vựng và quyền tác giả. | F:Medium | G:Use Case | H:User1 đã tạo và lưu một bộ từ thử, đồng thời ghi lại mã chia sẻ đang dùng được. User2 là tài khoản khác chưa nhập bộ này. Bộ có nội dung câu hỏi để User2 thực hiện bài kiểm tra sau khi nhập. | I:Mã bộ User1 | J:1. User2 mở nhập mã bộ từ.
+2. Nhập mã của User1 và xác nhận.
+3. Mở bộ đã thêm. | K:Hiển thị đúng tiêu đề và từ của bộ User1; không biến User2 thành tác giả. | L:Hiển thị đúng tiêu đề và từ của bộ User1; không biến User2 thành tác giả. | O:Pass | P:2026-10-30 00:00:00
+102 A:TC-CUS-02-02 | B:TR-CUS-02 | C:Bộ từ tùy chỉnh | D:Võ Nhạc Phước | E:Kiểm tra phản hồi của chức năng nhập mã bộ từ khi người dùng nhập một mã đúng hình thức nhưng không trùng với bộ nào đã được tạo. | F:Medium | G:EP | H:User1 đã tạo và lưu một bộ từ thử, đồng thời ghi lại mã chia sẻ đang dùng được. User2 là tài khoản khác chưa nhập bộ này. Bộ có nội dung câu hỏi để User2 thực hiện bài kiểm tra sau khi nhập. Chuẩn bị một mã 6 ký tự mà nhóm chưa cấp; nếu mã tình cờ tồn tại thì chọn mã khác để kiểm tra đúng trường hợp. | I:Mã 6 ký tự chưa được cấp | J:1. Mở chức năng nhập mã bộ từ ở tài khoản User2.
+2. Nhập mã 6 ký tự chưa được cấp đã chuẩn bị rồi bấm xác nhận.
+3. Quan sát phản hồi và kiểm tra danh sách bộ từ có bị thêm mục mới ngoài ý muốn hay không. | K:Thông báo không tìm thấy hoặc mã không hợp lệ; không thêm bộ giả. | L:Thông báo không tìm thấy hoặc mã không hợp lệ; không thêm bộ giả. | O:Pass | P:2026-10-30 00:00:00
+103 A:TC-CUS-02-03 | B:TR-CUS-02 | C:Bộ từ tùy chỉnh | D:Võ Nhạc Phước | E:Kiểm tra bài trắc nghiệm của bộ từ tùy chỉnh sau khi được nhập vào tài khoản khác, từ trả lời các câu đến xem số câu đúng và điểm tổng kết. | F:Medium | G:Use Case | H:User1 đã tạo và lưu một bộ từ thử, đồng thời ghi lại mã chia sẻ đang dùng được. User2 là tài khoản khác chưa nhập bộ này. Bộ có nội dung câu hỏi để User2 thực hiện bài kiểm tra sau khi nhập. | I:Bộ đã nhập của User2 | J:1. Mở bộ và bấm Làm trắc nghiệm.
+2. Trả lời từng câu.
+3. Xem kết quả.
+4. Mở lại thống kê/kết quả nếu UI hỗ trợ. | K:Hiển thị đúng số đúng/tổng và điểm thang 10; không lưu nhiều lần chỉ do xem lại kết quả. | L:Hiển thị đúng số đúng/tổng và điểm thang 10; không lưu nhiều lần chỉ do xem lại kết quả. | O:Pass | P:2026-10-30 00:00:00
+104 A:TC-RANK-01-01 | B:TR-RANK-01 | C:Xếp hạng | D:Võ Nhạc Phước | E:Kiểm tra bảng xếp hạng cộng đồng được mở từ điều hướng ứng dụng, tập trung vào tên người học, thứ hạng và điểm hiển thị. | F:Medium | G:Use Case | H:User1 đã đăng nhập. giáo trình đã xuất bản thứ nhất và giáo trình đã xuất bản thứ hai có dữ liệu để kiểm tra bộ lọc xếp hạng; giáo trình chưa có dữ liệu xếp hạng là giáo trình thử chưa có dữ liệu xếp hạng. Các giáo trình cần kiểm tra có thể chọn từ giao diện. | I:Email User1; mật khẩu đúng. | J:1. Mở Xếp hạng/Cộng đồng theo điều hướng.
+2. Chọn bảng xếp hạng chung. | K:Tên, vị trí và điểm hiển thị rõ; không có điểm NaN hoặc thứ hạng âm. | L:Tên, vị trí và điểm hiển thị rõ; không có điểm NaN hoặc thứ hạng âm. | O:Pass | P:2026-10-30 00:00:00
+105 A:TC-RANK-01-02 | B:TR-RANK-01 | C:Xếp hạng | D:Võ Nhạc Phước | E:Kiểm tra việc đổi bộ lọc xếp hạng từ giáo trình đã xuất bản thứ nhất sang giáo trình đã xuất bản thứ hai, đối chiếu nhãn phạm vi và danh sách sau khi chuyển để phát hiện dữ liệu còn sót của lựa chọn trước. | F:Medium | G:Use Case | H:User1 đã đăng nhập. giáo trình đã xuất bản thứ nhất và giáo trình đã xuất bản thứ hai có dữ liệu để kiểm tra bộ lọc xếp hạng; giáo trình chưa có dữ liệu xếp hạng là giáo trình thử chưa có dữ liệu xếp hạng. Các giáo trình cần kiểm tra có thể chọn từ giao diện. | I:giáo trình đã xuất bản thứ nhất rồi giáo trình đã xuất bản thứ hai | J:1. Chọn giáo trình đã xuất bản thứ nhất trong bộ lọc xếp hạng.
+2. Ghi tên giáo trình/danh sách.
+3. Chọn giáo trình đã xuất bản thứ hai. | K:Nhãn và dữ liệu chuyển đúng giáo trình; không giữ nhãn giáo trình đã xuất bản thứ hai với dữ liệu giáo trình đã xuất bản thứ nhất. | L:Nhãn và dữ liệu chuyển đúng giáo trình; không giữ nhãn giáo trình đã xuất bản thứ hai với dữ liệu giáo trình đã xuất bản thứ nhất. | O:Pass | P:2026-10-30 00:00:00
+106 A:TC-RANK-01-03 | B:TR-RANK-01 | C:Xếp hạng | D:Võ Nhạc Phước | E:Kiểm tra trạng thái trống khi chọn giáo trình chưa có dữ liệu xếp hạng, sau đó chuyển lại giáo trình có dữ liệu để kiểm tra khả năng phục hồi hiển thị. | F:Medium | G:Use Case | H:User1 đã đăng nhập. giáo trình đã xuất bản thứ nhất và giáo trình đã xuất bản thứ hai có dữ liệu để kiểm tra bộ lọc xếp hạng; giáo trình chưa có dữ liệu xếp hạng là giáo trình thử chưa có dữ liệu xếp hạng. Các giáo trình cần kiểm tra có thể chọn từ giao diện. | I:giáo trình chưa có dữ liệu xếp hạng chưa có người học | J:1. Chọn giáo trình không có dữ liệu xếp hạng.
+2. Quan sát rồi chuyển lại giáo trình đã xuất bản thứ nhất. | K:Có trạng thái trống hợp lý; chuyển lại giáo trình đã xuất bản thứ nhất vẫn tải được dữ liệu. | L:Có trạng thái trống hợp lý; chuyển lại giáo trình đã xuất bản thứ nhất vẫn tải được dữ liệu. | O:Pass | P:2026-10-30 00:00:00
+107 A:TC-SHOP-01-01 | B:TR-SHOP-01 | C:Cửa hàng | D:Võ Nhạc Phước | E:Kiểm tra việc mua một cây chưa sở hữu khi tài khoản có đủ kim cương, đối chiếu giá mua, số dư còn lại và trạng thái sở hữu sau khi tải lại. | F:High | G:Use Case | H:User1 đã đăng nhập và mở được Cửa hàng. Trước mỗi ca, ghi số kim cương hiện có, giá cây và trạng thái sở hữu trên giao diện. Chuẩn bị số dư bằng hoạt động học; nếu chưa đủ dữ liệu cho tình huống cần kiểm tra thì ghi Blocked. Chọn cây chưa sở hữu và có giá không lớn hơn số dư User1. | I:Số kim cương hiện có lớn hơn hoặc bằng giá cây; cây chưa sở hữu | J:1. Mở Cửa hàng, chọn cây chưa sở hữu có giá không vượt số kim cương hiện có; ghi số kim cương hiện có và giá cây.
+2. Bấm Đổi cây một lần và xác nhận nếu giao diện yêu cầu.
+3. Chờ xử lý rồi ghi lại trạng thái sở hữu và số dư mới.
+4. Bấm F5 và đối chiếu lại trạng thái cùng số dư. | K:Cây chuyển sang sở hữu; số dư còn số kim cương trước khi mua trừ đi giá cây; không trừ nhiều lần chỉ do tải lại. | L:Cây chuyển sang sở hữu; số dư còn số kim cương trước khi mua trừ đi giá cây; không trừ nhiều lần chỉ do tải lại. | O:Pass | P:2026-10-30 00:00:00
+108 A:TC-SHOP-01-02 | B:TR-SHOP-01 | C:Cửa hàng | D:Võ Nhạc Phước | E:Kiểm tra nút mua của cây có giá lớn hơn số dư hiện có, nhằm xác định người học không thể mua vượt số kim cương đang sở hữu. | F:High | G:EP | H:User1 đã đăng nhập và mở được Cửa hàng. Trước mỗi ca, ghi số kim cương hiện có, giá cây và trạng thái sở hữu trên giao diện. Chuẩn bị số dư bằng hoạt động học; nếu chưa đủ dữ liệu cho tình huống cần kiểm tra thì ghi Blocked. Chọn cây chưa sở hữu, có giá lớn hơn số dư User1. | I:Số kim cương hiện có ít hơn giá cây | J:1. Mở cây có giá vượt số dư.
+2. Thử bấm Đổi cây. | K:Nút khóa hoặc báo không đủ; số dư không âm; cây chưa được sở hữu. | L:Khóa nút không cho mua | O:Pass | P:2026-10-30 00:00:00
+109 A:TC-SHOP-01-03 | B:TR-SHOP-01 | C:Cửa hàng | D:Võ Nhạc Phước | E:Kiểm tra đổi cây đang sử dụng sang một cây khác đã sở hữu, đối chiếu trạng thái trong Cửa hàng và cây hiển thị trên Trang chủ sau khi tải lại. | F:High | G:Use Case | H:User1 đã đăng nhập và mở được Cửa hàng. Trước mỗi ca, ghi số kim cương hiện có, giá cây và trạng thái sở hữu trên giao diện. Chuẩn bị số dư bằng hoạt động học; nếu chưa đủ dữ liệu cho tình huống cần kiểm tra thì ghi Blocked. User1 đã sở hữu ít nhất 2 cây, trong đó một cây chưa được chọn sử dụng. | I:Hai cây thuộc User1 | J:1. Chọn cây khác đang sở hữu.
+2. Về Trang chủ kiểm tra cây.
+3. F5. | K:Cây được chọn là Đang sử dụng; trang chủ và sau tải lại nhất quán; không trừ thêm kim cương. | L:Cây được chọn là Đang sử dụng; trang chủ và sau tải lại nhất quán; không trừ thêm kim cương. | O:Pass | P:2026-10-30 00:00:00
+110 A:TC-PROG-01-01 | B:TR-PROG-01 | C:Tiến độ | D:Nguyễn Danh Nghĩa | E:Kiểm tra trạng thái của bài bài học dùng kiểm tra thưởng khi mới hoàn thành 3 trong 4 hoạt động bắt buộc, nhằm xác định bài chưa được báo hoàn thành toàn bộ. | F:High | G:Use Case | H:User1 có bài bài học dùng kiểm tra thưởng với đủ 4 hoạt động từ vựng, nghe chép, Shadowing và ôn tập. Bài chưa hoàn thành và chưa nhận thưởng trước ca hoàn thành đầu tiên. Đã ghi lại XP, kim cương và trạng thái từng hoạt động để đối chiếu. Bắt đầu với bài chưa hoàn thành; chỉ làm 3 hoạt động và để hoạt động thứ tư chưa hoàn thành. | I:Chỉ hoàn thành 3/4 hoạt động | J:1. Ghi trạng thái ban đầu của 4 hoạt động trong bài học dùng kiểm tra thưởng.
+2. Hoàn thành qua UI đúng 3 hoạt động, giữ hoạt động thứ tư chưa hoàn thành.
+3. Quay về chi tiết bài để ghi tiến độ từng hoạt động và tiến độ bài.
+4. Về Trang chủ, đối chiếu trạng thái hoàn thành của bài. | K:Bài chưa được ghi hoàn thành 100%; hoạt động còn lại vẫn chưa hoàn thành. | L:Hệ thống hiển thị Trang chủ Korean Study với tiến độ học tập của Bài 1 đạt 83%, mục tiêu trong ngày hoàn thành 100% (41,9/15 phút) kèm thông báo đạt mục tiêu, phần "Truy cập nhanh", và biểu đồ tiến độ cá nhân cùng lịch ôn từ vựng. | O:Pass | P:2026-10-30 00:00:00
+111 A:TC-PROG-01-02 | B:TR-PROG-01 | C:Tiến độ | D:Nguyễn Danh Nghĩa | E:Kiểm tra thời điểm bài bài học dùng kiểm tra thưởng chuyển sang hoàn thành khi người học làm xong hoạt động bắt buộc cuối cùng, đồng thời ghi nhận tiến độ và phần thưởng hiển thị. | F:High | G:Use Case | H:User1 có bài bài học dùng kiểm tra thưởng với đủ 4 hoạt động từ vựng, nghe chép, Shadowing và ôn tập. Bài chưa hoàn thành và chưa nhận thưởng trước ca hoàn thành đầu tiên. Đã ghi lại XP, kim cương và trạng thái từng hoạt động để đối chiếu. Bài đã hoàn thành 3 hoạt động, còn đúng một hoạt động cuối chưa hoàn tất. | I:bài học dùng kiểm tra thưởng còn hoạt động cuối | J:1. Hoàn thành hoạt động cuối bằng UI.
+2. Về chi tiết bài/Trang chủ.
+3. Ghi XP và kim cương. | K:Bài chuyển hoàn thành; thưởng hiển thị theo quy tắc app; các màn hình tiến độ thống nhất. | L:Hệ thống hiển thị Trang chủ Korean Study với thông tin tài khoản đạt 97 XP, cấp độ Lv. 1, tiến độ học tập Bài 1 đạt 83%, hoàn thành 100% mục tiêu trong ngày cùng biểu đồ tiến độ cá nhâ | O:Pass | P:2026-10-30 00:00:00
+112 A:TC-PROG-01-03 | B:TR-PROG-01 | C:Tiến độ | D:Nguyễn Danh Nghĩa | E:Kiểm tra phần thưởng của bài đã hoàn thành bằng cách mở lại bài và tải lại Trang chủ nhiều lần, nhằm phát hiện XP hoặc kim cương bị cộng thêm khi không có lượt học mới. | F:High | G:Use Case | H:User1 đã hoàn thành đủ 4 hoạt động của bài học dùng kiểm tra thưởng và đã được ghi nhận phần thưởng của bài này. Đã ghi XP và số kim cương hiện tại trên Trang chủ để so sánh khi chỉ mở lại bài hoặc tải lại trang. | I:bài học dùng kiểm tra thưởng đã hoàn thành | J:1. Ghi XP và kim cương.
+2. Mở lại bài rồi về Trang chủ.
+3. F5 hai lần. | K:XP/kim cương không tăng thêm chỉ do mở lại/tải trang; bài vẫn hoàn thành. | L:Hệ thống hiển thị Trang chủ Korean Study với thông tin tài khoản đạt 97 XP, cấp độ Lv. 1, tiến độ học tập Bài 1 đạt 83%, hoàn thành 100% mục tiêu trong ngày (41,9/15 phút) kèm thông báo đạt mục tiêu, cùng biểu đồ tiến độ cá nhân và lịch ôn từ vựng. | O:Pass | P:2026-10-30 00:00:00
+113 A:TC-SET-01-01 | B:TR-SET-01 | C:Kế hoạch học | D:Nguyễn Danh Nghĩa | E:Kiểm tra chuẩn hóa số phút mục tiêu khi nhập 4 phút, thấp hơn 1 phút so với giới hạn tối thiểu 5 phút, rồi đưa con trỏ ra khỏi ô. | F:High | G:BVA | H:User1 đã đăng nhập và đang mở ô số phút mục tiêu trong Cài đặt hoặc Kế hoạch học. Mỗi ca nhập lại giá trị riêng và bấm ra ngoài ô để kiểm tra chuẩn hóa; chưa cần lưu hoặc chờ kế hoạch có hiệu lực. | I:4 phút | J:1. Tại Cài đặt/Kế hoạch học, chọn toàn bộ số đang có trong ô mục tiêu phút mỗi ngày.
+2. Nhập 4 rồi bấm vào vùng khác để ô mất focus.
+3. Đọc giá trị còn lại trong ô; chưa bấm Lưu kế hoạch. | K:Giá trị được chuẩn hóa thành 5 phút. | L:Hệ thống lưu lại thiết lập, hiển thị thông báo "Đã lưu kế hoạch học tập" trên Korean Study, và sau khi bấm "Đã hiểu", trang cài đặt tải lại với ô "Mục tiêu mỗi ngày" giữ nguyên giá trị 15 phút. | O:Pass | P:2026-10-30 00:00:00
+114 A:TC-SET-01-02 | B:TR-SET-01 | C:Kế hoạch học | D:Nguyễn Danh Nghĩa | E:Kiểm tra giá trị tại giới hạn tối thiểu 5 phút của mục tiêu ngày sau khi người dùng nhập và đưa con trỏ ra khỏi ô. | F:High | G:BVA | H:User1 đã đăng nhập và đang mở ô số phút mục tiêu trong Cài đặt hoặc Kế hoạch học. Mỗi ca nhập lại giá trị riêng và bấm ra ngoài ô để kiểm tra chuẩn hóa; chưa cần lưu hoặc chờ kế hoạch có hiệu lực. | I:5 phút | J:1. Chọn toàn bộ giá trị ở ô mục tiêu phút mỗi ngày và nhập 5.
+2. Bấm vào vùng khác để ô mất focus.
+3. Đọc lại giá trị trong ô; chưa cần lưu kế hoạch. | K:Giữ 5 phút, không đổi thành 15 hoặc giá trị khác. | L:Hệ thống cập nhật ô "Mục tiêu mỗi ngày" thành 5 phút trên Korean Study, nút lưu chuyển thành trạng thái Đã lưu!. | O:Pass | P:2026-10-30 00:00:00
+115 A:TC-SET-01-03 | B:TR-SET-01 | C:Kế hoạch học | D:Nguyễn Danh Nghĩa | E:Kiểm tra giá trị tại giới hạn tối đa 180 phút của mục tiêu ngày sau khi người dùng nhập và đưa con trỏ ra khỏi ô. | F:High | G:BVA | H:User1 đã đăng nhập và đang mở ô số phút mục tiêu trong Cài đặt hoặc Kế hoạch học. Mỗi ca nhập lại giá trị riêng và bấm ra ngoài ô để kiểm tra chuẩn hóa; chưa cần lưu hoặc chờ kế hoạch có hiệu lực. | I:180 phút | J:1. Chọn toàn bộ giá trị ở ô mục tiêu phút mỗi ngày và nhập 180.
+2. Bấm vào vùng khác để ô mất focus.
+3. Đọc lại giá trị trong ô; chưa cần lưu kế hoạch. | K:Giữ 180 phút. | L:Hệ thống cập nhật ô "Mục tiêu mỗi ngày" thành 180 phút trên Korean Study, nút lưu chuyển sang trạng thái Đã lưu!. | O:Pass | P:2026-10-30 00:00:00
+116 A:TC-SET-01-04 | B:TR-SET-01 | C:Kế hoạch học | D:Nguyễn Danh Nghĩa | E:Kiểm tra chuẩn hóa số phút mục tiêu khi nhập 181 phút, cao hơn 1 phút so với giới hạn tối đa 180 phút, rồi đưa con trỏ ra khỏi ô. | F:High | G:BVA | H:User1 đã đăng nhập và đang mở ô số phút mục tiêu trong Cài đặt hoặc Kế hoạch học. Mỗi ca nhập lại giá trị riêng và bấm ra ngoài ô để kiểm tra chuẩn hóa; chưa cần lưu hoặc chờ kế hoạch có hiệu lực. | I:181 phút | J:1. Chọn toàn bộ giá trị ở ô mục tiêu phút mỗi ngày và nhập 181.
+2. Bấm vào vùng khác để ô mất focus.
+3. Đọc lại giá trị được chuẩn hóa; chưa cần lưu kế hoạch. | K:Chuẩn hóa thành 180 phút. | L:Hệ thống tự động chuẩn hóa và giới hạn giá trị tối đa thành 180 phút trên Korean Study. | O:Pass | P:2026-10-30 00:00:00
+117 A:TC-SET-01-05 | B:TR-SET-01 | C:Kế hoạch học | D:Nguyễn Danh Nghĩa | E:Kiểm tra cách ô mục tiêu xử lý khi người dùng xóa hết số phút rồi bấm ra ngoài, nhằm tránh lưu giá trị rỗng hoặc không hợp lệ. | F:High | G:EP | H:User1 đã đăng nhập và đang mở ô số phút mục tiêu trong Cài đặt hoặc Kế hoạch học. Mỗi ca nhập lại giá trị riêng và bấm ra ngoài ô để kiểm tra chuẩn hóa; chưa cần lưu hoặc chờ kế hoạch có hiệu lực. | I:Ô rỗng | J:1. Chọn và xóa hết nội dung ở ô mục tiêu phút mỗi ngày.
+2. Bấm vào vùng khác để ô mất focus.
+3. Đọc lại giá trị ứng dụng đưa vào ô; chưa cần lưu kế hoạch. | K:Chuẩn hóa về mặc định 15 phút theo code hiện tại; không lưu NaN hoặc rỗng. | L:Hệ thống tự động điều chỉnh về giá trị mặc định là 15 phút trên Korean Study. | O:Pass | P:2026-10-30 00:00:00
+118 A:TC-SET-02-01 | B:TR-SET-02 | C:Kế hoạch học | D:Nguyễn Danh Nghĩa | E:Kiểm tra việc lưu đồng thời lịch tuần, mục tiêu phút và hạn hoàn thành mới, bao gồm thông báo thời điểm hiệu lực và dữ liệu khi mở lại form chỉnh sửa. | F:High | G:Use Case | H:User1 đang có kế hoạch hiệu lực từ thứ Hai đến thứ Sáu, mục tiêu 15 phút/ngày. Nhóm đã ghi ngày lưu D, thứ Hai tuần kế tiếp M và hạn hoàn thành hiện tại. Chuẩn bị kế hoạch mới với lịch T2/T4/T6 và mục tiêu 20 phút; không thay đổi đồng hồ hệ thống. | I:Lịch mới T2/T4/T6; mục tiêu 20; hạn mới hợp lệ | J:1. Mở Cài đặt.
+2. Đổi lịch, mục tiêu và hạn.
+3. Lưu.
+4. Đọc thông báo và mở lại Cài đặt. | K:Thông báo áp dụng từ thứ Hai tuần sau; form chỉnh sửa giữ giá trị mới sau mở lại. | L:Hệ thống ghi nhận và đồng bộ thành công các thay đổi về lịch học trong tuần, mục tiêu phút mỗi ngày (hiển thị 10 phút) cùng ngày hạn hoàn thành trên Korean Study, sau đó hiển thị thông báo lưu thành công và giữ nguyên vẹn các thiết lập này khi người dùng mở lại trang Cài đặt. | O:Pass | P:2026-10-30 00:00:00
+119 A:TC-SET-02-02 | B:TR-SET-02 | C:Kế hoạch học | D:Nguyễn Danh Nghĩa | E:Kiểm tra Trang chủ và lịch ôn trong tuần đang chạy sau khi đã lưu kế hoạch mới cho tuần kế tiếp, nhằm xác định bản chờ chưa thay thế kế hoạch hiện hành quá sớm. | F:High | G:Use Case | H:User1 đang có kế hoạch hiệu lực từ thứ Hai đến thứ Sáu, mục tiêu 15 phút/ngày. Nhóm đã ghi ngày lưu D, thứ Hai tuần kế tiếp M và hạn hoàn thành hiện tại. Chuẩn bị kế hoạch mới với lịch T2/T4/T6 và mục tiêu 20 phút; không thay đổi đồng hồ hệ thống. Thực hiện trước ngày M để kiểm tra kế hoạch mới chưa có hiệu lực. | I:Đã lưu lịch mới, chưa đến M | J:1. Ghi mục tiêu Trang chủ trước sửa.
+2. Lưu lịch/mục tiêu mới ở Cài đặt.
+3. Về Trang chủ và F5. | K:Mục tiêu đang áp dụng vẫn 15; lịch ôn tuần hiện tại không đổi ngay theo bản chờ. | L:Hệ thống cập nhật và hiển thị thành công các thay đổi về lịch học và mục tiêu mới trên Korean Study, sau đó giữ nguyên vẹn thiết lập này khi người dùng chuyển về Trang chủ và tải lại trang. | O:Pass | P:2026-10-30 00:00:00
+120 A:TC-SET-02-03 | B:TR-SET-02 | C:Kế hoạch học | D:Nguyễn Danh Nghĩa | E:Kiểm tra mục tiêu và lịch ôn sau khi thực tế bước sang thứ Hai có hiệu lực của kế hoạch mới, đối chiếu với các lựa chọn đã lưu từ tuần trước. | F:High | G:Use Case | H:User1 đang có kế hoạch hiệu lực từ thứ Hai đến thứ Sáu, mục tiêu 15 phút/ngày. Nhóm đã ghi ngày lưu D, thứ Hai tuần kế tiếp M và hạn hoàn thành hiện tại. Chuẩn bị kế hoạch mới với lịch T2/T4/T6 và mục tiêu 20 phút; không thay đổi đồng hồ hệ thống. Đã lưu kế hoạch từ trước ngày M và hiện đã đến M hoặc sau M theo thời gian thật; nếu chưa đến thì ghi Blocked. | I:Đã lưu trước đó; ngày thật >= M | J:1. Mở ứng dụng vào ngày M hoặc sau M.
+2. F5.
+3. Xem mục tiêu, lịch ôn và kế hoạch hiển thị. | K:Mục tiêu chuyển 20; lịch học/ôn theo phiên bản mới; không dùng lịch cũ cho tuần mới. | L:Hệ thống cập nhật và hiển thị thành công các mục tiêu, tiến độ cá nhân và lịch ôn từ vựng theo kế hoạch mới trên Korean Study. | O:Pass | P:2026-10-30 00:00:00
+121 A:TC-SET-03-01 | B:TR-SET-03 | C:Kế hoạch học | D:Nguyễn Danh Nghĩa | E:Kiểm tra việc lưu trạng thái bật nhắc học cùng giờ nhắc được chọn, rồi tải lại và mở Cài đặt để xác minh lựa chọn được giữ. | F:Medium | G:Use Case | H:User1 có thể mở Cài đặt và truy cập hộp thư thử bằng webmail. Các ca kiểm tra email chỉ chạy khi người quản lý xác nhận SMTP và lịch gửi tự động đang hoạt động; nhóm không gọi job hoặc API thủ công. Chọn giờ nhắc cách thời điểm lưu ít nhất 10 phút để tránh bỏ lỡ lịch gửi trong lúc thiết lập. | I:Giờ nhắc cách thời điểm test >=10 phút | J:1. Bật nhắc học, chọn giờ.
+2. Lưu.
+3. F5 mở lại Cài đặt. | K:Trạng thái bật và giờ nhắc được giữ. | L:Hệ thống ghi nhận và lưu lại thành công thiết lập nhắc nhở học mỗi ngày cùng khung giờ đã chọn trên Korean Study, đồng thời giữ nguyên trạng thái khi người dùng tải lại trang và mở lại mục Cài đặt. | O:Pass | P:2026-10-30 00:00:00
+122 A:TC-SET-03-02 | B:TR-SET-03 | C:Kế hoạch học | D:Nguyễn Danh Nghĩa | E:Kiểm tra tùy chọn tắt âm thanh hiệu ứng bằng một hoạt động thường có âm phản hồi, đồng thời phân biệt âm hiệu ứng với audio của bài học. | F:Medium | G:Use Case | H:User1 có thể mở Cài đặt và truy cập hộp thư thử bằng webmail. Các ca kiểm tra email chỉ chạy khi người quản lý xác nhận SMTP và lịch gửi tự động đang hoạt động; nhóm không gọi job hoặc API thủ công. | I:Tắt âm thanh | J:1. Tắt âm thanh và lưu.
+2. Thực hiện một hành động học có âm thanh phản hồi.
+3. Mở lại Cài đặt. | K:Không phát âm hiệu ứng khi đã tắt; cài đặt được giữ. Audio bài học vẫn điều khiển riêng. | L:Hệ thống giữ nguyên trạng thái tắt hiệu ứng âm thanh hệ thống (tiếng phản hồi đúng/sai), tệp âm thanh học tập phát độc lập bình thường và các thiết lập được lưu thành công trên Korean Study. | O:Pass | P:2026-10-30 00:00:00
+123 A:TC-SET-03-03 | B:TR-SET-03 | C:Kế hoạch học | D:Nguyễn Danh Nghĩa | E:Kiểm tra email nhắc học trong ngày có lịch học, khi nhắc học đã bật và người dùng chưa được ghi nhận phút học nào trước thời điểm nhắc. | F:Medium | G:Use Case | H:User1 có thể mở Cài đặt và truy cập hộp thư thử bằng webmail. Các ca kiểm tra email chỉ chạy khi người quản lý xác nhận SMTP và lịch gửi tự động đang hoạt động; nhóm không gọi job hoặc API thủ công. Hôm nay là ngày học theo lịch có hiệu lực, nhắc học đã bật và số phút ghi nhận hôm nay bằng 0. Chưa có email nhắc được gửi cho tài khoản trong ngày. Xác nhận lịch tự động có ít nhất một lượt chạy trong khoảng ±7 phút quanh giờ nhắc theo múi giờ tài khoản; thiếu xác nhận SMTP/job thì ghi Blocked. | I:Ngày học có hiệu lực; hôm nay 0 phút; nhắc đã bật | J:1. Trong Cài đặt, bật nhắc học và chọn giờ nhắc còn đủ thời gian để lịch tự động chạy, sau đó lưu.
+2. Về Trang chủ xác nhận hôm nay đang có 0 phút; không mở hoạt động học trong lúc chờ.
+3. Chờ qua giờ nhắc và cửa sổ gửi tự động của môi trường, tối thiểu 10 phút sau giờ đã đặt.
+4. Mở webmail, kiểm tra thư đến và thư rác; ghi thời gian, số thư và tài khoản nhận. | K:Có email nhắc đúng tài khoản, không gửi lặp cùng user/ngày. | L:Hệ thống gửi email nhắc học tự động theo cấu hình (tuy nhiên ứng dụng chạy hoàn toàn trên trình duyệt nên thực tế sẽ hiển thị banner thông báo trong ứng dụng nếu chưa có hệ thống máy chủ backend gửi mail thực tế) | O:Pass | P:2026-10-30 00:00:00 | Q:Theo code hiện tại: chỉ gửi khi 0 phút, không phải khi chưa đủ mục tiêu.
+124 A:TC-SET-03-04 | B:TR-SET-03 | C:Kế hoạch học | D:Nguyễn Danh Nghĩa | E:Kiểm tra điều kiện không gửi email nhắc khi người học đã được ghi nhận hơn 0 phút trong ngày nhưng chưa đạt mục tiêu ngày, theo quy tắc nhắc học hiện đang thiết kế. | F:Medium | G:Use Case | H:User1 có thể mở Cài đặt và truy cập hộp thư thử bằng webmail. Các ca kiểm tra email chỉ chạy khi người quản lý xác nhận SMTP và lịch gửi tự động đang hoạt động; nhóm không gọi job hoặc API thủ công. Hôm nay là ngày học theo lịch có hiệu lực và nhắc đã bật. Chưa có email nhắc được gửi trong ngày; người học sẽ học 1–2 phút trước giờ nhắc. Xác nhận lịch tự động có ít nhất một lượt chạy trong khoảng ±7 phút quanh giờ nhắc theo múi giờ tài khoản; thiếu xác nhận SMTP/job thì ghi Blocked. | I:Ngày học; đã ghi 1–2 phút trước giờ nhắc; chưa đủ mục tiêu | J:1. Bật nhắc học, đặt giờ còn ở phía trước và lưu; xác nhận hôm nay chưa nhận email nhắc.
+2. Học qua UI khoảng 1–2 phút, kết thúc phiên rồi kiểm tra Trang chủ đã ghi hơn 0 phút nhưng chưa đủ mục tiêu.
+3. Không học thêm; chờ qua giờ nhắc và cửa sổ gửi tự động, tối thiểu 10 phút sau giờ đã đặt.
+4. Kiểm tra thư đến/thư rác của hộp thư thử để ghi nhận có email nhắc cho ngày này hay không. | K:Không nhận email nhắc của ngày này theo code hiện tại. | L:Hệ thống ghi nhận và lưu lại thành công ngày mục tiêu hoàn thành (30/10/2026), bật tính năng nhắc nhở học với khung giờ đã chọn, đồng thời hiển thị thông báo "Đã lưu!" và cập nhật chính xác trạng thái trên Korean Study. | O:Pass | P:2026-10-30 00:00:00
+125 A:TC-TIME-01-01 | B:TR-TIME-01 | C:Tiến độ | D:Nguyễn Danh Nghĩa | E:Kiểm tra số phút học được ghi khi người dùng thực sự ở màn hình học khoảng 2 phút, rồi kết thúc phiên và xem lại số phút sau khi tải trang. | F:High | G:Use Case | H:User1 đã đăng nhập trong một tab Chrome duy nhất. Đã ghi số phút và streak hiện tại trên Trang chủ. Có đồng hồ để theo dõi thời gian thực; không mở đồng thời nhiều phiên học của cùng tài khoản. | I:Khoảng 2 phút ở màn học | J:1. Ghi số phút Trang chủ.
+2. Mở màn học và học khoảng 2 phút.
+3. Kết thúc/quay lại Trang chủ rồi F5. | K:Phút tăng phù hợp thời gian hiển thị, có thể làm tròn theo UI; không mất sau tải lại. | L:Hệ thống cập nhật và hiển thị thành công số phút học mới sau phiên học, ghi nhận tiến độ trong ngày đã hoàn thành mục tiêu (đạt 100%) trên Korean Study. | O:Pass | P:2026-10-30 00:00:00
+126 A:TC-TIME-01-02 | B:TR-TIME-01 | C:Tiến độ | D:Nguyễn Danh Nghĩa | E:Kiểm tra khoảng thời gian tab học bị ẩn bằng cách chuyển sang tab khác khoảng 2 phút, nhằm phân biệt thời gian học chủ động với thời gian trang không hiển thị. | F:High | G:Use Case | H:User1 đã đăng nhập trong một tab Chrome duy nhất. Đã ghi số phút và streak hiện tại trên Trang chủ. Có đồng hồ để theo dõi thời gian thực; không mở đồng thời nhiều phiên học của cùng tài khoản. | I:Ẩn tab 2 phút | J:1. Mở màn học, ghi thời điểm.
+2. Chuyển sang tab khác 2 phút.
+3. Quay lại, kết thúc phiên và xem phút. | K:Khoảng tab bị ẩn không được cộng như thời gian học chủ động; ghi cả thời gian hiển thị trước/sau để đối chiếu. | L:Hệ thống không tính thời gian khi người dùng chuyển sang tab khác, giữ nguyên tổng thời gian học đúng bằng thời lượng thực tế trước đó trên Korean Study. | O:Pass | P:2026-10-30 00:00:00
+127 A:TC-TIME-01-03 | B:TR-TIME-01 | C:Tiến độ | D:Nguyễn Danh Nghĩa | E:Kiểm tra việc ghi nhận hoàn thành mục tiêu ngày và streak khi học đủ phút, sau đó tải lại nhiều lần để xác định một ngày không bị tính lặp. | F:High | G:Use Case | H:User1 đã đăng nhập trong một tab Chrome duy nhất. Đã ghi số phút và streak hiện tại trên Trang chủ. Có đồng hồ để theo dõi thời gian thực; không mở đồng thời nhiều phiên học của cùng tài khoản. Tài khoản đang gần đủ số phút mục tiêu của ngày để có thể hoàn thành bằng thao tác học trong thời gian kiểm tra. | I:Ngày đang học; User1 gần đủ mục tiêu | J:1. Ghi streak và phút ban đầu.
+2. Học đến đủ mục tiêu.
+3. Về Trang chủ và F5 nhiều lần. | K:Mục tiêu hiển thị hoàn thành; streak của ngày không tăng lặp chỉ do tải lại. | L:Hệ thống giữ nguyên số ngày streak và tổng số phút học đã đạt được, đảm bảo giao diện Trang chủ hiển thị ổn định, không bị thay đổi hay mất dữ liệu sau khi tải lại trang nhiều lần. | O:Pass | P:2026-10-30 00:00:00
+128 A:TC-PREF-01-01 | B:TR-PREF-01 | C:Hồ sơ và giao diện | D:Võ Nhạc Phước | E:Kiểm tra tên hiển thị của hồ sơ sau tải lại và đăng nhập lại. | F:Medium | G:Use Case | H:User1 có tài khoản người học hợp lệ; đã ghi lại tên hiển thị nhập khi đăng ký. | I:Email/mật khẩu User1; tên hiển thị đã đăng ký. | J:1. Mở Trang chủ và quan sát lời chào có đúng tên không | K:Tên hiển thị khớp hồ sơ User1 và giữ nhất quán sau tải lại, đăng nhập lại; không hiển thị tên tài khoản khác. | L:Tên hiển thị khớp hồ sơ User1 và giữ nhất quán sau tải lại, đăng nhập lại; không hiển thị tên tài khoản khác. | O:Pass | P:2026-10-30 00:00:00
+129 A:TC-PREF-01-02 | B:TR-PREF-01 | C:Hồ sơ và giao diện | D:Võ Nhạc Phước | E:Kiểm tra ảnh đại diện mặc định ở các màn hình người học. | F:Medium | G:Use Case | H:User1 đã đăng nhập; có thể mở Trang chủ, Cộng đồng và Cài đặt. | I:Ảnh đại diện mặc định tại header người học; không dùng file ảnh tải lên. | J:1. Chọn ảnh mới ở hồ sơ.
+2. Chờ tải lên và lưu nếu form yêu cầu.
+3. F5. | K:Ảnh đại diện mặc định của header hiển thị nhất quán, không bị vỡ hoặc mất hình khi chuyển màn và tải lại. | L:Ảnh đại diện mặc định của header hiển thị nhất quán, không bị vỡ hoặc mất hình khi chuyển màn và tải lại. | O:Pass | P:2026-10-30 00:00:00
+130 A:TC-PREF-01-03 | B:TR-PREF-01 | C:Hồ sơ và giao diện | D:Võ Nhạc Phước | E:Kiểm tra tên hồ sơ khi chuyển giữa hai tài khoản trên cùng trình duyệt. | F:Medium | G:Use Case | H:Có User1 và User2 với tên hiển thị khác nhau; đã ghi tên của từng tài khoản; dùng cùng hồ sơ Chrome. | I:Tên/email User1 và User2 khác nhau; mật khẩu đúng của mỗi tài khoản. | J:1. Đăng nhập User1, ghi tên tại Trang chủ và header Cộng đồng.
+2. Đăng xuất User1 rồi đăng nhập User2 trên cùng Chrome.
+3. Kiểm tra tên tại Trang chủ và header Cộng đồng của User2.
+4. F5 rồi đối chiếu lại tên. | K:Sau khi chuyển tài khoản, Trang chủ và header hiển thị tên User2, không giữ tên User1; sau F5 vẫn đúng User2. | L:Sau khi chuyển tài khoản, Trang chủ và header hiển thị tên User2, không giữ tên User1; sau F5 vẫn đúng User2. | O:Pass | P:2026-10-30 00:00:00
+131 A:TC-PREF-02-01 | B:TR-PREF-02 | C:Hồ sơ và giao diện | D:Võ Nhạc Phước | E:Kiểm tra chuyển theme sáng/tối và khả năng lưu lựa chọn sau khi tải lại, đồng thời rà độ rõ của chữ, nút và vùng nội dung trên Trang chủ và màn học. | F:Medium | G:Use Case | H:Đã chuẩn bị User1 và Chrome trên Windows. Các tùy chọn theme/ngôn ngữ có thể mở từ giao diện. Ca responsive dùng chế độ đổi kích thước của Chrome; đây là kiểm tra viewport, không phải thiết bị điện thoại thật. | I:Sáng rồi Tối | J:1. Chọn theme tối trong giao diện.
+2. Xem Trang chủ và một màn học.
+3. F5.
+4. Đổi lại sáng. | K:Theme đổi và được giữ; chữ/nút dễ đọc, không có vùng mất tương phản rõ rệt. | L:Theme đổi và được giữ; chữ/nút dễ đọc, không có vùng mất tương phản rõ rệt. | O:Pass | P:2026-10-30 00:00:00
+132 A:TC-PREF-02-02 | B:TR-PREF-02 | C:Hồ sơ và giao diện | D:Võ Nhạc Phước | E:Kiểm tra chuyển lần lượt ngôn ngữ giao diện Việt, Anh và Hàn, tập trung vào các điều khiển có bản dịch và việc ghi nhớ lựa chọn sau khi tải lại. | F:Medium | G:Use Case | H:Đã chuẩn bị User1 và Chrome trên Windows. Các tùy chọn theme/ngôn ngữ có thể mở từ giao diện. Ca responsive dùng chế độ đổi kích thước của Chrome; đây là kiểm tra viewport, không phải thiết bị điện thoại thật. | I:Việt, Anh, Hàn | J:1. Chọn lần lượt ngôn ngữ UI.
+2. Xem điều hướng và điều khiển có bản dịch.
+3. F5. | K:Các nhãn được hỗ trợ dịch đúng lựa chọn; không hiện undefined hoặc khóa dịch; nội dung học vẫn giữ ngôn ngữ gốc. | L:Chưa đổi hết ngôn ngữ theo setting, chỉ những chữ bên thanh menu, header và nội dung trong setting | O:Fail | P:2026-10-30 00:00:00
+133 A:TC-PREF-02-03 | B:TR-PREF-02 | C:Hồ sơ và giao diện | D:Võ Nhạc Phước | E:Kiểm tra bố cục các màn hình chính trên Chrome Windows ở hai viewport mobile, bao gồm cuộn trang, nút điều hướng và thao tác nhập liệu bằng bàn phím máy tính. | F:Medium | G:Use Case | H:Đã chuẩn bị User1 và Chrome trên Windows. Các tùy chọn theme/ngôn ngữ có thể mở từ giao diện. Ca responsive dùng chế độ đổi kích thước của Chrome; đây là kiểm tra viewport, không phải thiết bị điện thoại thật. Có thể đặt viewport 390×844 và 360×800 bằng công cụ responsive của Chrome; chỉ thay kích thước hiển thị. | I:Viewport 390×844 và 360×800 | J:1. Mở chế độ responsive của Chrome và đặt viewport 390×844; không sửa request hoặc dữ liệu trang.
+2. Lần lượt mở Đăng nhập, Trang chủ, Flashcard và Cài đặt; cuộn trang và bấm các nút chính.
+3. Đặt viewport 360×800 rồi lặp lại việc quan sát và thao tác.
+4. Bấm vào các ô nhập, nhập bằng bàn phím máy tính và kiểm tra nội dung/nút không bị che hoặc tràn khỏi vùng nhìn thấy. | K:Không che khuất nút chính hoặc tràn ngang làm mất nội dung; điều hướng dưới và ô nhập dùng được. | L:Không che khuất nút chính hoặc tràn ngang làm mất nội dung; điều hướng dưới và ô nhập dùng được. | O:Pass | P:2026-10-30 00:00:00 | Q:Giả lập kích thước trên Chrome Windows, không thay thế kiểm thử thiết bị di động thật.
+134 A:TC-PREF-02-04 | B:TR-PREF-02 | C:Hồ sơ và giao diện | D:Võ Nhạc Phước | E:Kiểm tra luồng sử dụng cơ bản trên Chrome Windows: đăng nhập, mở giáo trình, học Flashcard, nghe audio và đăng nhập lại sau khi đăng xuất. | F:Medium | G:Use Case | H:Đã chuẩn bị User1 và Chrome trên Windows. Các tùy chọn theme/ngôn ngữ có thể mở từ giao diện. Ca responsive dùng chế độ đổi kích thước của Chrome; đây là kiểm tra viewport, không phải thiết bị điện thoại thật. | I:ENV-01; tài khoản User1 | J:1. Trên Chrome Windows đăng nhập User1.
+2. Mở giáo trình, Flashcard và nghe một audio.
+3. Đăng xuất rồi đăng nhập lại. | K:Các thao tác chính hoạt động trên Chrome Windows; không lỗi hiển thị hoặc mất dữ liệu đã lưu. | L:Các thao tác chính hoạt động trên Chrome Windows; không lỗi hiển thị hoặc mất dữ liệu đã lưu. | O:Pass | P:2026-10-30 00:00:00
+135 A:TC-ADM-01-01 | B:TR-ADM-01 | C:Quản trị | D:Võ Nhạc Phước | E:Kiểm tra bộ chọn thống kê 7 ngày và 30 ngày trên dashboard admin, bao gồm nhãn phạm vi, số liệu và biểu đồ sau mỗi lần chuyển. | F:Medium | G:Use Case | H:Admin đã đăng nhập và mở được trang quản trị. Danh sách có User1/User2 để tìm kiếm. Dashboard có thể tải thống kê; ghi lại phạm vi thời gian và tài khoản trước khi đối chiếu. | I:7 ngày rồi 30 ngày | J:1. Mở dashboard admin.
+2. Chọn 7 ngày.
+3. Chọn 30 ngày. | K:Khoảng được chọn hiển thị đúng; biểu đồ và số liệu tải được, không NaN hoặc lỗi trang. | L:Biểu đổ không hiện ngày mà hiện thứ | O:Pass | P:2026-10-30 00:00:00
+136 A:TC-ADM-01-02 | B:TR-ADM-01 | C:Quản trị | D:Võ Nhạc Phước | E:Kiểm tra việc tìm tài khoản User2 bằng tên hoặc email trong Quản lý người dùng, rồi mở chi tiết để xác định đúng tài khoản cần quản lý. | F:Medium | G:Use Case | H:Admin đã đăng nhập và mở được trang quản trị. Danh sách có User1/User2 để tìm kiếm. Dashboard có thể tải thống kê; ghi lại phạm vi thời gian và tài khoản trước khi đối chiếu. | I:Từ khóa tìm kiếm: email hoặc tên hiển thị User2. | J:1. Mở Người dùng.
+2. Tìm User2 bằng tên/email được UI hỗ trợ.
+3. Mở chi tiết. | K:Kết quả đúng User2; hồ sơ và vai trò đúng tài khoản. | L:Không có xem chi tiết | O:Blocked | P:2026-10-30 00:00:00
+137 A:TC-ADM-01-03 | B:TR-ADM-01 | C:Quản trị | D:Võ Nhạc Phước | E:Kiểm tra trạng thái danh sách khi tìm người dùng bằng từ khóa không tồn tại, sau đó xóa từ khóa để xác định danh sách được phục hồi. | F:Medium | G:Use Case | H:Admin đã đăng nhập và mở được trang quản trị. Danh sách có User1/User2 để tìm kiếm. Dashboard có thể tải thống kê; ghi lại phạm vi thời gian và tài khoản trước khi đối chiếu. | I:Chuỗi zzz-ui-no-user | J:1. Mở Người dùng trong trang quản trị Admin.
+2. Nhập zzz-ui-no-user vào ô tìm kiếm và quan sát danh sách.
+3. Xóa toàn bộ từ khóa, sau đó kiểm tra danh sách người dùng được hiển thị lại. | K:Có trạng thái không tìm thấy; xóa bộ lọc khôi phục danh sách. | L:Có trạng thái không tìm thấy; xóa bộ lọc khôi phục danh sách. | O:Pass | P:2026-10-30 00:00:00
+138 A:TC-ADM-02-01 | B:TR-ADM-02 | C:Quản trị | D:Võ Nhạc Phước | E:Kiểm tra việc nâng User thử vai trò từ người học lên admin qua giao diện, rồi đăng nhập lại tài khoản đó để xác minh quyền truy cập khu vực quản trị. | F:High | G:Use Case | H:Admin có quyền đổi vai trò và tiếp tục giữ quyền quản trị trong toàn bộ đợt kiểm tra. User thử vai trò là tài khoản thử riêng, có thể đổi giữa người học và admin; không thay đổi vai trò của tài khoản quản trị chính. User thử vai trò hiện mang vai trò người học. | I:Tài khoản thử được chọn; vai trò mới: admin. | J:1. Ở phiên Admin, mở Người dùng và tìm User thử vai trò theo email.
+2. Đổi vai trò của User thử vai trò từ người học sang admin và xác nhận nếu được yêu cầu.
+3. Ở hồ sơ Chrome riêng, đăng xuất User thử vai trò nếu đang có phiên rồi đăng nhập lại tài khoản đó.
+4. Quan sát màn hình được mở và thử vào https://nminmin.github.io/korean.study/#/admin. | K:User thử vai trò mở được giao diện admin; danh sách Admin phản ánh vai trò mới. | L:User thử vai trò mở được giao diện admin; danh sách Admin phản ánh vai trò mới. | O:Pass | P:2026-10-30 00:00:00
+139 A:TC-ADM-02-02 | B:TR-ADM-02 | C:Quản trị | D:Võ Nhạc Phước | E:Kiểm tra việc hạ User thử vai trò từ admin về người học, rồi đăng nhập lại và nhập URL admin trực tiếp để xác minh quyền quản trị đã bị thu hồi. | F:High | G:Use Case | H:Admin có quyền đổi vai trò và tiếp tục giữ quyền quản trị trong toàn bộ đợt kiểm tra. User thử vai trò là tài khoản thử riêng, có thể đổi giữa người học và admin; không thay đổi vai trò của tài khoản quản trị chính. User thử vai trò hiện mang vai trò admin và Admin là một quản trị viên khác vẫn đang hoạt động. | I:Tài khoản thử đang là admin; vai trò mới: user; URL: https://nminmin.github.io/korean.study/#/admin. | J:1. Ở phiên Admin, tìm User thử vai trò hiện là admin và đổi về vai trò người học.
+2. Đăng xuất rồi đăng nhập lại User thử vai trò ở hồ sơ riêng.
+3. Nhập https://nminmin.github.io/korean.study/#/admin trên thanh địa chỉ và nhấn Enter.
+4. Kiểm tra màn hình User thử vai trò được mở; ở cửa sổ Admin kiểm tra quản trị viên chính vẫn sử dụng được trang quản trị. | K:User thử vai trò vào giao diện người học và bị chuyển khỏi admin; Admin vẫn quản trị được. | L:User thử vai trò vào giao diện người học và bị chuyển khỏi admin; Admin vẫn quản trị được. | O:Pass | P:2026-10-30 00:00:00
+140 A:TC-ADM-03-01 | B:TR-ADM-03 | C:Quản trị nội dung | D:Võ Nhạc Phước | E:Kiểm tra tạo giáo trình mới ở trạng thái nháp bằng tên và slug hợp lệ, rồi tìm lại và tải lại để đối chiếu dữ liệu đã lưu. | F:High | G:Use Case | H:Admin đã mở khu vực quản lý giáo trình. Chỉ dùng giáo trình có tiền tố [UI-TEST], không chứa tiến độ học thật. Chuẩn bị slug chưa sử dụng khi tạo mới; ca sửa/xóa cần có giáo trình thử đã được tạo trước. | I:Slug ui-test-book-<mốc>; tên Hàn UI TEST; trạng thái nháp | J:1. Mở Giáo trình > Thêm.
+2. Điền các trường bắt buộc và lưu.
+3. Tìm giáo trình vừa tạo. | K:Giáo trình xuất hiện đúng tên/slug/trạng thái; giữ sau F5. | L:Giáo trình xuất hiện đúng tên/slug/trạng thái; giữ sau F5. | O:Pass | P:2026-10-30 00:00:00
+141 A:TC-ADM-03-02 | B:TR-ADM-03 | C:Quản trị nội dung | D:Võ Nhạc Phước | E:Kiểm tra validation của form tạo giáo trình khi bỏ trống tên hoặc slug bắt buộc, nhằm ngăn tạo giáo trình thiếu thông tin định danh. | F:High | G:EP | H:Admin đã mở khu vực quản lý giáo trình. Chỉ dùng giáo trình có tiền tố [UI-TEST], không chứa tiến độ học thật. Chuẩn bị slug chưa sử dụng khi tạo mới; ca sửa/xóa cần có giáo trình thử đã được tạo trước. | I:Tên hoặc slug rỗng | J:1. Mở form Thêm giáo trình ở Admin.
+2. Lượt thứ nhất: nhập slug chưa sử dụng nhưng để trống tên bắt buộc, sau đó bấm Lưu và ghi phản hồi.
+3. Đóng/mở lại form; lượt thứ hai: nhập tên hợp lệ nhưng để trống slug, bấm Lưu và ghi phản hồi.
+4. Kiểm tra danh sách không xuất hiện giáo trình thiếu tên hoặc slug từ hai lượt thử. | K:Báo thiếu thông tin; không tạo bản ghi rỗng. | L:Báo thiếu thông tin; không tạo bản ghi rỗng. | O:Pass | P:2026-10-30 00:00:00
+142 A:TC-ADM-03-03 | B:TR-ADM-03 | C:Quản trị nội dung | D:Võ Nhạc Phước | E:Kiểm tra việc sửa tên và trạng thái của giáo trình thử, sau đó tìm theo tên mới và lọc trạng thái để đối chiếu cập nhật sau khi tải lại. | F:High | G:Use Case | H:Admin đã mở khu vực quản lý giáo trình. Chỉ dùng giáo trình có tiền tố [UI-TEST], không chứa tiến độ học thật. Chuẩn bị slug chưa sử dụng khi tạo mới; ca sửa/xóa cần có giáo trình thử đã được tạo trước. | I:Giáo trình thử vừa tạo | J:1. Đổi tên/trạng thái rồi lưu.
+2. Tìm theo tên mới và lọc trạng thái tương ứng.
+3. F5. | K:Giá trị mới được giữ; tìm/lọc trả đúng giáo trình. | L:Giá trị mới được giữ; tìm/lọc trả đúng giáo trình. | O:Pass | P:2026-10-30 00:00:00
+143 A:TC-ADM-03-04 | B:TR-ADM-03 | C:Quản trị nội dung | D:Võ Nhạc Phước | E:Kiểm tra cả Hủy và Xác nhận trong hộp thoại xóa giáo trình thử, đối chiếu việc giữ lại hoặc xóa mục khỏi danh sách sau mỗi thao tác. | F:High | G:Use Case | H:Admin đã mở khu vực quản lý giáo trình. Chỉ dùng giáo trình có tiền tố [UI-TEST], không chứa tiến độ học thật. Chuẩn bị slug chưa sử dụng khi tạo mới; ca sửa/xóa cần có giáo trình thử đã được tạo trước. Giáo trình thử không có nội dung hoặc dữ liệu cần giữ; ghi lại tên để tránh xóa nhầm. | I:Giáo trình thử không có dữ liệu cần giữ | J:1. Chọn Xóa rồi Hủy, kiểm tra còn.
+2. Chọn Xóa lần nữa và xác nhận.
+3. Tải lại danh sách. | K:Hủy không xóa; xác nhận xóa thành công thì mục biến mất. Nếu có ràng buộc thì hiển thị lý do rõ ràng. | L:Hủy không xóa; xác nhận xóa thành công thì mục biến mất. Nếu có ràng buộc thì hiển thị lý do rõ ràng. | O:Pass | P:2026-10-30 00:00:00
+144 A:TC-ADM-04-01 | B:TR-ADM-04 | C:Quản trị nội dung | D:Võ Nhạc Phước | E:Kiểm tra việc thêm bài số 1 với tên hợp lệ vào đúng giáo trình thử do Admin tạo riêng, rồi dùng bộ lọc giáo trình để đối chiếu bài vừa lưu. | F:High | G:Use Case | H:Admin đang quản lý một giáo trình giáo trình thử do Admin tạo riêng được tạo riêng cho kiểm thử. Các bài thêm, sửa hoặc xóa không chứa dữ liệu học thật. Ca chỉnh sửa cần có sẵn bài bài thử do Admin tạo riêng với tên và số bài đã ghi nhận. | I:giáo trình thử do Admin tạo riêng; số bài 1; tên bài UI TEST | J:1. Mở Bài học > Thêm.
+2. Chọn giáo trình thử do Admin tạo riêng, nhập số và tên.
+3. Lưu và lọc giáo trình thử do Admin tạo riêng. | K:Bài xuất hiện đúng giáo trình và số bài; không thêm vào giáo trình khác. | L:Bài xuất hiện đúng giáo trình và số bài; không thêm vào giáo trình khác. | O:Pass | P:2026-10-30 00:00:00
+145 A:TC-ADM-04-02 | B:TR-ADM-04 | C:Quản trị nội dung | D:Võ Nhạc Phước | E:Kiểm tra form thêm bài khi số bài bằng 0 trong khi các trường bắt buộc khác hợp lệ, nhằm xác minh giới hạn của số thứ tự bài. | F:High | G:BVA | H:Admin đang quản lý một giáo trình giáo trình thử do Admin tạo riêng được tạo riêng cho kiểm thử. Các bài thêm, sửa hoặc xóa không chứa dữ liệu học thật. Ca chỉnh sửa cần có sẵn bài bài thử do Admin tạo riêng với tên và số bài đã ghi nhận. | I:Số bài 0 | J:1. Mở Bài học > Thêm ở Admin và chọn giáo trình thử do Admin tạo riêng.
+2. Nhập số bài 0, tên bài hợp lệ và các trường bắt buộc còn lại.
+3. Bấm Lưu rồi ghi thông báo validation; kiểm tra danh sách của giáo trình thử do Admin tạo riêng. | K:Có lỗi validation; không tạo bài số 0. | L:Có lỗi validation; không tạo bài số 0. | O:Pass | P:2026-10-30 00:00:00
+146 A:TC-ADM-04-03 | B:TR-ADM-04 | C:Quản trị nội dung | D:Võ Nhạc Phước | E:Kiểm tra việc sửa tên bài bài thử do Admin tạo riêng và giữ cập nhật sau tải lại, sau đó xác nhận xóa bài thử và kiểm tra danh sách còn lại. | F:High | G:Use Case | H:Admin đang quản lý một giáo trình giáo trình thử do Admin tạo riêng được tạo riêng cho kiểm thử. Các bài thêm, sửa hoặc xóa không chứa dữ liệu học thật. Ca chỉnh sửa cần có sẵn bài bài thử do Admin tạo riêng với tên và số bài đã ghi nhận. | I:bài thử do Admin tạo riêng không có tiến độ thật | J:1. Sửa tên bài thử do Admin tạo riêng và lưu.
+2. F5 kiểm tra tên.
+3. Xóa và xác nhận. | K:Tên mới được giữ; xóa thành công thì không còn trong danh sách. Nếu bị ràng buộc, thông báo rõ. | L:Tên mới được giữ; xóa thành công thì không còn trong danh sách. Nếu bị ràng buộc, thông báo rõ. | O:Pass | P:2026-10-30 00:00:00
+147 A:TC-ADM-05-01 | B:TR-ADM-05 | C:Quản trị nội dung | D:Võ Nhạc Phước | E:Kiểm tra tạo câu hỏi từ form quản trị theo bài và loại kỹ năng đã chọn, rồi lọc hoặc xem trước để đối chiếu đề, đáp án và nơi lưu. | F:High | G:Use Case | H:Admin đã mở quản lý câu hỏi. Có bài thử nguồn và bài thử đích được chuẩn bị riêng, cùng hai câu câu hỏi thử thứ nhất/câu hỏi thử thứ hai có thể chỉnh sửa hoặc chuyển bài. Nội dung đề và đáp án mẫu đã được ghi tại cột Dữ liệu kiểm thử; mọi thao tác thực hiện bằng form quản trị. | I:Bài thử nguồn; chọn loại câu hỏi từ vựng/flashcard đang có trên form. Từ tiếng Hàn: 안녕; nghĩa tiếng Việt: Xin chào. Đặt tên/nội dung thử có dấu nhận diện để tìm lại. | J:1. Trong quản lý câu hỏi, chọn bài thử nguồn và loại kỹ năng cần thử; ghi tên loại đã chọn.
+2. Bấm thêm câu hỏi, nhập đề và đáp án chuẩn theo dữ liệu nội dung mẫu: 안녕 / Xin chào; 감사 / Cảm ơn; câu nghe/nói lấy từ bài đang kiểm tra trong các trường của form.
+3. Điền đủ trường bắt buộc của loại câu hỏi đó rồi lưu.
+4. Lọc lại bài thử nguồn cùng loại kỹ năng vừa dùng và mở câu vừa tạo để đối chiếu nội dung. | K:Câu hỏi mới xuất hiện đúng bài và loại; mở lại form Sửa phản ánh đúng đề và đáp án đã lưu. | L:Câu hỏi mới xuất hiện đúng bài và loại; mở lại form Sửa phản ánh đúng đề và đáp án đã lưu. | O:Pass | P:2026-10-30 00:00:00
+148 A:TC-ADM-05-02 | B:TR-ADM-05 | C:Quản trị nội dung | D:Võ Nhạc Phước | E:Kiểm tra việc sửa đề hoặc đáp án của câu câu hỏi thử thứ nhất, sau đó tải lại và mở lại câu để xác minh cập nhật đúng câu hỏi. | F:High | G:Use Case | H:Admin đã mở quản lý câu hỏi. Có bài thử nguồn và bài thử đích được chuẩn bị riêng, cùng hai câu câu hỏi thử thứ nhất/câu hỏi thử thứ hai có thể chỉnh sửa hoặc chuyển bài. Nội dung đề và đáp án mẫu đã được ghi tại cột Dữ liệu kiểm thử; mọi thao tác thực hiện bằng form quản trị. | I:Bài thử nguồn; chọn loại câu hỏi từ vựng/flashcard đang có trên form. Từ tiếng Hàn: 안녕; nghĩa tiếng Việt: Xin chào. Đặt tên/nội dung thử có dấu nhận diện để tìm lại. | J:1. Mở sửa câu hỏi thử thứ nhất.
+2. Đổi đề hoặc đáp án hợp lệ và lưu.
+3. F5 rồi mở lại. | K:Nội dung đã sửa được giữ; không đổi nhầm Q khác. | L:Nội dung đã sửa được giữ; không đổi nhầm Q khác. | O:Pass | P:2026-10-30 00:00:00
+149 A:TC-ADM-05-03 | B:TR-ADM-05 | C:Quản trị nội dung | D:Võ Nhạc Phước | E:Kiểm tra thao tác chọn đồng thời câu hỏi thử thứ nhất/câu hỏi thử thứ hai và chuyển từ bài thử nguồn sang bài thử đích, rồi lọc từng bài để đối chiếu vị trí mới và nội dung còn nguyên. | F:High | G:Use Case | H:Admin đã mở quản lý câu hỏi. Có bài thử nguồn và bài thử đích được chuẩn bị riêng, cùng hai câu câu hỏi thử thứ nhất/câu hỏi thử thứ hai có thể chỉnh sửa hoặc chuyển bài. Nội dung đề và đáp án mẫu đã được ghi tại cột Dữ liệu kiểm thử; mọi thao tác thực hiện bằng form quản trị. | I:câu hỏi thử thứ nhất và câu hỏi thử thứ hai thuộc bài thử nguồn | J:1. Trong quản lý câu hỏi, chọn bài thử nguồn và loại kỹ năng cần thử; ghi tên loại đã chọn.
+2. Bấm thêm câu hỏi, nhập đề và đáp án chuẩn theo dữ liệu nội dung mẫu: 안녕 / Xin chào; 감사 / Cảm ơn; câu nghe/nói lấy từ bài đang kiểm tra trong các trường của form.
+3. Điền đủ trường bắt buộc của loại câu hỏi đó rồi lưu.
+4. Lọc lại bài thử nguồn cùng loại kỹ năng vừa dùng và mở câu vừa tạo để đối chiếu nội dung. | K:Câu hỏi mới xuất hiện đúng bài và loại; mở lại form Sửa phản ánh đúng đề và đáp án đã lưu. | L:Câu hỏi mới xuất hiện đúng bài và loại; mở lại form Sửa phản ánh đúng đề và đáp án đã lưu. | O:Pass | P:2026-10-30 00:00:00
+150 A:TC-ADM-05-04 | B:TR-ADM-05 | C:Quản trị nội dung | D:Võ Nhạc Phước | E:Kiểm tra validation của form tạo câu hỏi khi để trống phần đề bắt buộc, nhằm xác định câu chưa đủ nội dung không được lưu. | F:High | G:Use Case | H:Admin đã mở quản lý câu hỏi. Có bài thử nguồn và bài thử đích được chuẩn bị riêng, cùng hai câu câu hỏi thử thứ nhất/câu hỏi thử thứ hai có thể chỉnh sửa hoặc chuyển bài. Nội dung đề và đáp án mẫu đã được ghi tại cột Dữ liệu kiểm thử; mọi thao tác thực hiện bằng form quản trị. | I:Form câu hỏi có đề rỗng | J:1. Mở form tạo câu.
+2. Bỏ trống đề bắt buộc.
+3. Thử lưu. | K:Không lưu câu rỗng; hiển thị thông báo xác định trường cần nhập. | L:Không lưu câu rỗng; hiển thị thông báo xác định trường cần nhập. | O:Pass | P:2026-10-30 00:00:00
+151 A:TC-MOD-01-01 | B:TR-MOD-01 | C:Kiểm duyệt | D:Võ Nhạc Phước | E:Kiểm tra việc ẩn rồi khôi phục một bài cộng đồng bằng tài khoản admin, đối chiếu khả năng nhìn thấy bài từ tài khoản người học sau mỗi thay đổi. | F:High | G:Use Case | H:Admin đang mở khu vực quản trị cộng đồng; User1 ở hồ sơ Chrome khác để kiểm tra phía người học. bài viết thử dùng kiểm duyệt là bài thử đang hiển thị, có thể ẩn/khôi phục và đã có báo cáo thử để xử lý. | I:bài viết thử dùng kiểm duyệt | J:1. Admin ẩn bài từ Quản trị cộng đồng.
+2. User1 tải lại bảng tin.
+3. Admin khôi phục bài.
+4. User1 tải lại. | K:Bài ẩn không có trên bảng tin người học; khôi phục thì hiện lại đúng bài. | L:Bài ẩn không có trên bảng tin người học; khôi phục thì hiện lại đúng bài. | O:Pass | P:2026-10-30 00:00:00
+152 A:TC-MOD-01-02 | B:TR-MOD-01 | C:Kiểm duyệt | D:Võ Nhạc Phước | E:Kiểm tra hiệu lực khóa bình luận của một bài qua thao tác quản trị, sau đó dùng tài khoản người học mở lại bài và thử nhập/gửi bình luận. | F:High | G:Use Case | H:Admin đang mở khu vực quản trị cộng đồng; User1 ở hồ sơ Chrome khác để kiểm tra phía người học. bài viết thử dùng kiểm duyệt là bài thử đang hiển thị, có thể ẩn/khôi phục và đã có báo cáo thử để xử lý. | I:bài viết thử dùng kiểm duyệt đang hiện | J:1. Admin tìm bài viết thử dùng kiểm duyệt trong Quản trị cộng đồng, bật khóa bình luận và lưu/xác nhận.
+2. Ở hồ sơ User1, tải lại bài bài viết thử dùng kiểm duyệt rồi mở khu vực bình luận.
+3. Thử nhập và gửi một bình luận mới nếu giao diện còn cho phép; ghi phản hồi và trạng thái các bình luận cũ. | K:UI ngăn gửi bình luận mới và thể hiện đang khóa; bình luận cũ không biến thành bài khác. | L:UI ngăn gửi bình luận mới và thể hiện đang khóa; bình luận cũ không biến thành bài khác. | O:Pass | P:2026-10-30 00:00:00
+153 A:TC-MOD-01-03 | B:TR-MOD-01 | C:Kiểm duyệt | D:Võ Nhạc Phước | E:Kiểm tra xử lý báo cáo đang chờ bằng Đã xử lý hoặc Bỏ qua. | F:High | G:Use Case | H:Admin mở quản trị cộng đồng; đã có hai báo cáo thử đang chờ và biết đúng bài/lý do để nhận diện. | I:Hai báo cáo pending khác nhau; ghi số báo cáo chờ ban đầu. | J:1. Admin mở báo cáo.
+2. Chọn trạng thái xử lý và ghi chú nếu có.
+3. Lưu rồi F5, lọc theo trạng thái. | K:Các báo cáo đã thao tác không còn trong phần chờ; số chờ giảm đúng số báo cáo được xử lý; không làm mất báo cáo thử khác còn chờ. | L:Các báo cáo đã thao tác không còn trong phần chờ; số chờ giảm đúng số báo cáo được xử lý; không làm mất báo cáo thử khác còn chờ. | O:Pass | P:2026-10-30 00:00:00
+154 A:TC-UX-01-01 | B:TR-UX-01 | C:Độ ổn định UI | D:Võ Nhạc Phước | E:Kiểm tra phản hồi khi lưu kế hoạch học trong lúc máy mất kết nối, rồi nối mạng và tải lại để đối chiếu bản kế hoạch thực sự được lưu. | F:High | G:Use Case | H:Đã chuẩn bị User1/User2 có dữ liệu cá nhân khác nhau và có thể đăng nhập trên cùng Chrome. Các ca mất mạng dùng cài đặt Windows để ngắt/kết nối lại, không sửa request. Dữ liệu kiểm tra phải được lưu qua UI trước khi đối chiếu. | I:User1; đã tải Cài đặt | J:1. Mở phần báo cáo chờ của bài thử.
+2. Với báo cáo thứ nhất, bấm Đã xử lý.
+3. Với báo cáo thứ hai, bấm Bỏ qua.
+4. F5 và kiểm tra danh sách cùng số báo cáo chờ. | K:Không thông báo đã lưu thành công khi chưa lưu; không kẹt vĩnh viễn; giá trị sau tải lại phản ánh bản thực sự đã lưu. | L:Không thông báo đã lưu thành công khi chưa lưu; không kẹt vĩnh viễn; giá trị sau tải lại phản ánh bản thực sự đã lưu. | O:Pass | P:2026-10-30 00:00:00
+155 A:TC-UX-01-02 | B:TR-UX-01 | C:Độ ổn định UI | D:Võ Nhạc Phước | E:Kiểm tra dấu sao và ghi chú từ vựng khi chuyển từ User1 sang User2 trên cùng trình duyệt, nhằm phát hiện dữ liệu cá nhân của tài khoản trước còn hiển thị. | F:High | G:Use Case | H:Đã chuẩn bị User1/User2 có dữ liệu cá nhân khác nhau và có thể đăng nhập trên cùng Chrome. Các ca mất mạng dùng cài đặt Windows để ngắt/kết nối lại, không sửa request. Dữ liệu kiểm tra phải được lưu qua UI trước khi đối chiếu. từ vựng thứ nhất đã có dấu sao và ghi chú ở User1, còn User2 chưa lưu dấu sao hoặc ghi chú cho từ vựng thứ nhất. | I:User1 có dấu sao và ghi chú cho từ đã chọn; User2 chưa lưu từ đó. Đăng nhập bằng email và mật khẩu đúng của từng tài khoản. | J:1. User1 kiểm tra từ vựng thứ nhất.
+2. Đăng xuất và đăng nhập User2 cùng trình duyệt.
+3. Mở sổ tay và từ vựng thứ nhất. | K:Không hiển thị dấu sao/ghi chú của User1 cho User2. | L:Không hiển thị dấu sao/ghi chú của User1 cho User2. | O:Pass | P:2026-10-30 00:00:00
+156 A:TC-UX-01-03 | B:TR-UX-01 | C:Độ ổn định UI | D:Võ Nhạc Phước | E:Kiểm tra điều hướng Quay lại và tải lại trang trong một luồng học, tập trung vào khả năng trở về màn hợp lệ và giữ tiến độ đã được lưu. | F:High | G:Use Case | H:Đã chuẩn bị User1/User2 có dữ liệu cá nhân khác nhau và có thể đăng nhập trên cùng Chrome. Các ca mất mạng dùng cài đặt Windows để ngắt/kết nối lại, không sửa request. Dữ liệu kiểm tra phải được lưu qua UI trước khi đối chiếu. | I:bài học thứ nhất đã chuẩn bị | J:1. Mở bài học thứ nhất đã chuẩn bị, vào một hoạt động và thực hiện một phần cho đến khi có tiến độ được lưu.
+2. Ghi tiến độ đang hiển thị, sau đó bấm nút Quay lại của Chrome.
+3. Mở lại hoạt động bằng điều hướng trong app rồi bấm F5.
+4. Từ màn hình hợp lệ được mở sau tải lại, về Trang chủ và kiểm tra lại tiến độ đã lưu. | K:Không trang trắng hoặc lỗi không phục hồi; app trở về màn hợp lệ và tiến độ đã lưu không mất. | L:Không trang trắng hoặc lỗi không phục hồi; app trở về màn hợp lệ và tiến độ đã lưu không mất. | O:Pass | P:2026-10-30 00:00:00
+
+WORKBOOK Timeline_TienDo_WBS_Korean_Study.xlsx
+
+SHEET Phan_Cong_WBS 65x21
+1 A:TRƯỜNG ĐẠI HỌC LẠC HỒNG - KHOA CÔNG NGHỆ THÔNG TIN | P:Biểu đồ Gantt 
+2 A:BẢNG PHÂN CÔNG CÔNG VIỆC VÀ QUẢN LÝ TIẾN ĐỘ KIỂM THỬ
+4 A:Tên dự án: | C:Kiểm thử giao diện web Korean Study | G:Giảng viên hướng dẫn: | I:Vũ Thanh Nhàn
+5 A:Nhóm thực hiện: | C:Tạ Trần Vinh Quang (nhóm trưởng), Nguyễn Danh Nghĩa, Võ Nhạc Phước | G:Nhóm thực hiện: | I:Nhóm 17: Tạ Trần Vinh Quang, Võ Nhạc Phước, Nguyễn Danh Nghĩa
+7 A:STT | B:Mã WBS | C:Tên công việc / Hạng mục | D:Người phụ trách | E:Người phối hợp / Review | F:Sản phẩm bàn giao | G:Ngày bắt đầu | H:Ngày kết thúc | I:Số ngày | J:Tiến độ (%) | K:Trạng thái | L:Chuẩn CLO | M:Ghi chú | O:2026-10-25 00:00:00 | P:2026-10-26 00:00:00 | Q:2026-10-27 00:00:00 | R:2026-10-28 00:00:00 | S:2026-10-29 00:00:00 | T:2026-10-30 00:00:00 | U:2026-10-31 00:00:00
+8 B:1 | C:GIAI ĐOẠN 1: CHUẨN BỊ | G:2026-10-25 00:00:00 | H:2026-10-26 00:00:00 | I:2 | J:1 | K:Hoàn thành | O:1 | P:1
+9 A:1 | B:1.1 | C:Khảo sát các luồng UI của Korean Study | D:Võ Nhạc Phước | E:Tạ Trần Vinh Quang | F:Danh sách luồng và phạm vi chức năng | G:2026-10-25 00:00:00 | H:2026-10-25 00:00:00 | I:1 | J:1 | K:Hoàn thành | L:CLO2 | M:Kiểm thử UI trên website triển khai. | O:1
+10 A:2 | B:1.2 | C:Thống nhất phạm vi, môi trường và tiêu chí kiểm thử | D:Võ Nhạc Phước | E:Nguyễn Danh Nghĩa | F:Phạm vi UI, Chrome/Windows, điều kiện chạy | G:2026-10-25 00:00:00 | H:2026-10-25 00:00:00 | I:1 | J:1 | K:Hoàn thành | L:CLO2, CLO4 | M:Chrome/Windows; kiểm tra quyền qua URL admin. | O:1
+11 A:3 | B:1.3 | C:Hoàn thiện Test Plan và phân công công việc | D:Cả nhóm | E:Tạ Trần Vinh Quang | F:Test Plan và WBS của nhóm | G:2026-10-25 00:00:00 | H:2026-10-26 00:00:00 | I:2 | J:1 | K:Hoàn thành | L:CLO1, CLO4 | M:Cả nhóm phối hợp; Quang kiểm tra chung. | O:1 | P:1
+12 B:2 | C:GIAI ĐOẠN 2: THIẾT KẾ TR/TC | G:2026-10-25 00:00:00 | H:2026-10-26 00:00:00 | I:2 | J:1 | K:Hoàn thành | O:1 | P:1
+13 A:4 | B:2.1 | C:Hoàn thiện 43 yêu cầu kiểm thử | D:Nguyễn Danh Nghĩa | E:Tạ Trần Vinh Quang | F:43 TR trong workbook TR/TC | G:2026-10-25 00:00:00 | H:2026-10-26 00:00:00 | I:2 | J:1 | K:Hoàn thành | L:CLO2 | M:43 TR đã duyệt. | O:1 | P:1
+14 A:5 | B:2.2 | C:Hoàn thiện 151 TC kiểm thử giao diện | D:Võ Nhạc Phước | E:Tạ Trần Vinh Quang | F:151 TC có bước, dữ liệu và kết quả mong đợi | G:2026-10-25 00:00:00 | H:2026-10-26 00:00:00 | I:2 | J:1 | K:Hoàn thành | L:CLO2 | M:151 TC; giữ mã và phân công. | O:1 | P:1
+15 A:6 | B:2.3 | C:Rà soát và duyệt bộ TR/TC | D:Tạ Trần Vinh Quang | E:Nguyễn Danh Nghĩa | F:Bộ TR/TC đã duyệt để chạy | G:2026-10-26 00:00:00 | H:2026-10-26 00:00:00 | I:1 | J:1 | K:Hoàn thành | L:CLO2, CLO4 | M:Nhóm trưởng/người duyệt: Tạ Trần Vinh Quang. | P:1
+16 B:3 | C:GIAI ĐOẠN 3: THỰC THI UI | G:2026-10-25 00:00:00 | H:2026-10-30 00:00:00 | I:6 | J:1 | K:Hoàn thành | O:1 | P:1 | Q:1 | R:1 | S:1 | T:1
+17 A:7 | B:3.1 | C:Chuẩn bị tài khoản và dữ liệu cho các ca được giao | D:Cả nhóm | E:Tạ Trần Vinh Quang | F:Tài khoản chính/phụ và nội dung thử riêng | G:2026-10-25 00:00:00 | H:2026-10-27 00:00:00 | I:3 | J:1 | K:Hoàn thành | L:CLO2 | M:Đã chuẩn bị tài khoản; còn thiếu bài thứ hai cho 3 TC. | O:1 | P:1 | Q:1
+18 A:8 | B:3.2 | C:Quang thực hiện 50 TC theo luồng được giao | D:Tạ Trần Vinh Quang | E:Cả nhóm | F:Kết quả và ảnh bằng chứng của 50 TC | G:2026-10-26 00:00:00 | H:2026-10-30 00:00:00 | I:5 | J:1 | K:Hoàn thành | L:CLO2, CLO3 | M:Đã chốt 50 TC: 47 Pass, 3 Blocked do thiếu bài thứ hai; 100% là hoàn tất rà soát và ghi nhận. | P:1 | Q:1 | R:1 | S:1 | T:1
+19 A:9 | B:3.3 | C:Nghĩa thực hiện 52 TC theo luồng được giao | D:Nguyễn Danh Nghĩa | E:Cả nhóm | F:Kết quả và ảnh bằng chứng của 52 TC | G:2026-10-26 00:00:00 | H:2026-10-30 00:00:00 | I:5 | J:1 | K:Hoàn thành | L:CLO2, CLO3 | M:52/52 TC Pass. | P:1 | Q:1 | R:1 | S:1 | T:1
+20 A:10 | B:3.4 | C:Phước thực hiện 49 TC theo luồng được giao | D:Võ Nhạc Phước | E:Cả nhóm | F:Kết quả và ảnh bằng chứng của 49 TC | G:2026-10-26 00:00:00 | H:2026-10-30 00:00:00 | I:5 | J:1 | K:Hoàn thành | L:CLO2, CLO3 | M:Đã chốt 49 TC: 47 Pass, 1 Fail (TC-PREF-02-02), 1 Blocked, 0 N/A; 100% là hoàn tất thực thi/rà soát và ghi nhận, không phải 100% Pass. | P:1 | Q:1 | R:1 | S:1 | T:1
+21 A:11 | B:3.5 | C:Kiểm tra các ca phụ thuộc ngày có hiệu lực của lịch học | D:Nguyễn Danh Nghĩa | E:Cả nhóm | F:Kết quả TC lịch học hoặc lý do Blocked | G:2026-10-26 00:00:00 | H:2026-10-30 00:00:00 | I:5 | J:1 | K:Hoàn thành | L:CLO2, CLO3 | M:Các ca lịch học Pass; thuộc 52 TC của Nghĩa. | P:1 | Q:1 | R:1 | S:1 | T:1
+22 A:12 | B:3.6 | C:Cập nhật kết quả và tổng hợp bằng chứng hiện có | D:Tạ Trần Vinh Quang | E:Cả nhóm | F:TC có kết quả, trạng thái và bằng chứng hiện có đã chốt | G:2026-10-26 00:00:00 | H:2026-10-30 00:00:00 | I:5 | J:1 | K:Hoàn thành | L:CLO2, CLO3 | M:Đã chốt kết quả và bằng chứng hiện có của 151 TC. | P:1 | Q:1 | R:1 | S:1 | T:1
+23 B:4 | C:GIAI ĐOẠN 4: ĐÁNH GIÁ | G:2026-10-27 00:00:00 | H:2026-10-30 00:00:00 | I:4 | J:0.75 | K:Chưa đủ cập nhật | Q:1 | R:1 | S:1 | T:1
+24 A:13 | B:4.1 | C:Tổng hợp và phân loại các lỗi thực sự phát hiện | D:Tạ Trần Vinh Quang | E:Võ Nhạc Phước | F:Danh sách lỗi có mô tả, mức độ và bằng chứng | G:2026-10-27 00:00:00 | H:2026-10-30 00:00:00 | I:4 | J:1 | K:Hoàn thành | L:CLO3 | M:TR/TC ghi nhận 1 Fail (TC-PREF-02-02: ngôn ngữ giao diện chưa đồng nhất), 4 Blocked, 0 N/A. Cần xử lý lỗi và kiểm thử lại sau sửa. | Q:1 | R:1 | S:1 | T:1
+25 A:14 | B:4.2 | C:Kiểm thử lại các lỗi đã được sửa nếu có | D:Cả nhóm | E:Tạ Trần Vinh Quang | F:Kết quả kiểm thử lại hoặc lý do chưa thực hiện | G:2026-10-29 00:00:00 | H:2026-10-30 00:00:00 | I:2 | J:0 | K:Chưa thực hiện | L:CLO2, CLO3 | M:Có 1 TC Fail: TC-PREF-02-02. Chưa có bản sửa hoặc kết quả chạy lại; chờ bản sửa để retest. Khoảng 29–30/10/2026 là kế hoạch ban đầu, chưa có lịch retest mới được xác nhận. | S:1 | T:1
+26 A:15 | B:4.3 | C:Tổng hợp số lượng và tính các chỉ số kiểm thử | D:Nguyễn Danh Nghĩa | E:Tạ Trần Vinh Quang | F:Tổng TC, Pass/Fail/Blocked và độ bao phủ | G:2026-10-29 00:00:00 | H:2026-10-30 00:00:00 | I:2 | J:1 | K:Hoàn thành | L:CLO3 | M:146 Pass, 1 Fail, 4 Blocked, 0 N/A; thực thi 147/151 = 97,35%; Pass/tổng TC 96,69%; Pass/(Pass+Fail) 99,32%; bao phủ TR 42/43 = 97,67%. | S:1 | T:1
+27 A:16 | B:4.4 | C:Đánh giá chất lượng và các giới hạn của đợt test | D:Võ Nhạc Phước | E:Tạ Trần Vinh Quang | F:Nhận xét dựa trên dữ liệu kiểm thử | G:2026-10-30 00:00:00 | H:2026-10-30 00:00:00 | I:1 | J:1 | K:Hoàn thành | L:CLO3 | M:Đánh giá kèm giới hạn 1 Fail về ngôn ngữ giao diện và 4 Blocked; chưa có kết quả retest xác nhận sửa lỗi. | T:1
+28 B:5 | C:GIAI ĐOẠN 5: HOÀN THIỆN HỒ SƠ | G:2026-10-27 00:00:00 | H:2026-10-30 00:00:00 | I:4 | J:1 | K:Hoàn thành | Q:1 | R:1 | S:1 | T:1
+29 A:17 | B:5.1 | C:Viết báo cáo Word theo cấu trúc 8 chương | D:Nguyễn Danh Nghĩa | E:Tạ Trần Vinh Quang | F:Bản báo cáo Word/PDF | G:2026-10-27 00:00:00 | H:2026-10-30 00:00:00 | I:4 | J:1 | K:Hoàn thành | L:CLO1 | M:Cả nhóm viết; Quang kiểm tra bản cuối. | Q:1 | R:1 | S:1 | T:1
+30 A:18 | B:5.2 | C:Xây dựng slide thuyết trình | D:Võ Nhạc Phước | E:Tạ Trần Vinh Quang | F:Slide trình bày đề tài và kết quả | G:2026-10-28 00:00:00 | H:2026-10-30 00:00:00 | I:3 | J:1 | K:Hoàn thành | L:CLO1 | M:Cả nhóm phối hợp xây dựng slide. | R:1 | S:1 | T:1
+31 A:19 | B:5.3 | C:Đối chiếu số liệu và rà soát bộ hồ sơ | D:Tạ Trần Vinh Quang | E:Võ Nhạc Phước | F:Bộ báo cáo, TR/TC, timeline và slide thống nhất | G:2026-10-30 00:00:00 | H:2026-10-30 00:00:00 | I:1 | J:1 | K:Hoàn thành | L:CLO1, CLO4 | M:Đối chiếu báo cáo, TR/TC, timeline và slide. | T:1
+32 A:20 | B:5.4 | C:Đóng gói và nộp bài cuối kỳ | D:Tạ Trần Vinh Quang | E:Nguyễn Danh Nghĩa | F:Bộ hồ sơ nộp bài và xác nhận đã nộp | G:2026-10-30 00:00:00 | H:2026-10-30 00:00:00 | I:1 | J:1 | K:Hoàn thành | L:CLO4 | M:Hạn nộp: 30/10/2026. | T:1
+33 B:6 | C:GIAI ĐOẠN 6: THUYẾT TRÌNH | G:2026-10-30 00:00:00 | H:2026-10-31 00:00:00 | I:2 | J:1 | K:Hoàn thành | T:1 | U:1
+34 A:21 | B:6.1 | C:Thống nhất nội dung nói và luyện thuyết trình | D:Cả nhóm | E:Tạ Trần Vinh Quang | F:Phân đoạn trình bày và phần hỏi đáp | G:2026-10-30 00:00:00 | H:2026-10-31 00:00:00 | I:2 | J:1 | K:Hoàn thành | L:CLO1, CLO4 | M:Chuẩn bị nội dung và phân đoạn trình bày. | T:1 | U:1
+35 A:22 | B:6.2 | C:Thuyết trình và trả lời câu hỏi | D:Cả nhóm | E:Tạ Trần Vinh Quang | F:Trình bày trước giảng viên | G:2026-10-31 00:00:00 | H:2026-10-31 00:00:00 | I:1 | J:1 | K:Hoàn thành | L:CLO1, CLO3, CLO4 | M:Lịch thuyết trình: 31/10/2026. | U:1
+
+SHEET Ma_Tran_RACI 65x21
+1 A:TRƯỜNG ĐẠI HỌC LẠC HỒNG - KHOA CÔNG NGHỆ THÔNG TIN
+2 A:MA TRẬN PHÂN CÔNG TRÁCH NHIỆM RACI - KIỂM THỬ KOREAN STUDY
+3 A:Chú giải mã RACI
+4 A:R - Responsible | B:Người trực tiếp thực hiện công việc.
+5 A:A - Accountable | B:Người chịu trách nhiệm và kiểm tra/chốt kết quả.
+6 A:C - Consulted | B:Người phối hợp, tư vấn hoặc cung cấp thông tin.
+7 A:I - Informed | B:Người được thông báo kết quả.
+9 A:Mã WBS | B:Hạng mục công việc | C:Tạ Trần Vinh Quang (Lead) | D:Nguyễn Danh Nghĩa | E:Võ Nhạc Phước | F:Giảng viên hướng dẫn
+10 A:1 | B:GIAI ĐOẠN 1: CHUẨN BỊ | C:A / R | D:R | E:R | F:I
+11 A:1.1 | B:Khảo sát các luồng UI của Korean Study | C:A / R | D:R | E:R | F:I
+12 A:1.2 | B:Thống nhất phạm vi, môi trường và tiêu chí kiểm thử | C:A / R | D:R | E:R | F:I
+13 A:1.3 | B:Hoàn thiện Test Plan và phân công công việc | C:A / R | D:R | E:R | F:I
+14 A:2 | B:GIAI ĐOẠN 2: THIẾT KẾ TR/TC | C:A / R | D:R | E:R | F:I
+15 A:2.1 | B:Hoàn thiện 43 yêu cầu kiểm thử | C:A / R | D:R | E:R | F:I
+16 A:2.2 | B:Hoàn thiện 151 TC kiểm thử giao diện | C:A / R | D:R | E:R | F:I
+17 A:2.3 | B:Rà soát và duyệt bộ TR/TC | C:A / R | D:C | E:C | F:I
+18 A:3 | B:GIAI ĐOẠN 3: THỰC THI UI | C:A / R | D:R | E:R | F:I
+19 A:3.1 | B:Chuẩn bị tài khoản và dữ liệu cho các ca được giao | C:A / R | D:R | E:R | F:I
+20 A:3.2 | B:Quang thực hiện 50 TC theo luồng được giao | C:A / R | D:C | E:C | F:I
+21 A:3.3 | B:Nghĩa thực hiện 52 TC theo luồng được giao | C:A | D:R | E:C | F:I
+22 A:3.4 | B:Phước thực hiện 49 TC theo luồng được giao | C:A | D:C | E:R | F:I
+23 A:3.5 | B:Kiểm tra các ca phụ thuộc ngày có hiệu lực của lịch học | C:A | D:R | E:C | F:I
+24 A:3.6 | B:Cập nhật kết quả và tổng hợp bằng chứng hiện có | C:A / R | D:R | E:R | F:I
+25 A:4 | B:GIAI ĐOẠN 4: ĐÁNH GIÁ | C:A / R | D:R | E:R | F:I
+26 A:4.1 | B:Tổng hợp và phân loại các lỗi thực sự phát hiện | C:A / R | D:R | E:R | F:I
+27 A:4.2 | B:Kiểm thử lại các lỗi đã được sửa nếu có | C:A / R | D:R | E:R | F:I
+28 A:4.3 | B:Tổng hợp số lượng và tính các chỉ số kiểm thử | C:A / R | D:R | E:R | F:I
+29 A:4.4 | B:Đánh giá chất lượng và các giới hạn của đợt test | C:A / R | D:R | E:R | F:I
+30 A:5 | B:GIAI ĐOẠN 5: HOÀN THIỆN HỒ SƠ | C:A / R | D:R | E:R | F:I
+31 A:5.1 | B:Viết báo cáo Word theo cấu trúc 8 chương | C:A / R | D:R | E:R | F:I
+32 A:5.2 | B:Xây dựng slide thuyết trình | C:A / R | D:R | E:R | F:I
+33 A:5.3 | B:Đối chiếu số liệu và rà soát bộ hồ sơ | C:A / R | D:C | E:C | F:I
+34 A:5.4 | B:Đóng gói và nộp bài cuối kỳ | C:A / R | D:C | E:C | F:I
+35 A:6 | B:GIAI ĐOẠN 6: THUYẾT TRÌNH | C:A / R | D:R | E:R | F:I
+36 A:6.1 | B:Thống nhất nội dung nói và luyện thuyết trình | C:A / R | D:R | E:R | F:I
+37 A:6.2 | B:Thuyết trình và trả lời câu hỏi | C:A / R | D:R | E:R | F:I
+
+SHEET Thong_Ke_Progress 60x21
+1 A:TRƯỜNG ĐẠI HỌC LẠC HỒNG - KHOA CÔNG NGHỆ THÔNG TIN
+2 A:BẢNG TỔNG HỢP TIẾN ĐỘ VÀ PHÂN BỔ CÔNG VIỆC THEO CLO
+4 A:1. Thống kê phân công theo thành viên nhóm
+5 A:STT | B:Họ và tên thành viên | C:Vai trò trong dự án | D:Số việc phụ trách riêng | E:Tỷ lệ đóng góp (%)
+6 A:1 | B:Tạ Trần Vinh Quang | C:Nhóm trưởng / Kiểm thử UI | D:6 | E:0.35294117647058826
+7 A:2 | B:Nguyễn Danh Nghĩa | C:Kiểm thử UI / Phối hợp hồ sơ | D:5 | E:0.29411764705882354
+8 A:3 | B:Võ Nhạc Phước | C:Kiểm thử UI / Phối hợp hồ sơ | D:6 | E:0.35294117647058826
+10 A:2. Thống kê phân bổ công việc theo chuẩn đầu ra CLO
+11 A:Mã CLO | B:Nội dung chuẩn đầu ra học phần | C:Số việc liên quan | D:Trọng số đánh giá | E:Trạng thái
+12 A:CLO1 | B:Trình bày công việc bằng báo cáo kỹ thuật đúng định dạng. | C:6 | D:0.17142857142857143 | E:Hoàn thành
+13 A:CLO2 | B:Thiết kế và thực hiện kiểm thử yêu cầu chức năng theo mục tiêu. | C:12 | D:0.34285714285714286 | E:Chưa đủ cập nhật
+14 A:CLO3 | B:Đo lường, phân tích kết quả và đánh giá chất lượng phần mềm. | C:10 | D:0.2857142857142857 | E:Chưa đủ cập nhật
+15 A:CLO4 | B:Tổ chức công việc, phối hợp nhóm và quản lý tiến độ. | C:7 | D:0.2 | E:Hoàn thành
+
+PPT 12 12192000x6858000
+
+SLIDE 1
+'BÁO CÁO CUỐI KỲ'
+'KIỂM THỬ\nKOREAN STUDY'
+'Kiểm thử và đảm bảo chất lượng phần mềm'
+'GVHD: Vũ Thanh Nhàn'
+'Tạ Trần Vinh Quang   ·   Võ Nhạc Phước   ·   Nguyễn Danh Nghĩa'
+
+SLIDE 2
+'KOREAN STUDY'
+'Korean Study và mục tiêu kiểm thử'
+'Ứng dụng web hỗ trợ học tiếng Hàn theo giáo trình'
+'Kiểm tra các luồng học tập và quản trị trên giao diện'
+'Đối chiếu kết quả với yêu cầu và test case của nhóm'
+'Ghi nhận ca chưa hoàn tất và các vấn đề cần xác minh'
+'Báo cáo kiểm thử phần mềm'
+'02'
+
+SLIDE 3
+'KOREAN STUDY'
+'Phạm vi kiểm thử UI'
+'Kiểm thử thủ công trên trình duyệt theo bảng của nhóm'
+'TRONG PHẠM VI'
+'Tài khoản và phân quyền'
+'Học tập, ôn tập, tiến độ'
+'Cộng đồng và quản trị'
+'Responsive, audio và micro'
+'CHƯA BAO GỒM'
+'Kiểm thử API và token'
+'Truy vấn hoặc sửa database'
+'Hiệu năng và bảo mật backend'
+'Báo cáo kiểm thử phần mềm'
+'03'
+
+SLIDE 4
+'KOREAN STUDY'
+'Thiết kế kiểm thử'
+'43 yêu cầu kiểm thử được liên kết với 151 test case'
+'43'
+'yêu cầu kiểm thử'
+'151'
+'test case UI'
+'22'
+'nhóm chức năng'
+'Kỹ thuật thiết kế'
+'Use Case: 114     EP: 24     BVA: 10     Decision Table: 3'
+'Báo cáo kiểm thử phần mềm'
+'04'
+
+SLIDE 5
+'KOREAN STUDY'
+'Các phân hệ có nhiều test case nhất'
+'Phân bổ theo bảng TC của nhóm'
+'Tài khoản'
+'24'
+'Kế hoạch học'
+'12'
+'Quản trị nội dung'
+'11'
+'Nghe chép'
+'10'
+'Cộng đồng'
+'8'
+'Các phân hệ còn lại có từ 3 đến 7 ca mỗi phân hệ.'
+'Báo cáo kiểm thử phần mềm'
+'05'
+
+SLIDE 6
+'KOREAN STUDY'
+'Kết quả kiểm thử UI'
+'Theo trạng thái trong bảng của nhóm tại thời điểm đối chiếu'
+'146'
+'Pass'
+'1'
+'Fail'
+'4'
+'Blocked'
+'99,32% Pass trên số ca đã chạy'
+'146 / (146 + 1)  ·  Không tính 4 ca Blocked'
+'Báo cáo kiểm thử phần mềm'
+'06'
+
+SLIDE 7
+'KOREAN STUDY'
+'Một test case đăng ký đạt'
+'TC-AUTH-01-01  |  TR-AUTH-01'
+'ĐẦU VÀO'
+'Tên gồm 2 ký tự\nMật khẩu đủ 8 ký tự\nXác nhận khớp'
+'KẾT QUẢ GHI NHẬN'
+'Đăng ký thành công\nvà nhận email xác nhận'
+'Trạng thái: PASS'
+'Báo cáo kiểm thử phần mềm'
+'07'
+
+SLIDE 8
+'KOREAN STUDY'
+'Một ca cần xử lý và bốn ca bị chặn'
+'Chi tiết theo kết quả nhóm ghi trong trang TC'
+'FAIL'
+'TC-PREF-02-02'
+'Chuyển ngôn ngữ chưa áp dụng cho toàn bộ giao diện theo kết quả ghi nhận.'
+'BLOCKED'
+'3 ca tiếp tục học'
+'Chưa có giáo trình đủ hai bài để thực hiện.'
+'1 ca quản trị'
+'Ghi nhận chưa có chức năng xem chi tiết.'
+'Báo cáo kiểm thử phần mềm'
+'08'
+
+SLIDE 9
+'KOREAN STUDY'
+'Độ bao phủ và giới hạn của kết quả'
+'Bao phủ được tính theo yêu cầu có ít nhất một test case'
+'100%'
+'bao phủ thiết kế\n43 / 43 yêu cầu'
+'97,67%'
+'bao phủ thực thi\n42 / 43 yêu cầu'
+'Các chỉ số không chứng minh mọi test case trong từng yêu cầu đã chạy.'
+'Cột ảnh bằng chứng còn trống; nhiều ca chưa có ngày hoặc kết quả thực tế.'
+'Báo cáo kiểm thử phần mềm'
+'09'
+
+SLIDE 10
+'KOREAN STUDY'
+'Phân công test case'
+'Số test case được giao không đồng nghĩa tỷ lệ đóng góp'
+'Tạ Trần Vinh Quang'
+'50'
+'Võ Nhạc Phước'
+'49'
+'Nguyễn Danh Nghĩa'
+'52'
+'Tổng cộng 151 ca'
+'Báo cáo kiểm thử phần mềm'
+'10'
+
+SLIDE 11
+'KOREAN STUDY'
+'Kết luận và công việc tiếp theo'
+'146 ca UI đạt, 1 ca thất bại và 4 ca chưa thực hiện được'
+'Chuẩn bị dữ liệu để chạy lại các ca Blocked'
+'Xác nhận và xử lý lỗi chuyển ngôn ngữ'
+'Bổ sung ảnh, ngày chạy và kết quả thực tế còn thiếu'
+'Đánh giá thêm API, phân quyền dữ liệu và hiệu năng'
+'Báo cáo kiểm thử phần mềm'
+'11'
+
+SLIDE 12
+'KOREAN STUDY'
+'Nguồn dữ liệu'
+'Bảng TR và Test Case UI của nhóm'
+'43 TR và 151 TC; đối chiếu ngày 31/10/2026'
+'Báo cáo kiểm thử Korean Study'
+'Thông tin project, phạm vi và quy trình kiểm thử'
+'Xin cảm ơn'
+'Báo cáo kiểm thử phần mềm'
+'12'

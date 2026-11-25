@@ -13,9 +13,9 @@ export const mapDatabaseGrammar = (grammar, index) => ({
   context: grammar.context || grammar.usageVi || grammar.meaningVi,
   translation: grammar.translation || grammar.meaningVi,
   formula: grammar.conjugationVi
-    ? String(grammar.conjugationVi).split(/\r?\n/).filter(Boolean).map((form) => ({ subject: '', condition: 'Cách dùng', form }))
-    : [{ subject: '', condition: 'Cấu trúc', form: grammar.pattern }],
-  examples: [],
+    ? String(grammar.conjugationVi).split(/\r?\n/).filter(Boolean).map((form) => ({ subject: '', condition: '', form }))
+    : [{ subject: '', condition: '', form: grammar.pattern }],
+  examples: grammar.examples || [],
   notes: grammar.notesVi ? String(grammar.notesVi).split(/\r?\n/).filter(Boolean) : [],
   tip: null,
 });

@@ -186,6 +186,20 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return { data }
   })
 
+  app.get<{ Params: { id: string }; Querystring: { page?: string } }>('/admin/lessons/:id/ranking', async (request, reply) => {
+    const page = Math.min(100000, Math.max(1, Math.floor(Number(request.query.page) || 1)))
+    const pageSize = 20
+    const { data, error, count } = await supabaseAdmin.from('lesson_progress')
+      .select('user_id, progress_percent, updated_at, profiles(display_name)', { count: 'exact' })
+      .eq('lesson_id', request.params.id)
+      .order('progress_percent', { ascending: false })
+      .order('updated_at', { ascending: true })
+      .order('user_id', { ascending: true })
+      .range((page - 1) * pageSize, page * pageSize - 1)
+    if (error) return reply.code(500).send({ code: 'LESSON_RANKING_READ_FAILED', message: 'Không thể tải bảng xếp hạng bài học.', requestId: request.id })
+    return { data: { items: data ?? [], total: count ?? 0, page, pageSize } }
+  })
+
   app.post<{ Body: { textbookId: string; lessonNumber: number; titleKo: string; titleVi?: string; status?: Status } }>('/admin/lessons', async (request, reply) => {
     const body = request.body
     const { data, error } = await supabaseAdmin.from('lessons').insert({ textbook_id: body.textbookId, lesson_number: body.lessonNumber, title_ko: body.titleKo, title_vi: body.titleVi || null, status: body.status ?? 'draft' }).select().single()

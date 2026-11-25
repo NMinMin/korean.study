@@ -3461,7 +3461,10 @@ html[data-theme="dark"] .review-word-result.incorrect { color: #ffaaaa; backgrou
 
 .gm-formula-form {
   flex-shrink: 0;
-  font: 800 15px 'Baloo 2'
+  color: var(--ks-text-4b4470, #4B4470);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
 }
 
 .gm-examples {
@@ -15209,3 +15212,21 @@ textarea.fc2-note {
 .quiz-preparation-spinner { color: #9384f5; animation: quiz-preparation-turn 1s linear infinite; }
 @keyframes quiz-preparation-turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .quiz-preparation-spinner { animation: none; } }
+
+@media (max-width: 600px) {
+  .gm-formula-form { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+  .gm-formula-row { flex-wrap: wrap; }
+  .gm-box, .gm-example-text { min-width: 0; overflow-wrap: anywhere; }
+  .fc2-back-scroll { overscroll-behavior: contain; }
+}
+
+/* Keep flashcard ratings above the mobile navigation bar. */
+@media (max-width: 620px) {
+  .fc2-page { padding-bottom: calc(160px + env(safe-area-inset-bottom)); }
+  .fc2-actions-2 {
+    bottom: calc(82px + env(safe-area-inset-bottom));
+    z-index: 81;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .fc2-actions-2 .fc2-act-btn { min-height: 48px; }
+}

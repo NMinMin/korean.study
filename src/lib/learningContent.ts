@@ -116,6 +116,7 @@ export type LearningGrammar = {
   context?: string
   usageVi?: string | null
   conjugationVi?: string | null
+  examples?: { ko: string; vi: string }[]
   notesVi?: string | null
   sortOrder: number
 }
@@ -355,6 +356,7 @@ async function loadLearningCatalogUncached(preferredTextbookId?: string): Promis
         context: textFrom(answer.contextVi) ?? textFrom(answer.usageVi) ?? textFrom(row.explanation_vi) ?? '',
         usageVi: textFrom(answer.usageVi) ?? textFrom(row.explanation_vi),
         conjugationVi: formulaLines.join('\n') || textFrom(answer.conjugationVi),
+        examples: Array.isArray(answer.examples) ? answer.examples.map((entry) => { const example = asRecord(entry); return { ko: textFrom(example.ko) ?? '', vi: textFrom(example.vi) ?? '' } }).filter((example) => example.ko || example.vi) : [],
         notesVi: textFrom(answer.note) ?? textFrom(row.explanation_vi),
         sortOrder: row.sort_order,
       }

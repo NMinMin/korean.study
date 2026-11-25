@@ -3703,3 +3703,46 @@
 .admin-bar-chart.is-month .admin-bar-column small { white-space: nowrap; }
 .admin-user-detail-content { padding: 22px 24px; }
 .admin-user-detail-content strong { overflow-wrap: anywhere; }
+
+.admin-grammar-examples { display: grid; gap: 10px; min-width: 0; }
+.admin-grammar-example { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.admin-grammar-example label { min-width: 0; }
+.admin-grammar-example textarea { width: 100%; }
+.admin-grammar-example > button { min-width: 40px; min-height: 40px; }
+@media (max-width: 640px) {
+  .admin-grammar-example { grid-template-columns: minmax(0, 1fr) auto; }
+  .admin-grammar-example label { grid-column: 1 / -1; }
+  .admin-grammar-example > button { grid-column: 2; }
+  .admin-formula-builder-head { flex-wrap: wrap; gap: 10px; }
+}
+
+.admin-lesson-tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid var(--ks-border-eae5f5, #eae5f5); }
+.admin-lesson-tabs button { padding: 11px 15px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--ks-text-756d91, #756d91); font: inherit; font-weight: 700; cursor: pointer; }
+.admin-lesson-tabs button[aria-selected="true"] { color: var(--ks-text-6255d8, #6255d8); border-bottom-color: #7c6fe4; }
+.admin-ranking-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 18px 0; }
+.admin-ranking-filters label { display: flex; flex-direction: column; gap: 7px; min-width: 0; font-size: 13px; font-weight: 700; }
+.admin-ranking-filters .admin-combobox { width: 100%; min-width: 0; }
+@media (max-width: 900px) {
+  .admin-exercise-modal .admin-content-section.is-grammar { grid-template-columns: minmax(0, 1fr); }
+  .admin-exercises .admin-exercise-modal.is-review { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); }
+}
+@media (max-width: 640px) {
+  .admin-ranking-filters { grid-template-columns: minmax(0, 1fr); }
+  .admin-lesson-tabs { overflow-x: auto; }
+  .admin-lesson-tabs button { flex: 0 0 auto; }
+  .admin-exercises .admin-exercise-modal, .admin-exercises .admin-exercise-modal.is-review { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
+  .admin-exercises .admin-exercise-modal .admin-exercise-form, .admin-exercises .admin-exercise-modal.is-review .admin-exercise-form { padding: 14px 12px 18px; }
+  .admin-exercises .admin-exercise-modal header, .admin-exercises .admin-exercise-modal footer { padding: 12px; }
+  .admin-modal-header-main { min-width: 0; }
+  .admin-exercise-modal h2 { font-size: 16px; overflow-wrap: anywhere; }
+  .admin-exercise-modal .admin-content-section.is-grammar, .admin-exercise-modal .admin-content-section.is-review { min-width: 0; padding: 12px; }
+  .admin-exercise-modal .admin-grammar-main, .admin-exercise-modal .admin-grammar-side, .admin-standard-exam, .admin-standard-section-card { min-width: 0; width: 100%; }
+  .admin-formula-row input { min-width: 0; }
+  .admin-standard-exam-intro, .admin-standard-section-card { padding: 14px; }
+  .admin-standard-intro-title, .admin-standard-card-header.has-actions { flex-wrap: wrap; }
+  .admin-standard-card-header-left { min-width: 0; }
+  .admin-standard-view-switch { max-width: 100%; }
+  .admin-standard-level-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-standard-level-tab { min-width: 0; }
+  .admin-standard-matrix-wrap { max-width: 100%; overflow-x: auto; }
+}

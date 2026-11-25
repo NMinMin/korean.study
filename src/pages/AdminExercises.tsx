@@ -32,6 +32,9 @@ import {
   Volume2,
   X,
 } from 'lucide-react'
+import sunhiPreview from '../assets/voice-previews/sunhi.mp3'
+import injoonPreview from '../assets/voice-previews/injoon.mp3'
+import hyunsuPreview from '../assets/voice-previews/hyunsu.mp3'
 import { adminApi } from '../lib/adminApi'
 import { AdminSelect } from './AdminPage'
 import { BlockingLoader } from '../components/common/AppDialog'
@@ -90,6 +93,7 @@ type Draft = {
   note: string
   contextVi: string
   formulaLines: string[]
+  grammarExamples: { ko: string; vi: string }[]
   imageUrl: string
   audioUrl: string
   ttsVoice: TtsVoice
@@ -157,6 +161,7 @@ const emptyDraft: Draft = {
   note: '',
   contextVi: '',
   formulaLines: [''],
+  grammarExamples: [{ ko: '', vi: '' }],
   imageUrl: '',
   audioUrl: '',
   ttsVoice: 'ko-KR-SunHiNeural',
@@ -177,14 +182,14 @@ const ttsVoices: { value: TtsVoice; label: string; gender: 'Nữ' | 'Nam'; descr
   {
     value: 'ko-KR-SunHiNeural', gender: 'Nữ', label: 'SunHi',
     description: 'Tiêu chuẩn, tự nhiên, phổ biến',
-    previewUrl: 'http://api-cloud-u4v8.onrender.com/files/storage/1787874626792-NgheThu.mp3',
+    previewUrl: sunhiPreview,
   },
   {
     value: 'ko-KR-InJoonNeural', gender: 'Nam', label: 'InJoon',
     description: 'Tiêu chuẩn, rõ ràng, phù hợp giảng dạy',
-    previewUrl: 'http://api-cloud-u4v8.onrender.com/files/storage/1787874893843-NgheThu.mp3',
+    previewUrl: injoonPreview,
   },
-  { value: 'ko-KR-HyunSuNeural', gender: 'Nam', label: 'HyunSu', description: 'Trẻ trung, tự nhiên' },
+  { value: 'ko-KR-HyunSuNeural', gender: 'Nam', label: 'HyunSu', description: 'Trẻ trung, tự nhiên', previewUrl: hyunsuPreview },
 ]
 
 const voicePreviewCache = new Map<TtsVoice, string>()
@@ -747,6 +752,7 @@ export default function AdminExercises() {
       formulaLines: Array.isArray(answer.formulaLines) && answer.formulaLines.length
         ? answer.formulaLines.map((line) => String(line))
         : [''],
+      grammarExamples: Array.isArray(answer.examples) && answer.examples.length ? answer.examples.map((entry) => { const example = asRecord(entry); return { ko: String(example.ko || ''), vi: String(example.vi || '') } }) : [{ ko: '', vi: '' }],
       imageUrl: item.image_url || item.media_url || '',
       audioUrl: item.audio_url || String(answer.audioUrl || ''),
       ttsVoice: normalizeTtsVoice(answer.ttsVoice),
@@ -809,6 +815,7 @@ export default function AdminExercises() {
         note: draft.note.trim(),
         contextVi: draft.contextVi.trim(),
         formulaLines: draft.formulaLines.map((line) => line.trim()).filter(Boolean),
+        examples: draft.grammarExamples.map((example) => ({ ko: example.ko.trim(), vi: example.vi.trim() })).filter((example) => example.ko || example.vi),
       }
     }
     if (isReview) {
@@ -1707,6 +1714,14 @@ export default function AdminExercises() {
                   </div>
                 </div>
               </div>
+              <section className="admin-note-field admin-grammar-examples">
+                <div className="admin-formula-builder-head"><strong>Ví dụ ngữ pháp</strong><button type="button" onClick={() => setDraft((current) => ({ ...current, grammarExamples: [...current.grammarExamples, { ko: '', vi: '' }] }))}><Plus size={14} /> Thêm ví dụ</button></div>
+                {draft.grammarExamples.map((example, index) => <div className="admin-grammar-example" key={index}>
+                  <label>Câu tiếng Hàn<textarea rows={2} value={example.ko} onChange={(event) => setDraft((current) => ({ ...current, grammarExamples: current.grammarExamples.map((item, i) => i === index ? { ...item, ko: event.target.value } : item) }))} placeholder="Nhập câu ví dụ tiếng Hàn…" /></label>
+                  <label>Nghĩa tiếng Việt<textarea rows={2} value={example.vi} onChange={(event) => setDraft((current) => ({ ...current, grammarExamples: current.grammarExamples.map((item, i) => i === index ? { ...item, vi: event.target.value } : item) }))} placeholder="Nhập bản dịch tiếng Việt…" /></label>
+                  <button type="button" aria-label={`Xóa ví dụ ${index + 1}`} disabled={draft.grammarExamples.length === 1} onClick={() => setDraft((current) => ({ ...current, grammarExamples: current.grammarExamples.filter((_, i) => i !== index) }))}><X size={16} /></button>
+                </div>)}
+              </section>
               <label className="admin-note-field">
                 Lưu ý ngữ pháp
                 <textarea

@@ -13,6 +13,7 @@ import './admin.css'
 type Status = 'draft' | 'published' | 'locked' | 'no_content'
 type Textbook = { id: string; slug: string; title_ko: string; title_vi: string | null; description?: string | null; sort_order?: number; status: Status }
 type Lesson = { id: string; textbook_id: string; lesson_number: number; title_ko: string; title_vi: string | null; status: Status; textbooks?: { title_ko?: string } }
+type LessonRanking = { items: { user_id: string; progress_percent: number; updated_at: string; profiles: { display_name?: string } | null }[]; total: number; page: number; pageSize: number }
 type AdminUser = { id: string; email?: string; display_name?: string; avatar_url?: string; role: 'user' | 'admin'; level?: number; xp?: number; created_at?: string; emailConfirmedAt?: string; lastSignInAt?: string; is_locked?: boolean; locked_at?: string }
 type DashboardData = { days: number; activeUsers: number; averageCompletedLessons: number; averageMinutes: number; retentionRate: number; pendingReports: number; totalTextbooks: number; totalLessons: number; totalUsers: number; chart: { date: string; minutes: number }[]; courses: { title: string; percent: number }[]; hardVocabulary: { word: string; meaning: string; course: string; errorRate: number }[] }
 type CommunityReport = { id: string; post_id: string | null; custom_lesson_id?: string | null; reason: string; status: 'pending' | 'resolved' | 'dismissed'; created_at: string; profiles?: { display_name?: string } }
@@ -98,6 +99,13 @@ export default function AdminPage() {
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [textbookStatusFilter, setTextbookStatusFilter] = useState('all')
+  const [lessonView, setLessonView] = useState<'list' | 'statistics'>('list')
+  const [rankingBookId, setRankingBookId] = useState('')
+  const [rankingLessonId, setRankingLessonId] = useState('')
+  const [rankingPage, setRankingPage] = useState(1)
+  const [ranking, setRanking] = useState<LessonRanking | null>(null)
+  const [rankingLoading, setRankingLoading] = useState(false)
+  const [rankingError, setRankingError] = useState('')
   const [lessonStatusFilter, setLessonStatusFilter] = useState('all')
   const [lessonTextbookFilter, setLessonTextbookFilter] = useState('all')
   const [expandedTextbookGroups, setExpandedTextbookGroups] = useState<Set<string>>(new Set())
@@ -165,6 +173,19 @@ export default function AdminPage() {
     finally { if (sequence === loadSequence.current) setLoading(false) }
   }, [range, tab])
   useEffect(() => { void load(); return () => { loadSequence.current += 1 } }, [load])
+
+  useEffect(() => {
+    if (tab !== 'lessons' || lessonView !== 'statistics' || !rankingLessonId) return
+    let active = true
+    setRankingLoading(true)
+    setRankingError('')
+    setRanking(null)
+    adminApi<LessonRanking>(`/lessons/${encodeURIComponent(rankingLessonId)}/ranking?page=${rankingPage}`)
+      .then((data) => { if (active) setRanking(data) })
+      .catch((cause) => { if (active) setRankingError(cause instanceof Error ? cause.message : 'Không thể tải bảng xếp hạng.') })
+      .finally(() => { if (active) setRankingLoading(false) })
+    return () => { active = false }
+  }, [tab, lessonView, rankingLessonId, rankingPage])
 
   useEffect(() => {
     if (!supabase || tab !== 'dashboard') return
@@ -557,6 +578,21 @@ export default function AdminPage() {
           {!filteredTextbooks.length && <div className="admin-empty">Không tìm thấy giáo trình phù hợp.</div>}
         </>}
         {tab === 'lessons' && <>
+          <div className="admin-lesson-tabs" role="tablist" aria-label="Bài học">
+            <button type="button" role="tab" aria-selected={lessonView === 'list'} onClick={() => setLessonView('list')}>Danh sách bài học</button>
+            <button type="button" role="tab" aria-selected={lessonView === 'statistics'} onClick={() => setLessonView('statistics')}>Xếp hạng</button>
+          </div>
+          {lessonView === 'statistics' ? <section className="admin-lesson-ranking">
+            <div className="admin-panel-title"><div><h2>Bảng xếp hạng bài học</h2><p>Xếp theo phần trăm hoàn thành bài học; nếu bằng nhau, ưu tiên thời điểm cập nhật sớm hơn.</p></div></div>
+            <div className="admin-ranking-filters">
+              <label>Giáo trình<AdminSelect value={rankingBookId} label="Chọn giáo trình" options={[{ value: '', label: 'Chọn giáo trình' }, ...textbooks.map((book) => ({ value: book.id, label: book.title_ko }))]} onChange={(value) => { setRankingBookId(value); setRankingLessonId(''); setRankingPage(1); setRanking(null) }} /></label>
+              <label>Bài học<AdminSelect value={rankingLessonId} label="Chọn bài học" options={[{ value: '', label: 'Chọn bài học' }, ...lessons.filter((lesson) => lesson.textbook_id === rankingBookId).sort((a, b) => a.lesson_number - b.lesson_number).map((lesson) => ({ value: lesson.id, label: `Bài ${lesson.lesson_number} · ${lesson.title_ko}` }))]} onChange={(value) => { setRankingLessonId(value); setRankingPage(1) }} /></label>
+            </div>
+            {!rankingLessonId ? <div className="admin-empty">Chọn giáo trình và bài học để xem bảng xếp hạng.</div> : rankingLoading ? <div className="admin-empty">Đang tải bảng xếp hạng…</div> : rankingError ? <div className="admin-empty" role="alert">{rankingError}</div> : ranking && !ranking.items.length ? <div className="admin-empty">Chưa có học viên có tiến độ trong bài học này.</div> : ranking && <>
+              <div className="admin-table-wrap"><table><thead><tr><th>Hạng</th><th>Học viên</th><th>Hoàn thành</th><th>Cập nhật lần cuối</th></tr></thead><tbody>{ranking.items.map((item, index) => <tr key={item.user_id}><td>{(ranking.page - 1) * ranking.pageSize + index + 1}</td><td>{item.profiles?.display_name || 'Học viên'}</td><td>{Number(item.progress_percent)}%</td><td>{formatAdminDateTime(item.updated_at)}</td></tr>)}</tbody></table></div>
+              <AdminPagination page={ranking.page} totalItems={ranking.total} pageSize={ranking.pageSize} onChange={setRankingPage} />
+            </>}
+          </section> : <>
           <div className="admin-panel-title"><div><h2>Bài học</h2><p>Bài học được gom theo giáo trình; mở từng giáo trình để quản lý các bài bên trong.</p></div><button className="admin-primary" onClick={() => openEditor('lessons')} disabled={!textbooks.length}><Plus size={18} /> Thêm bài học</button></div>
           <div className="admin-toolbar admin-toolbar-with-filters">
             <label><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm bài học hoặc giáo trình…" /></label>
@@ -587,6 +623,7 @@ export default function AdminPage() {
           </tbody></table></div>
           <AdminPagination page={lessonPage} totalItems={lessonGroups.length} pageSize={pageSize} onChange={(page) => changePage('lessons', page)} />
           {!filteredLessons.length && <div className="admin-empty">Không tìm thấy bài học phù hợp.</div>}
+          </>}
         </>}
         {tab === 'exercises' && <AdminExercises />}
         {tab === 'community' && <div className="admin-community-workspace">

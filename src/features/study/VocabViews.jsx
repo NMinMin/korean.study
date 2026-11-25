@@ -1,17 +1,17 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ChevronLeft, ChevronRight, Volume2, Star, BookOpen, Headphones, Mic, Sparkles,
-  BookMarked, Lightbulb, CheckCircle2, RotateCcw, Plus, XCircle, ArrowLeft, ArrowRight,
-  Play, RotateCw, Check, Link2, Image as ImageIcon, NotebookPen,
+  BookMarked, CheckCircle2, RotateCcw, Plus, XCircle,
+  Play, Link2, Image as ImageIcon, NotebookPen,
   AlertTriangle, Bot, Flame, MessageCircle, MessageSquare, PencilLine, Settings, Target, Type, Lock, Search
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { speakKo, playVocabularyAudio, playIncorrectSound, playCelebrationSound } from '../../services/audioService';
+import { speakKo, playVocabularyAudio, playIncorrectSound } from '../../services/audioService';
 import { renderKo } from '../../utils/textUtils';
 import { todayStr } from '../../utils/streakUtils';
-import { FcBunny, SwBunnyEmpty, MiniBear } from '../../components/common/Mascots';
+import { FcBunny, SwBunnyEmpty } from '../../components/common/Mascots';
 import { Bar, ProgressIcon } from '../../components/common/ProgressBar';
-import { VOCAB_SAMPLE, GRAMMAR_SAMPLE, SHADOW_LINES, FALLBACK_LESSONS, DiamondIcon, UserGemCount, UserXpCount, UserStreakCount } from '../../data/fallbackData';
+import { VOCAB_SAMPLE, GRAMMAR_SAMPLE, FALLBACK_LESSONS, DiamondIcon, UserGemCount, UserXpCount, UserStreakCount } from '../../data/fallbackData';
 import {
   vocabProgressKey,
   legacyVocabProgressKey,
@@ -20,7 +20,7 @@ import {
   readScopedProgress,
   saveScopedProgress
 } from '../../services/storageShim';
-import { markRemoteActivityCompleted, saveRemoteActivityProgress } from '../../lib/activityProgress';
+import { saveRemoteActivityProgress } from '../../lib/activityProgress';
 import { ACTIVITIES, loadActivityProgress as loadLessonActivityProgress, mergeVocabStates } from './activityHelpers';
 import { SkillCompletionView } from '../review/ReviewViews';
 import {
@@ -31,8 +31,6 @@ import {
   saveRemoteVocabularyStateForWords,
   saveRemoteFlashcardSession,
 } from '../../lib/vocabularyProgress';
-
-const cleanKo = (text) => String(text || '').replace(/\*\*/g, '').replaceAll('[', '').replaceAll(']', '');
 
 const vocabularyStateDelta = (local = {}, remote = {}, merged = {}) => Object.fromEntries(
   Object.keys(local)
@@ -566,7 +564,7 @@ export function VocabListView({ lesson, userId, onBack, onStudy, onReviewStart, 
     let alive = true;
     (async () => {
       let local = {};
-      try { const res = await readScopedProgress(storageKey, legacyVocabProgressKey(lesson), userId); if (res?.value) local = JSON.parse(res.value); } catch (e) { }
+      try { const res = await readScopedProgress(storageKey, legacyVocabProgressKey(lesson), userId); if (res?.value) local = JSON.parse(res.value); } catch { /* Giữ dữ liệu mặc định khi không đọc được dữ liệu đã lưu. */ }
       const remote = await loadRemoteVocabularyState(lesson, userId);
       const merged = remote ? mergeVocabStates(local, remote) : local;
       if (alive) setProgress(merged);
@@ -668,13 +666,13 @@ export function VocabNotebookView({ lesson, userId, onBack, onReview, vocabulary
     try {
       const res = await readScopedProgress(primaryKey, legacyKey, userId);
       if (res?.value) local = JSON.parse(res.value);
-    } catch (e) { }
+    } catch { /* Giữ dữ liệu mặc định khi không đọc được dữ liệu đã lưu. */ }
 
     if (lesson) {
       try {
         const nbRes = await readScopedProgress(vocabNotebookKey(userId), legacyVocabNotebookKey, userId);
         if (nbRes?.value) local = { ...JSON.parse(nbRes.value), ...local };
-      } catch (e) { }
+      } catch { /* Giữ dữ liệu mặc định khi không đọc được dữ liệu đã lưu. */ }
     }
 
     let remoteList = [];
@@ -727,7 +725,7 @@ export function VocabNotebookView({ lesson, userId, onBack, onReview, vocabulary
       try {
         const remote = await loadRemoteVocabularyState(lesson, userId);
         if (remote) merged = mergeVocabStates(local, remote);
-      } catch (e) { }
+      } catch { /* Giữ dữ liệu mặc định khi không đọc được dữ liệu đã lưu. */ }
     }
 
     setRemoteStarred(remoteList);
@@ -780,7 +778,7 @@ export function VocabNotebookView({ lesson, userId, onBack, onReview, vocabulary
     if (supabase && userId && wordItem?.id) {
       try {
         await supabase.from('vocabulary_bookmarks').delete().eq('user_id', userId).eq('vocabulary_id', wordItem.id);
-      } catch (e) { }
+      } catch { /* Giữ dữ liệu mặc định khi không đọc được dữ liệu đã lưu. */ }
     }
 
     if (wordItem?.id && wordItem?.lessonId && wordItem?.textbookId) {
@@ -945,7 +943,7 @@ export function FlashcardView({ lesson, userId, onBack, onFinish, onProgress, in
           let sessionState = {};
           try {
             sessionState = await loadRemoteFlashcardSession(sessionKey, userId) || {};
-          } catch (e) { }
+          } catch { /* Giữ dữ liệu mặc định khi không đọc được dữ liệu đã lưu. */ }
 
           let remaining = deck
             .map((item, index) => ({ item, index }))
@@ -967,7 +965,7 @@ export function FlashcardView({ lesson, userId, onBack, onFinish, onProgress, in
             setGrammarIdx(Math.min(Math.max(sessionState.grammarIdx, 0), grammar.length - 1));
           }
         }
-      } catch (e) {
+      } catch {
         /* chưa có dữ liệu lưu trước đó — dùng mặc định rỗng */
       } finally {
         if (alive) setLoaded(true);
@@ -1005,7 +1003,7 @@ export function FlashcardView({ lesson, userId, onBack, onFinish, onProgress, in
       } else {
         await saveScopedProgress(storageKey, JSON.stringify(updated));
       }
-    } catch (e) {
+    } catch {
       /* lưu thất bại — tiến trình vẫn hiển thị tạm trong phiên này */
     }
   };
@@ -1167,17 +1165,24 @@ export function FlashcardView({ lesson, userId, onBack, onFinish, onProgress, in
                     <div className="gm-formula">
                       {gram.formula.map((f, i) => (
                         <div key={i} className="gm-formula-row">
-                          <div className="gm-formula-left">
+                          {(f.subject || (f.condition && !["Cách dùng", "Cấu trúc"].includes(f.condition.trim()))) && <div className="gm-formula-left">
                             {f.subject && <span className="gm-formula-subj">{f.subject}</span>}
-                            <span>{f.condition}</span>
-                          </div>
-                          <span className="gm-formula-plus">+</span>
-                          <span className="gm-formula-form" style={{ color: gram.color }} lang="ko">{f.form}</span>
+                            {!["Cách dùng", "Cấu trúc"].includes((f.condition || "").trim()) && <span>{f.condition}</span>}
+                          </div>}
+                          {(f.subject || (f.condition && !["Cách dùng", "Cấu trúc"].includes(f.condition.trim()))) && <span className="gm-formula-plus">+</span>}
+                          <span className="gm-formula-form" lang="ko">{f.form}</span>
                         </div>
                       ))}
                     </div>
                   </div>
 
+                  {!!gram.examples?.length && <div className="fc2-section">
+                    <div className="fc2-sec-title">💬 VÍ DỤ</div>
+                    <div className="gm-examples">{gram.examples.map((example, i) => <div className="gm-example-row" key={i}>
+                      <div className="gm-example-text"><div className="gm-example-ko" lang="ko">{renderKo(example.ko)}</div><div className="gm-example-vi">{example.vi}</div></div>
+                      {example.ko && <button className="gm-example-audio" onClick={() => speakKo(example.ko)} aria-label="Nghe câu ví dụ"><Volume2 size={16} /></button>}
+                    </div>)}</div>
+                  </div>}
                   <div className="fc2-section">
                     <div className="fc2-sec-title">⭐ LƯU Ý</div>
                     <ul className="gm-notes">
@@ -1412,7 +1417,7 @@ export function FlashcardView({ lesson, userId, onBack, onFinish, onProgress, in
 /* ------------------------------------------------------------------ */
 /*  MÀN CHỌN DẠNG BÀI TẬP TỪ VỰNG                                       */
 /* ------------------------------------------------------------------ */
-export function VocabTestSelectView({ lesson, onBack, onPick }) {
+export function VocabTestSelectView({ onBack, onPick }) {
   return (
     <section className="qz-page">
       <div className="fc2-topbar">
