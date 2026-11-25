@@ -15231,12 +15231,3 @@ textarea.fc2-note {
   .fc2-actions-2 .fc2-act-btn { min-height: 48px; }
 }
 
-/* Keep flashcard text sharp on mobile, where 3D layers can blur rendering. */
-@media (max-width: 620px) {
-  .fc2-flip-outer { perspective: none; }
-  .fc2-flip-inner, .fc2-flip-inner.is-flipped { transform: none; transform-style: flat; transition: none; }
-  .fc2-face, .fc2-face.back { transform: none; backface-visibility: visible; }
-  .fc2-flip-inner:not(.is-flipped) > .fc2-face.back,
-  .fc2-flip-inner.is-flipped > .fc2-face.front { visibility: hidden; pointer-events: none; }
-  .fc2-flip-inner.is-flipped > .fc2-face.back { visibility: visible; }
-}
