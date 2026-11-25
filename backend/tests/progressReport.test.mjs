@@ -16,10 +16,10 @@ const progress = [
 supabaseAdmin.rpc = async (name, args) => { assert.equal(name, 'get_curriculum_leaderboard'); assert.deepEqual(args, { p_textbook_id: 'b1', p_page: 1, p_page_size: 100 }); return { data: [{ rank_position: 1, user_id: 'u1', display_name: 'Học viên', xp: 120, streak: 3, total_count: 1 }], error: null } }
 supabaseAdmin.auth.getUser = async () => ({ data: { user: { id: 'admin' } }, error: null })
 supabaseAdmin.from = (table) => {
-  let filtered = progress
+  let filtered = table === 'user_roles' ? [{ user_id: 'u1', profiles: { display_name: 'An' } }, { user_id: 'u2', profiles: { display_name: 'Bình' } }] : table === 'user_textbooks' ? [{ user_id: 'u1', textbook_id: 'b1', profiles: { display_name: 'An' }, textbooks: { title_ko: '한국어' } }] : progress
   const q = {
     select() { return this },
-    eq(key, value) { if (table === 'lesson_progress' && key === 'textbook_id') filtered = progress.filter((row) => row.textbook_id === value); return this },
+    eq(key, value) { if (table === 'lesson_progress' && (key === 'textbook_id' || key === 'user_id')) filtered = filtered.filter((row) => row[key] === value); return this },
     order() { return this },
     maybeSingle() { return Promise.resolve({ data: table === 'profiles' ? { is_locked: false } : { role: 'admin' }, error: null }) },
     range(from, to) { return Promise.resolve({ data: filtered.slice(from, to + 1), count: filtered.length, error: null }) },
@@ -40,6 +40,13 @@ test('admin course summary and paginated export use recorded lesson progress', a
     { id: 'b1', title: '한국어', learners: 2, records: 3, completed: 1, average: 50 },
     { id: 'b2', title: 'Empty', learners: 0, records: 0, completed: 0, average: null },
   ])
+  const learners = await app.inject({ method: 'GET', url: '/v1/admin/reports/learners', headers })
+  assert.equal(learners.json().data.total, 2)
+  const memberships = await app.inject({ method: 'GET', url: '/v1/admin/reports/enrollments', headers })
+  assert.equal(memberships.json().data.items[0].textbook_id, 'b1')
+  const individual = await app.inject({ method: 'GET', url: '/v1/admin/reports/course-progress?userId=u1', headers })
+  assert.equal(individual.json().data[0].learners, 1)
+  assert.equal(individual.json().data[0].average, 75)
   const ranking = await app.inject({ method: 'GET', url: '/v1/admin/reports/leaderboard?textbookId=b1', headers })
   assert.equal(ranking.json().data.items[0].xp, 120)
   assert.equal(ranking.json().data.total, 1)

@@ -197,6 +197,27 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return { data: { items, total: Number(items[0]?.total_count ?? 0), page, pageSize } }
   })
 
+  app.get<{ Querystring: { page?: string } }>('/admin/reports/learners', async (request, reply) => {
+    const page = Math.min(100000, Math.max(1, Math.floor(Number(request.query.page) || 1)))
+    const pageSize = 500
+    const { data, error, count } = await supabaseAdmin.from('user_roles')
+      .select('user_id, profiles(display_name)', { count: 'exact' }).eq('role', 'user')
+      .order('user_id', { ascending: true }).range((page - 1) * pageSize, page * pageSize - 1)
+    if (error) return reply.code(500).send({ code: 'LEARNERS_REPORT_FAILED', message: 'Không thể tải danh sách học viên.', requestId: request.id })
+    return { data: { items: data ?? [], total: count ?? 0, page, pageSize } }
+  })
+
+  app.get<{ Querystring: { page?: string } }>('/admin/reports/enrollments', async (request, reply) => {
+    const page = Math.min(100000, Math.max(1, Math.floor(Number(request.query.page) || 1)))
+    const pageSize = 500
+    const { data, error, count } = await supabaseAdmin.from('user_textbooks')
+      .select('user_id, textbook_id, profiles(display_name), textbooks(title_ko)', { count: 'exact' })
+      .order('user_id', { ascending: true }).order('textbook_id', { ascending: true })
+      .range((page - 1) * pageSize, page * pageSize - 1)
+    if (error) return reply.code(500).send({ code: 'ENROLLMENT_REPORT_FAILED', message: 'Không thể tải danh sách học viên theo giáo trình.', requestId: request.id })
+    return { data: { items: data ?? [], total: count ?? 0, page, pageSize } }
+  })
+
   app.get<{ Querystring: { textbookId?: string; page?: string } }>('/admin/reports/lesson-progress', async (request, reply) => {
     const page = Math.min(100000, Math.max(1, Math.floor(Number(request.query.page) || 1)))
     const pageSize = 500
@@ -209,14 +230,16 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return { data: { items: data ?? [], total: count ?? 0, page, pageSize } }
   })
 
-  app.get('/admin/reports/course-progress', async (request, reply) => {
+  app.get<{ Querystring: { userId?: string } }>('/admin/reports/course-progress', async (request, reply) => {
     const { data: books, error: bookError } = await supabaseAdmin.from('textbooks').select('id, title_ko').order('sort_order')
     if (bookError) return reply.code(500).send({ code: 'COURSE_PROGRESS_FAILED', message: 'Không thể tải tiến độ giáo trình.', requestId: request.id })
     const groups = new Map((books ?? []).map((book) => [book.id, { id: book.id, title: book.title_ko, learners: new Set<string>(), total: 0, records: 0, completed: 0 }]))
     const batchSize = 1000
     for (let offset = 0; ; offset += batchSize) {
-      const { data, error } = await supabaseAdmin.from('lesson_progress').select('user_id, textbook_id, lesson_id, progress_percent')
-        .order('user_id', { ascending: true }).order('lesson_id', { ascending: true }).range(offset, offset + batchSize - 1)
+      let query = supabaseAdmin.from('lesson_progress').select('user_id, textbook_id, lesson_id, progress_percent')
+        .order('user_id', { ascending: true }).order('lesson_id', { ascending: true })
+      if (request.query.userId) query = query.eq('user_id', request.query.userId)
+      const { data, error } = await query.range(offset, offset + batchSize - 1)
       if (error) return reply.code(500).send({ code: 'COURSE_PROGRESS_FAILED', message: 'Không thể tải tiến độ giáo trình.', requestId: request.id })
       for (const row of data ?? []) {
         const group = groups.get(row.textbook_id)

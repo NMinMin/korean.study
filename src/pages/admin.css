@@ -3784,3 +3784,11 @@
   .admin-course-progress-label { align-items: flex-start; }
   .admin-course-progress-meta { justify-content: flex-start; column-gap: 16px; row-gap: 4px; line-height: 1.5; }
 }
+
+@media (max-width: 860px) {
+  .admin-sidebar { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+  .admin-sidebar::-webkit-scrollbar { display: none; }
+  .admin-menu button, .admin-sidebar .admin-theme-toggle, .admin-sidebar .admin-signout { flex: 1 0 44px; }
+}
+.admin-course-progress-tools small { flex-basis: 100%; color: var(--ks-text-847da5, #847da5); font-size: 12px; }
+.admin-curriculum-ranking { margin: 24px 0; }
