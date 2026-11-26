@@ -1,6 +1,7 @@
 import { usePreferences } from '../../contexts/PreferencesContext';
 import { calculateReviewComposite } from './reviewScoring';
 import QuizPreparationLoader from '../../components/common/QuizPreparationLoader';
+import { askStudyAI } from '../../components/chat/StudyChatWidget';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, BookOpen, Sparkles, Target, RotateCcw, CheckCircle2,
@@ -770,7 +771,29 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
       setPicked(opt);
       if (opt.correct) playCorrectSound();
       else playIncorrectSound();
-      const answer = { correct: opt.correct, category: q.category, key: q.key, label: q.label };
+      const questionText = q.type === "listening"
+        ? `Nghe hiểu: "${q.prompt || q.label || ""}"`
+        : q.type === "grammar"
+          ? (q.question || `Chọn công thức đúng của ngữ pháp "${q.prompt}"`)
+          : q.type === "translate"
+            ? `Từ nào có nghĩa: "${q.prompt}"?`
+            : q.type === "dialogue"
+              ? `Câu tiếp theo sau: "${q.prompt}" là gì?`
+              : q.prompt;
+      const correctOpt = q.options.find((o) => o.correct);
+      const chosenText = q.type === "image" ? (opt.label || q.label || "Hình đã chọn") : (opt.text || "");
+      const correctText = q.type === "image" ? (correctOpt?.label || q.label || "Hình đúng") : (correctOpt?.text || "");
+      const answer = {
+        correct: opt.correct,
+        category: q.category,
+        key: q.key,
+        label: q.label,
+        type: q.type,
+        questionText,
+        chosenText,
+        correctText,
+        correctExplain: q.correctExplain || "",
+      };
       const updatedAnswers = [...answers, answer];
       setAnswers(updatedAnswers);
       if (opt.correct) {
@@ -1126,6 +1149,8 @@ export function ReviewQuizView({ lesson, userId, difficulty, mode, seed, vocabul
 export function ReviewResultView({ answers, writingResults, elapsedMs, difficulty, reflexResults, mode, onRetry, onChangeSet, onHome }) {
   const { t } = usePreferences();
   const [feedback, setFeedback] = useState(null);
+  const wrongAnswersCount = answers.filter((a) => !a.correct).length;
+  const [reviewFilter, setReviewFilter] = useState(() => (wrongAnswersCount > 0 ? "wrong" : "all"));
   const mcTotal = answers.length;
   const mcCorrect = answers.filter((a) => a.correct).length;
   const mcAccuracy = mcTotal ? mcCorrect / mcTotal : 1;
@@ -1261,8 +1286,72 @@ export function ReviewResultView({ answers, writingResults, elapsedMs, difficult
               <p className="rv-writing-review-q">{renderKo(w.instruction)}</p>
               <p className="rv-writing-review-a" lang="ko">"{w.answer}"</p>
               <div className="rv-writing-review-score">{w.score}/100</div>
+              <button
+                type="button"
+                className="rv-ask-ai-btn"
+                onClick={() => askStudyAI({
+                  prompt: 'Nhận xét chi tiết giúp mình câu tiếng Hàn này và gợi ý cách viết tự nhiên hơn nhé.',
+                  contextLabel: `Câu viết #${i + 1}`,
+                  questionContext: `Yêu cầu: ${String(w.instruction || '').replace(/\*\*/g, '')}\nBài viết của học viên: ${w.answer}\nĐiểm: ${w.score}/100\nLỗi AI ghi nhận: ${w.errors || 'Không có'}\nCâu gợi ý: ${w.naturalVersion || ''}`,
+                })}
+              >
+                <Sparkles size={13} /> Hỏi AI
+              </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {answers.length > 0 && (
+        <div className="rv-review-list">
+          <div className="rv-review-list-head">
+            <div className="rv-types-title"><BookOpen size={14} color="#7C6FE4" /> Xem lại câu làm bài</div>
+            <div className="rv-review-filter">
+              {wrongAnswersCount > 0 && (
+                <button
+                  type="button"
+                  className={reviewFilter === "wrong" ? "active" : ""}
+                  onClick={() => setReviewFilter("wrong")}
+                >
+                  Câu sai ({wrongAnswersCount})
+                </button>
+              )}
+              <button
+                type="button"
+                className={reviewFilter === "all" ? "active" : ""}
+                onClick={() => setReviewFilter("all")}
+              >
+                Tất cả ({answers.length})
+              </button>
+            </div>
+          </div>
+          {answers
+            .map((item, idx) => ({ ...item, idx }))
+            .filter((item) => (reviewFilter === "wrong" ? !item.correct : true))
+            .map((item) => (
+              <div key={item.idx} className={`rv-review-item ${item.correct ? "ok" : "wrong"}`}>
+                <div className="rv-review-item-body">
+                  <strong>
+                    {item.correct ? "✅" : "❌"} Câu {item.idx + 1}: {item.questionText || item.label}
+                  </strong>
+                  <div className="rv-review-item-meta">
+                    {item.chosenText && <span>Bạn chọn: <b>{item.chosenText}</b></span>}
+                    {item.correctText && <span>Đáp án đúng: <b>{item.correctText}</b></span>}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="rv-ask-ai-btn"
+                  onClick={() => askStudyAI({
+                    prompt: 'Giải thích giúp mình câu này vì sao đáp án đúng là như vậy và cách nhớ nhé.',
+                    contextLabel: `Câu ${item.idx + 1} (${item.label || 'Ôn tập'})`,
+                    questionContext: `Câu hỏi: ${item.questionText || item.label}\nĐáp án học viên chọn: ${item.chosenText || 'Chưa rõ'}\nĐáp án đúng: ${item.correctText || item.label}\nKết quả: ${item.correct ? 'Đúng' : 'Sai'}${item.correctExplain ? `\nGhi chú có sẵn: ${item.correctExplain}` : ''}`,
+                  })}
+                >
+                  <Sparkles size={13} /> Hỏi AI
+                </button>
+              </div>
+            ))}
         </div>
       )}
 

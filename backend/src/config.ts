@@ -13,6 +13,8 @@ const schema = z.object({
   SPEECH_TO_TEXT_URL: z.string().url().default('https://speech-to-text-hy3k.onrender.com/transcribe'),
   GROQ_GRADER_URL: z.string().url(),
   GROQ_GRADER_MODEL: z.string().min(1).default('openai/gpt-oss-20b'),
+  GEMINI_API_KEY: z.string().min(1).optional(),
+  AI_KEY_ENCRYPTION_SECRET: z.string().min(16).optional(),
   SMTP_FROM_EMAIL: z.string().email().optional(),
   SMTP_HOST: z.string().min(1).optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(587),

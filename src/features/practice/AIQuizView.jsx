@@ -1,4 +1,5 @@
 import QuizPreparationLoader from '../../components/common/QuizPreparationLoader';
+import { askStudyAI } from '../../components/chat/StudyChatWidget';
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, ChevronLeft, ChevronRight, RotateCcw, Sparkles, XCircle } from 'lucide-react';
 import { requestAIJson } from '../../services/aiService';
@@ -312,7 +313,7 @@ export default function AIQuizView({ lesson, vocabulary = [], grammar = [], onBa
           <span className="rv-tag-type ai">HOÀN THÀNH BỘ {setNumber}</span>
           <h2>{correctCount}/{questions.length} câu đúng</h2>
           <p>{correctCount === questions.length ? 'Xuất sắc! Bạn đã nắm chắc kiến thức của bài.' : 'Bạn có thể tạo một bộ mới để luyện thêm với ngữ cảnh khác.'}</p>
-          <div className="ai-quiz-result-actions"><button className="fc-nav-btn" onClick={onBack}><ChevronLeft size={17} /> Về bài học</button>{wrongQuestions.length > 0 && <button className="fc-nav-btn" onClick={reviewMistakes}><RotateCcw size={17} /> Ôn {wrongQuestions.length} câu sai</button>}<button className="rv-start-btn" onClick={() => void loadSet()}><Sparkles size={17} /> AI tạo bộ mới</button></div>
+          <div className="ai-quiz-result-actions"><button className="fc-nav-btn" onClick={onBack}><ChevronLeft size={17} /> Về bài học</button>{wrongQuestions.length > 0 && <button className="fc-nav-btn" onClick={reviewMistakes}><RotateCcw size={17} /> Ôn {wrongQuestions.length} câu sai</button>}{wrongQuestions.length > 0 && <button className="rv-ask-ai-btn" onClick={() => askStudyAI({ prompt: 'Giải thích giúp mình các câu mình vừa làm sai trong lượt luyện tập này nhé.', contextLabel: `${wrongQuestions.length} câu sai · AI luyện tập`, questionContext: wrongQuestions.slice(0, 5).map((q, idx) => `Câu ${idx + 1}: ${q.question}\nĐáp án đúng: ${q.options?.[q.correctIndex] || ''}\nGiải thích: ${q.explanation || ''}`).join('\n\n') })}><Sparkles size={15} /> Hỏi AI câu sai</button>}<button className="rv-start-btn" onClick={() => void loadSet()}><Sparkles size={17} /> AI tạo bộ mới</button></div>
         </div>
       ) : currentQuestion && (
         <div className="rv-quiz-card">
@@ -339,6 +340,17 @@ export default function AIQuizView({ lesson, vocabulary = [], grammar = [], onBa
             <div className={`rv-feedback ${picked === currentQuestion.correctIndex ? 'ok' : 'wrong'}`}>
               <span className="rv-feedback-face">{picked === currentQuestion.correctIndex ? '🐰' : '🤔'}</span>
               <span><b>{picked === currentQuestion.correctIndex ? 'Chính xác!' : 'Chưa đúng.'}</b> {currentQuestion.explanation}</span>
+              <button
+                type="button"
+                className="rv-ask-ai-btn"
+                onClick={() => askStudyAI({
+                  prompt: 'Giải thích chi tiết hơn giúp mình câu này và cách phân biệt các phương án nhé.',
+                  contextLabel: `Câu ${index + 1} · AI luyện tập`,
+                  questionContext: `Câu hỏi: ${currentQuestion.question}\nCác lựa chọn: ${(currentQuestion.options || []).map((opt, idx) => `${String.fromCharCode(65 + idx)}. ${opt}`).join(' | ')}\nBạn chọn: ${currentQuestion.options?.[picked] || ''}\nĐáp án đúng: ${currentQuestion.options?.[currentQuestion.correctIndex] || ''}\nGiải thích: ${currentQuestion.explanation || ''}`,
+                })}
+              >
+                <Sparkles size={13} /> Hỏi AI thêm
+              </button>
               {picked !== currentQuestion.correctIndex
                 ? <button className="rv-next-btn" onClick={next}>{index + 1 >= questions.length ? 'Xem kết quả' : 'Câu tiếp theo'} <ChevronRight size={16} /></button>
                 : <small className="ai-quiz-auto-next">{index + 1 >= questions.length ? 'Đang mở kết quả…' : 'Đang chuyển sang câu tiếp theo…'}</small>}

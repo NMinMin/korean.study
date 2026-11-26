@@ -99,6 +99,7 @@ import {
 
 // Auth
 import AuthView, { profileStorageKey } from './features/auth/AuthView';
+import StudyChatWidget from './components/chat/StudyChatWidget';
 
 const ROOT_PAGE_META = {
   'curriculum-hub': ['Giáo trình', 'Quản lý giáo trình của tôi và tiếp tục lộ trình đang học.'],
@@ -117,6 +118,11 @@ const ACTIVE_STUDY_VIEWS = new Set([
   'flashcards-grammar', 'nguphap-book', 'shadowing', 'dictation', 'review-quiz',
   'study-custom-lesson', 'test-custom-lesson', 'aiquiz', 'vocab-test-fillblank',
   'vocab-test-match', 'vocab-test-image',
+]);
+
+const EXAM_LOCKED_VIEWS = new Set([
+  'review-quiz', 'test-custom-lesson', 'vocab-schedule-quiz',
+  'vocab-test-fillblank', 'vocab-test-match', 'vocab-test-image',
 ]);
 
 export default function KoreanStudyDashboard({ authenticatedProfile = null, onSignOut = null }) {
@@ -1107,6 +1113,15 @@ export default function KoreanStudyDashboard({ authenticatedProfile = null, onSi
               />
             )}
           </main>
+          <StudyChatWidget
+            userId={profile?.id}
+            activeView={view}
+            textbookTitle={activeTextbookTitle}
+            lesson={selectedLesson}
+            vocabulary={lessonVocabulary}
+            grammar={lessonGrammar}
+            disabled={EXAM_LOCKED_VIEWS.has(view)}
+          />
         </div>
       </GemBalanceContext.Provider>
     </UserStatsContext.Provider>
