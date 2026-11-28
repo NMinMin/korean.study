@@ -105,12 +105,7 @@ export { correctSoundUrl };
 
 export function playVocabularyAudio(word) {
   if (!word) return;
-  if (word.audio) {
-    try {
-      const audio = new Audio(word.audio);
-      audio.play().catch(() => speakKo(word.word || word));
-      return;
-    } catch (e) { }
-  }
-  speakKo(word.word || word);
+  const text = typeof word === 'string' ? word : (word.word || word.korean || word.prompt_ko || '');
+  if (!text) return;
+  speakKo(text);
 }

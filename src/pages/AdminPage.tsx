@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
-import { adminApi } from '../lib/adminApi'
+import { adminApi, clearAdminApiCache, hasAdminApiCache } from '../lib/adminApi'
 import { downloadExcel } from '../lib/excelExport'
 import { buildProgressExportRows } from '../lib/progressReport'
 import { supabase } from '../lib/supabase'
@@ -73,6 +73,7 @@ export function AdminSelect({ value, options, onChange, label, searchable = fals
     return () => document.removeEventListener('pointerdown', close)
   }, [])
   const move = (direction: number) => {
+    if (!options.length) return
     const index = Math.max(0, options.findIndex((option) => option.value === value))
     onChange(options[(index + direction + options.length) % options.length].value)
   }
@@ -117,8 +118,10 @@ export default function AdminPage() {
   const [rankingDetail, setRankingDetail] = useState<LessonRanking['items'][number] | null>(null)
   const [courseProgress, setCourseProgress] = useState<CourseProgress[] | null>(null)
   const [courseProgressError, setCourseProgressError] = useState('')
+  const [statsTab, setStatsTab] = useState<'progress' | 'curriculum-ranking' | 'lesson-ranking'>('progress')
   const [progressBookId, setProgressBookId] = useState('all')
   const [progressUserId, setProgressUserId] = useState('all')
+  const [courseRankingBookId, setCourseRankingBookId] = useState('')
   const [courseRanking, setCourseRanking] = useState<CurriculumRankingPage | null>(null)
   const [courseRankingPage, setCourseRankingPage] = useState(1)
   const [courseRankingError, setCourseRankingError] = useState('')
@@ -166,7 +169,18 @@ export default function AdminPage() {
     const sequence = ++loadSequence.current
     const cachedDashboard = tab === 'dashboard' ? dashboardCache.current[range] : undefined
     if (cachedDashboard) setDashboard(cachedDashboard)
-    setLoading(!cachedDashboard); setError('')
+    const tabCached = tab === 'dashboard'
+      ? Boolean(cachedDashboard) || hasAdminApiCache(`/dashboard?days=${range}`)
+      : tab === 'textbooks'
+      ? hasAdminApiCache('/textbooks')
+      : tab === 'lessons' || tab === 'statistics'
+      ? hasAdminApiCache('/textbooks') && hasAdminApiCache('/lessons')
+      : tab === 'users'
+      ? hasAdminApiCache('/users')
+      : tab === 'community'
+      ? hasAdminApiCache('/community')
+      : true
+    setLoading(!tabCached); setError('')
     try {
       if (tab === 'dashboard') {
         const data = await adminApi<DashboardData>(`/dashboard?days=${range}`)
@@ -192,9 +206,26 @@ export default function AdminPage() {
     finally { if (sequence === loadSequence.current) setLoading(false) }
   }, [range, tab])
   useEffect(() => { void load(); return () => { loadSequence.current += 1 } }, [load])
+  useEffect(() => { setSearch('') }, [tab])
 
   useEffect(() => {
-    if (tab !== 'statistics' || !rankingLessonId) return
+    if (tab !== 'statistics' || courseRankingBookId) return
+    const firstBookId = textbooks[0]?.id || courseProgress?.[0]?.id || ''
+    if (firstBookId) setCourseRankingBookId(firstBookId)
+  }, [tab, courseRankingBookId, textbooks, courseProgress])
+
+  useEffect(() => {
+    if (tab !== 'statistics' || !textbooks.length || rankingBookId) return
+    const firstBookId = textbooks.find((book) => lessons.some((lesson) => lesson.textbook_id === book.id))?.id || textbooks[0].id
+    const firstLessonId = lessons
+      .filter((lesson) => lesson.textbook_id === firstBookId)
+      .sort((a, b) => a.lesson_number - b.lesson_number)[0]?.id || ''
+    setRankingBookId(firstBookId)
+    setRankingLessonId(firstLessonId)
+  }, [tab, textbooks, lessons, rankingBookId])
+
+  useEffect(() => {
+    if (tab !== 'statistics' || statsTab !== 'lesson-ranking' || !rankingLessonId) return
     let active = true
     setRankingLoading(true)
     setRankingError('')
@@ -204,7 +235,7 @@ export default function AdminPage() {
       .catch((cause) => { if (active) setRankingError(cause instanceof Error ? cause.message : 'Không thể tải bảng xếp hạng.') })
       .finally(() => { if (active) setRankingLoading(false) })
     return () => { active = false }
-  }, [tab, rankingLessonId, rankingPage])
+  }, [tab, statsTab, rankingLessonId, rankingPage])
 
   useEffect(() => {
     if (tab !== 'statistics') return
@@ -218,15 +249,15 @@ export default function AdminPage() {
   }, [tab, progressUserId])
 
   useEffect(() => {
-    if (tab !== 'statistics' || progressBookId === 'all') return
+    if (tab !== 'statistics' || statsTab !== 'curriculum-ranking' || !courseRankingBookId) return
     let active = true
     setCourseRanking(null); setCourseRankingError(''); setCourseRankingLoading(true)
-    adminApi<CurriculumRankingPage>(`/reports/leaderboard?textbookId=${encodeURIComponent(progressBookId)}&page=${courseRankingPage}`)
+    adminApi<CurriculumRankingPage>(`/reports/leaderboard?textbookId=${encodeURIComponent(courseRankingBookId)}&page=${courseRankingPage}`)
       .then((data) => { if (active) setCourseRanking(data) })
       .catch((cause) => { if (active) setCourseRankingError(cause instanceof Error ? cause.message : 'Không thể tải bảng xếp hạng giáo trình.') })
       .finally(() => { if (active) setCourseRankingLoading(false) })
     return () => { active = false }
-  }, [tab, progressBookId, courseRankingPage])
+  }, [tab, statsTab, courseRankingBookId, courseRankingPage])
 
   useEffect(() => {
     if (tab !== 'statistics') return
@@ -269,7 +300,7 @@ export default function AdminPage() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'content_reports' }, () => {
         setDashboard((current) => current ? { ...current, pendingReports: current.pendingReports + 1 } : current)
         playEffect(notificationSoundUrl)
-        if (tab === 'community') void adminApi<CommunityData>('/community').then(setCommunity).catch(() => undefined)
+        if (tab === 'community') void adminApi<CommunityData>('/community', { bypassCache: true }).then(setCommunity).catch(() => undefined)
       })
       .subscribe()
     return () => { void supabase?.removeChannel(channel) }
@@ -281,7 +312,7 @@ export default function AdminPage() {
       await adminApi(`/${kind}/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) })
       if (kind === 'textbooks') setTextbooks((items) => items.map((item) => item.id === id ? { ...item, status } : item))
       else setLessons((items) => items.map((item) => item.id === id ? { ...item, status } : item))
-      await refreshDashboard()
+      void refreshDashboard().catch(() => undefined)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể cập nhật.') }
     finally { setActionBusy('') }
   }
@@ -292,7 +323,7 @@ export default function AdminPage() {
       await adminApi(`/users/${id}/role`, { method: 'PATCH', body: JSON.stringify({ role }) })
       setUsers((items) => items.map((item) => item.id === id ? { ...item, role } : item))
       setSelectedUserDetail((cur) => cur && cur.id === id ? { ...cur, role } : cur)
-      await refreshDashboard()
+      void refreshDashboard().catch(() => undefined)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể cập nhật vai trò.') }
     finally { setActionBusy('') }
   }
@@ -313,7 +344,7 @@ export default function AdminPage() {
       await adminApi(`/users/${user.id}/lock`, { method: 'PATCH', body: JSON.stringify({ locked }) })
       setUsers((items) => items.map((item) => item.id === user.id ? { ...item, is_locked: locked, locked_at: locked ? new Date().toISOString() : undefined } : item))
       setSelectedUserDetail((cur) => cur && cur.id === user.id ? { ...cur, is_locked: locked, locked_at: locked ? new Date().toISOString() : undefined } : cur)
-      await refreshDashboard()
+      void refreshDashboard().catch(() => undefined)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể cập nhật trạng thái tài khoản.') }
     finally { setActionBusy('') }
   }
@@ -325,7 +356,9 @@ export default function AdminPage() {
       setDraft({ slug: book?.slug || '', titleKo: book?.title_ko || '', titleVi: book?.title_vi || '', description: book?.description || '', sortOrder: String(book?.sort_order ?? textbooks.length), status: book?.status || 'draft' })
     } else {
       const lesson = item as Lesson | undefined
-      setDraft({ textbookId: lesson?.textbook_id || textbooks[0]?.id || '', lessonNumber: String(lesson?.lesson_number ?? lessons.length + 1), titleKo: lesson?.title_ko || '', titleVi: lesson?.title_vi || '', status: lesson?.status || 'draft' })
+      const defaultTextbookId = lesson?.textbook_id || (lessonTextbookFilter !== 'all' ? lessonTextbookFilter : textbooks[0]?.id || '')
+      const nextLessonNumber = Math.max(0, ...lessons.filter((entry) => entry.textbook_id === defaultTextbookId).map((entry) => entry.lesson_number)) + 1
+      setDraft({ textbookId: defaultTextbookId, lessonNumber: String(lesson?.lesson_number ?? nextLessonNumber), titleKo: lesson?.title_ko || '', titleVi: lesson?.title_vi || '', status: lesson?.status || 'draft' })
     }
   }
 
@@ -338,7 +371,7 @@ export default function AdminPage() {
         ? { slug: draft.slug, titleKo: draft.titleKo, titleVi: draft.titleVi, description: draft.description, sortOrder: Number(draft.sortOrder) || 0, status: draft.status }
         : { textbookId: draft.textbookId, lessonNumber: Number(draft.lessonNumber), titleKo: draft.titleKo, titleVi: draft.titleVi, status: draft.status }
       await adminApi(`/${editor.kind}${editor.id ? `/${editor.id}` : ''}`, { method: editor.id ? 'PATCH' : 'POST', body: JSON.stringify(body) })
-      setEditor(null); await Promise.all([load(), refreshDashboard()])
+      setEditor(null); await load(); void refreshDashboard().catch(() => undefined)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể lưu dữ liệu.') }
     finally { setSaving(false) }
   }
@@ -353,7 +386,7 @@ export default function AdminPage() {
     })
     if (!accepted) return
     setActionBusy(kind === 'textbooks' ? 'Đang xóa giáo trình…' : 'Đang xóa bài học…')
-    try { await adminApi(`/${kind}/${item.id}`, { method: 'DELETE' }); await Promise.all([load(), refreshDashboard()]) }
+    try { await adminApi(`/${kind}/${item.id}`, { method: 'DELETE' }); await load(); void refreshDashboard().catch(() => undefined) }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể xóa dữ liệu.') }
     finally { setActionBusy('') }
   }
@@ -616,20 +649,19 @@ export default function AdminPage() {
   }
 
   const exportCurriculumRanking = async () => {
-    if (progressBookId === 'all') return
+    if (!courseRankingBookId) return
     setExporting('curriculum-ranking'); setError('')
     try {
       const rows: CurriculumRankingPage['items'] = []
       let page = 1
       let total = 0
       do {
-        const params = new URLSearchParams({ page: String(page) })
-        if (progressBookId !== 'all') params.set('textbookId', progressBookId)
+        const params = new URLSearchParams({ page: String(page), textbookId: courseRankingBookId })
         const result = await adminApi<CurriculumRankingPage>(`/reports/leaderboard?${params}`)
         rows.push(...result.items); total = result.total; page += 1
         if (!result.items.length && rows.length < total) throw new Error('Không thể tải đầy đủ bảng xếp hạng. Vui lòng thử lại.')
       } while (rows.length < total)
-      const bookTitle = progressBookId === 'all' ? 'Tất cả giáo trình' : courseProgress?.find((course) => course.id === progressBookId)?.title || ''
+      const bookTitle = textbooks.find((book) => book.id === courseRankingBookId)?.title_ko || courseProgress?.find((course) => course.id === courseRankingBookId)?.title || ''
       await downloadExcel('xep-hang-giao-trinh.xlsx', [
         ['Hạng', 'Mã học viên', 'Học viên', 'Giáo trình', 'XP', 'Chuỗi ngày', 'Cập nhật'],
         ...rows.map((item) => [Number(item.rank_position), item.user_id, item.display_name || 'Học viên', bookTitle, Number(item.xp), Number(item.streak), item.updated_at || '']),
@@ -682,7 +714,7 @@ export default function AdminPage() {
       </nav>
       <div className="admin-account"><div className="admin-avatar">{(profile?.displayName || 'A').slice(0, 1).toUpperCase()}</div><div><b>{profile?.displayName || 'Quản trị viên'}</b><small>Quản trị viên</small></div></div>
       <button type="button" className="admin-theme-toggle" aria-label="Chuyển giao diện sáng/tối" title="Chuyển giao diện sáng/tối" onClick={() => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark')}><Sun className="admin-theme-sun" size={18} /><Moon className="admin-theme-moon" size={18} /><span>Sáng / Tối</span></button>
-      <button className="admin-signout" onClick={() => void signOut()}><LogOut size={18} /><span>Đăng xuất</span></button>
+      <button className="admin-signout" onClick={() => { clearAdminApiCache(); void signOut() }}><LogOut size={18} /><span>Đăng xuất</span></button>
     </aside>
     <main className="admin-page">
       {tab === 'dashboard' ? <header className="admin-header admin-welcome"><div className="admin-welcome-avatar">{(profile?.displayName || 'A').slice(0, 1).toUpperCase()}</div><div className="admin-welcome-copy"><span className="admin-kicker">KOREAN STUDY ADMIN</span><h1>Chào {profile?.displayName || 'Quản trị viên'}! <span>👋</span></h1><p>Chúc bạn một ngày quản lý hệ thống thật hiệu quả.</p><div className="admin-welcome-chips"><span><Users size={17} /><b>{dashboard?.activeUsers || 0}</b> học viên hoạt động</span><span><ShieldCheck size={17} /> Hệ thống an toàn</span></div></div><button type="button" className="admin-report-bell" aria-label={`${dashboard?.pendingReports || 0} báo cáo đang chờ xử lý`} onClick={() => setTab('community')}><Bell size={27}/>{Boolean(dashboard?.pendingReports) && <><i /><b>{dashboard?.pendingReports}</b></>}</button></header> : <header className="admin-header"><div><span className="admin-kicker">KOREAN STUDY ADMIN</span><h1>{tab === 'textbooks' ? 'Quản lý giáo trình' : tab === 'lessons' ? 'Quản lý bài học' : tab === 'statistics' ? 'Thống kê học tập' : tab === 'exercises' ? 'Quản lý bài tập' : tab === 'community' ? 'Quản lý cộng đồng' : 'Quản lý người dùng'}</h1><p>Dữ liệu và quyền quản trị được xử lý an toàn qua backend.</p></div></header>}
@@ -710,39 +742,98 @@ export default function AdminPage() {
           {!filteredTextbooks.length && <div className="admin-empty">Không tìm thấy giáo trình phù hợp.</div>}
         </>}
         {tab === 'statistics' && <section className="admin-lesson-ranking">
-          <article className="admin-course-progress-report">
-            <div className="admin-card-heading"><div><h3>Tiến độ chung theo giáo trình</h3><p>Trung bình tính trên các bài đã ghi nhận tiến độ; bài chưa học không được tính. File tiến độ gồm tất cả học viên, không phụ thuộc bộ lọc.</p></div></div>
-            <div className="admin-course-progress-tools">
-              <AdminSelect searchable searchPlaceholder="Tìm học viên…" value={progressUserId} label="Chọn học viên xem tiến độ" options={[{ value: 'all', label: 'Tất cả học viên' }, ...reportLearners.map((learner) => ({ value: learner.user_id, label: `${learner.profiles?.display_name || 'Học viên'} · ${learner.user_id.slice(0, 8)}` }))]} onChange={setProgressUserId} />
-              <AdminSelect value={progressBookId} label="Chọn giáo trình xem tiến độ và xuất xếp hạng" options={[{ value: 'all', label: 'Tất cả giáo trình' }, ...(courseProgress || []).map((course) => ({ value: course.id, label: course.title }))]} onChange={(value) => { setProgressBookId(value); setCourseRankingPage(1); setCourseRanking(null) }} />
-              <button type="button" onClick={() => void exportProgress()} disabled={!!exporting || !courseProgress}><Download size={16} /> {exporting === 'progress' ? 'Đang xuất…' : 'Xuất tiến độ Excel'}</button>
-              <button type="button" onClick={() => void exportCurriculumRanking()} disabled={!!exporting || !courseProgress || progressBookId === 'all'}><Download size={16} /> {exporting === 'curriculum-ranking' ? 'Đang xuất…' : 'Xuất xếp hạng Excel'}</button>
-              {progressBookId === 'all' && <small>Chọn một giáo trình để xuất bảng xếp hạng.</small>}
+          <div className="admin-stats-tabs" role="tablist" aria-label="Loại thống kê">
+            <button type="button" role="tab" aria-selected={statsTab === 'progress'} className={statsTab === 'progress' ? 'active' : ''} onClick={() => setStatsTab('progress')}>
+              <BarChart3 size={16} /><span>Tiến độ giáo trình</span>
+            </button>
+            <button type="button" role="tab" aria-selected={statsTab === 'curriculum-ranking'} className={statsTab === 'curriculum-ranking' ? 'active' : ''} onClick={() => setStatsTab('curriculum-ranking')}>
+              <Star size={16} /><span>Xếp hạng giáo trình</span>
+            </button>
+            <button type="button" role="tab" aria-selected={statsTab === 'lesson-ranking'} className={statsTab === 'lesson-ranking' ? 'active' : ''} onClick={() => setStatsTab('lesson-ranking')}>
+              <BookText size={16} /><span>Xếp hạng bài học</span>
+            </button>
+          </div>
+
+          {statsTab === 'progress' && <article className="admin-course-progress-report">
+            <div className="admin-panel-title">
+              <div>
+                <h2>Tiến độ chung theo giáo trình</h2>
+                <p>Trung bình tính trên các bài đã ghi nhận tiến độ. File Excel gồm tất cả học viên.</p>
+              </div>
+              <button type="button" className="admin-primary" onClick={() => void exportProgress()} disabled={!!exporting || !courseProgress}>
+                <Download size={16} /> {exporting === 'progress' ? 'Đang xuất…' : 'Xuất tiến độ Excel'}
+              </button>
+            </div>
+            <div className="admin-ranking-filters">
+              <label>Học viên
+                <AdminSelect searchable searchPlaceholder="Tìm học viên…" value={progressUserId} label="Chọn học viên xem tiến độ" options={[{ value: 'all', label: 'Tất cả học viên' }, ...reportLearners.map((learner) => ({ value: learner.user_id, label: `${learner.profiles?.display_name || 'Học viên'} · ${learner.user_id.slice(0, 8)}` }))]} onChange={setProgressUserId} />
+              </label>
+              <label>Giáo trình
+                <AdminSelect value={progressBookId} label="Lọc theo giáo trình" options={[{ value: 'all', label: 'Tất cả giáo trình' }, ...(courseProgress || []).map((course) => ({ value: course.id, label: course.title }))]} onChange={setProgressBookId} />
+              </label>
             </div>
             {courseProgressError ? <p role="alert">{courseProgressError}</p> : !courseProgress ? <p>Đang tải tiến độ…</p> : !courseProgress.length ? <p>Chưa có giáo trình.</p> : <div className="admin-course-progress-chart" aria-label="Biểu đồ tiến độ trung bình theo giáo trình">{courseProgress.filter((course) => progressBookId === 'all' || course.id === progressBookId).map((course) => <div className="admin-course-progress-item" key={course.id}>
               <div className="admin-course-progress-label"><strong>{course.title}</strong><b>{course.average === null ? 'Chưa có dữ liệu' : `${course.average.toFixed(1)}%`}</b></div>
               <div className="admin-course-progress-track" role="progressbar" aria-label={`Tiến độ trung bình giáo trình ${course.title}`} aria-valuemin={0} aria-valuemax={100} {...(course.average === null ? { 'aria-valuetext': 'Chưa có dữ liệu' } : { 'aria-valuenow': Math.max(0, Math.min(100, course.average)), 'aria-valuetext': `${course.average.toFixed(1)}%` })}><span style={{ width: `${Math.max(0, Math.min(100, course.average ?? 0))}%` }} /></div>
-              <div className="admin-course-progress-meta"><span>{progressUserId === 'all' ? `${course.learners} học viên có tiến độ` : 'Học viên được chọn'}</span><span>{course.completed} bài đã hoàn thành</span></div>
+              <div className="admin-course-progress-meta">
+                <span>{progressUserId === 'all' ? `${course.learners} học viên có tiến độ` : 'Học viên được chọn'}</span>
+                <span>{course.completed} bài đã hoàn thành</span>
+                <button type="button" className="admin-course-rank-link" onClick={() => { setCourseRankingBookId(course.id); setCourseRankingPage(1); setCourseRanking(null); setStatsTab('curriculum-ranking') }}>Xem xếp hạng →</button>
+              </div>
             </div>)}</div>}
-          </article>
-          <section className="admin-curriculum-ranking">
-            <div className="admin-panel-title"><div><h2>Bảng xếp hạng theo giáo trình</h2><p>Xếp theo XP và chuỗi ngày học; chọn giáo trình ở phía trên để xem tất cả các trang.</p></div></div>
-            {progressBookId === 'all' ? <div className="admin-empty">Chọn giáo trình để xem bảng xếp hạng.</div> : courseRankingLoading ? <div className="admin-empty">Đang tải bảng xếp hạng…</div> : courseRankingError ? <div className="admin-empty" role="alert">{courseRankingError}</div> : courseRanking && !courseRanking.items.length ? <div className="admin-empty">Chưa có học viên trong bảng xếp hạng.</div> : courseRanking && <>
+          </article>}
+
+          {statsTab === 'curriculum-ranking' && <section className="admin-curriculum-ranking">
+            <div className="admin-panel-title">
+              <div>
+                <h2>Bảng xếp hạng theo giáo trình</h2>
+                <p>Xếp theo XP và chuỗi ngày học trong giáo trình được chọn.</p>
+              </div>
+              <button type="button" className="admin-primary" onClick={() => void exportCurriculumRanking()} disabled={!courseRankingBookId || !!exporting || courseRankingLoading || !!courseRankingError}>
+                <Download size={16} /> {exporting === 'curriculum-ranking' ? 'Đang xuất…' : 'Xuất xếp hạng Excel'}
+              </button>
+            </div>
+            <div className="admin-ranking-filters is-single">
+              <label>Giáo trình
+                <AdminSelect
+                  value={courseRankingBookId}
+                  label="Chọn giáo trình xem xếp hạng"
+                  options={(textbooks.length ? textbooks.map((book) => ({ value: book.id, label: book.title_ko })) : (courseProgress || []).map((course) => ({ value: course.id, label: course.title })))}
+                  onChange={(value) => { setCourseRankingBookId(value); setCourseRankingPage(1); setCourseRanking(null) }}
+                />
+              </label>
+            </div>
+            {!courseRankingBookId ? <div className="admin-empty">Chưa có giáo trình để hiển thị bảng xếp hạng.</div> : courseRankingLoading ? <div className="admin-empty">Đang tải bảng xếp hạng…</div> : courseRankingError ? <div className="admin-empty" role="alert">{courseRankingError}</div> : courseRanking && !courseRanking.items.length ? <div className="admin-empty">Chưa có học viên trong bảng xếp hạng.</div> : courseRanking && <>
               <div className="admin-table-wrap"><table><thead><tr><th>Hạng</th><th>Học viên</th><th>XP</th><th>Chuỗi ngày</th><th>Cập nhật</th></tr></thead><tbody>{courseRanking.items.map((item) => <tr key={item.user_id}><td>{item.rank_position}</td><td>{item.display_name || 'Học viên'}</td><td>{item.xp}</td><td>{item.streak}</td><td>{formatAdminDateTime(item.updated_at)}</td></tr>)}</tbody></table></div>
               <AdminPagination page={courseRanking.page} totalItems={courseRanking.total} pageSize={courseRanking.pageSize} onChange={setCourseRankingPage} />
             </>}
-          </section>
+          </section>}
 
+          {statsTab === 'lesson-ranking' && <>
             <div className="admin-panel-title"><div><h2>Bảng xếp hạng bài học</h2><p>Xếp theo phần trăm hoàn thành bài học; nếu bằng nhau, ưu tiên thời điểm cập nhật sớm hơn.</p></div><button type="button" className="admin-primary" disabled={!rankingLessonId || !!exporting || rankingLoading || !!rankingError} onClick={() => void exportLessonRanking()}><Download size={16} /> {exporting === 'ranking' ? 'Đang xuất…' : 'Xuất bảng xếp hạng Excel'}</button></div>
             <div className="admin-ranking-filters">
-              <label>Giáo trình<AdminSelect value={rankingBookId} label="Chọn giáo trình" options={[{ value: '', label: 'Chọn giáo trình' }, ...textbooks.map((book) => ({ value: book.id, label: book.title_ko }))]} onChange={(value) => { setRankingBookId(value); setRankingLessonId(''); setRankingPage(1); setRanking(null) }} /></label>
-              <label>Bài học<AdminSelect value={rankingLessonId} label="Chọn bài học" options={[{ value: '', label: 'Chọn bài học' }, ...lessons.filter((lesson) => lesson.textbook_id === rankingBookId).sort((a, b) => a.lesson_number - b.lesson_number).map((lesson) => ({ value: lesson.id, label: `Bài ${lesson.lesson_number} · ${lesson.title_ko}` }))]} onChange={(value) => { setRankingLessonId(value); setRankingPage(1) }} /></label>
+              <label>Giáo trình<AdminSelect value={rankingBookId} label="Chọn giáo trình" options={textbooks.map((book) => ({ value: book.id, label: book.title_ko }))} onChange={(value) => {
+                const firstLessonId = lessons
+                  .filter((lesson) => lesson.textbook_id === value)
+                  .sort((a, b) => a.lesson_number - b.lesson_number)[0]?.id || ''
+                setRankingBookId(value)
+                setRankingLessonId(firstLessonId)
+                setRankingPage(1)
+                setRanking(null)
+              }} /></label>
+              <label>Bài học<AdminSelect value={rankingLessonId} label="Chọn bài học" options={(() => {
+                const bookLessons = lessons.filter((lesson) => lesson.textbook_id === rankingBookId).sort((a, b) => a.lesson_number - b.lesson_number)
+                return bookLessons.length
+                  ? bookLessons.map((lesson) => ({ value: lesson.id, label: `Bài ${lesson.lesson_number} · ${lesson.title_ko}` }))
+                  : [{ value: '', label: 'Chưa có bài học' }]
+              })()} onChange={(value) => { setRankingLessonId(value); setRankingPage(1) }} /></label>
             </div>
-            {!rankingLessonId ? <div className="admin-empty">Chọn giáo trình và bài học để xem bảng xếp hạng.</div> : rankingLoading ? <div className="admin-empty">Đang tải bảng xếp hạng…</div> : rankingError ? <div className="admin-empty" role="alert">{rankingError}</div> : ranking && !ranking.items.length ? <div className="admin-empty">Chưa có học viên có tiến độ trong bài học này.</div> : ranking && <>
+            {!rankingLessonId ? <div className="admin-empty">Giáo trình này chưa có bài học để xem bảng xếp hạng.</div> : rankingLoading ? <div className="admin-empty">Đang tải bảng xếp hạng…</div> : rankingError ? <div className="admin-empty" role="alert">{rankingError}</div> : ranking && !ranking.items.length ? <div className="admin-empty">Chưa có học viên có tiến độ trong bài học này.</div> : ranking && <>
               <div className="admin-table-wrap"><table><thead><tr><th>Hạng</th><th>Học viên</th><th>Hoàn thành</th><th>Cập nhật lần cuối</th><th>Chi tiết</th></tr></thead><tbody>{ranking.items.map((item, index) => <tr key={item.user_id}><td>{(ranking.page - 1) * ranking.pageSize + index + 1}</td><td>{item.profiles?.display_name || 'Học viên'}</td><td>{Number(item.progress_percent)}%</td><td>{formatAdminDateTime(item.updated_at)}</td><td><button type="button" className="admin-skill-detail-button" onClick={() => setRankingDetail(item)}>Xem kỹ năng</button></td></tr>)}</tbody></table></div>
               <AdminPagination page={ranking.page} totalItems={ranking.total} pageSize={ranking.pageSize} onChange={setRankingPage} />
             </>}
-          </section>}
+          </>}
+        </section>}
         {tab === 'lessons' && <>
           <div className="admin-panel-title"><div><h2>Bài học</h2><p>Bài học được gom theo giáo trình; mở từng giáo trình để quản lý các bài bên trong.</p></div><button className="admin-primary" onClick={() => openEditor('lessons')} disabled={!textbooks.length}><Plus size={18} /> Thêm bài học</button></div>
           <div className="admin-toolbar admin-toolbar-with-filters">
@@ -782,7 +873,7 @@ export default function AdminPage() {
               <h2>Quản lý cộng đồng</h2>
               <p>Kiểm duyệt bài viết, bộ từ vựng chia sẻ và xử lý báo cáo vi phạm.</p>
             </div>
-            <button type="button" className="admin-community-refresh" onClick={() => void load()}>
+            <button type="button" className="admin-community-refresh" onClick={() => { clearAdminApiCache('/community'); void load() }}>
               <RotateCcw size={16} /> Làm mới dữ liệu
             </button>
           </div>

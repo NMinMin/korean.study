@@ -241,24 +241,11 @@ export default function VocabReviewQuizView({
   }, [selectedWords, sessionVocabulary]);
 
   // Phát âm từ hiện tại
-  const playWordAudio = (word, audioUrl) => {
+  const playWordAudio = (word, _audioUrl) => {
     if (isPlayingAudio) return;
     setIsPlayingAudio(true);
-    if (audioUrl) {
-      const audio = new Audio(audioUrl);
-      audio.onended = () => setIsPlayingAudio(false);
-      audio.onerror = () => {
-        speakKo(word);
-        setIsPlayingAudio(false);
-      };
-      audio.play().catch(() => {
-        speakKo(word);
-        setIsPlayingAudio(false);
-      });
-    } else {
-      speakKo(word);
-      setTimeout(() => setIsPlayingAudio(false), 900);
-    }
+    speakKo(word);
+    setTimeout(() => setIsPlayingAudio(false), 900);
   };
 
   // Tự động phát âm ở câu hỏi nghe

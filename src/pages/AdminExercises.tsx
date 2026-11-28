@@ -1,5 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
-import { createPortal } from 'react-dom'
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import {
   ArrowRight,
   BookOpen,
@@ -29,23 +28,18 @@ import {
   Star,
   Target,
   Trash2,
+  Upload,
   Volume2,
   X,
 } from 'lucide-react'
-import sunhiPreview from '../assets/voice-previews/sunhi.mp3'
-import injoonPreview from '../assets/voice-previews/injoon.mp3'
-import hyunsuPreview from '../assets/voice-previews/hyunsu.mp3'
 import { adminApi } from '../lib/adminApi'
+import { uploadCloudinaryAsset } from '../lib/cloudinary'
 import { AdminSelect } from './AdminPage'
 import { BlockingLoader } from '../components/common/AppDialog'
 
 type Status = 'draft' | 'published' | 'locked' | 'no_content'
 type Skill = 'vocabulary_grammar' | 'dictation' | 'shadowing' | 'review'
 type VocabularyGrammarKind = 'vocabulary' | 'grammar'
-type TtsVoice =
-  | 'ko-KR-SunHiNeural'
-  | 'ko-KR-InJoonNeural'
-  | 'ko-KR-HyunSuNeural'
 type DialogueLine = { speaker: 'A' | 'B'; ko: string; vi: string }
 type StandardExamLevel = {
   stars: number
@@ -96,8 +90,6 @@ type Draft = {
   grammarExamples: { ko: string; vi: string }[]
   imageUrl: string
   audioUrl: string
-  ttsVoice: TtsVoice
-  ttsSpeed: 0.75 | 1 | 1.25
   examDuration: number
   examVocabCount: number
   examGrammarCount: number
@@ -164,8 +156,6 @@ const emptyDraft: Draft = {
   grammarExamples: [{ ko: '', vi: '' }],
   imageUrl: '',
   audioUrl: '',
-  ttsVoice: 'ko-KR-SunHiNeural',
-  ttsSpeed: 1,
   examDuration: 15,
   examVocabCount: 12,
   examGrammarCount: 2,
@@ -177,23 +167,6 @@ const emptyDraft: Draft = {
   examGrading: 'Chấm theo độ chính xác, đúng ngữ cảnh và khả năng vận dụng. Shadowing đạt khi phát âm từ 80%.',
   examLevels: createStandardExamLevels(),
 }
-
-const ttsVoices: { value: TtsVoice; label: string; gender: 'Nữ' | 'Nam'; description: string; previewUrl?: string }[] = [
-  {
-    value: 'ko-KR-SunHiNeural', gender: 'Nữ', label: 'SunHi',
-    description: 'Tiêu chuẩn, tự nhiên, phổ biến',
-    previewUrl: sunhiPreview,
-  },
-  {
-    value: 'ko-KR-InJoonNeural', gender: 'Nam', label: 'InJoon',
-    description: 'Tiêu chuẩn, rõ ràng, phù hợp giảng dạy',
-    previewUrl: injoonPreview,
-  },
-  { value: 'ko-KR-HyunSuNeural', gender: 'Nam', label: 'HyunSu', description: 'Trẻ trung, tự nhiên', previewUrl: hyunsuPreview },
-]
-
-const voicePreviewCache = new Map<TtsVoice, string>()
-const VOICE_PREVIEW_TEXT = '안녕하세요. 한국어 공부를 함께 시작해 볼까요?'
 
 function asRecord(answer: unknown): Record<string, unknown> {
   return answer && typeof answer === 'object' && !Array.isArray(answer) ? answer as Record<string, unknown> : {}
@@ -239,13 +212,6 @@ function getExerciseSkillMeta(item: Exercise) {
     return { value: 'dictation', label: 'Nghe chép chính tả', icon: Headphones }
   }
   return { value: 'shadowing', label: 'Shadowing', icon: Mic }
-}
-
-function normalizeTtsVoice(value: unknown): TtsVoice {
-  if (ttsVoices.some((voice) => voice.value === value)) return value as TtsVoice
-  if (value === 'ko-KR-HyunsuNeural' || value === 'ko-KR-HyunsuMultilingualNeural') return 'ko-KR-HyunSuNeural'
-  if (value === 'ko-KR-BongJinNeural' || value === 'ko-KR-BongJinNeura' || value === 'ko-KR-GookMinNeural') return 'ko-KR-InJoonNeural'
-  return 'ko-KR-SunHiNeural'
 }
 
 function normalizeCollocations(value: unknown): { ko: string; vi: string }[] {
@@ -300,171 +266,81 @@ export async function deleteStorageAsset(url?: string | null): Promise<void> {
   }
 }
 
-function extractExerciseStorageUrls(item?: Exercise | null): string[] {
-  if (!item) return []
-  const urls: (string | null | undefined)[] = [
-    item.audio_url,
-    item.image_url,
-    item.media_url,
-  ]
-  if (item.answer && typeof item.answer === 'object') {
-    const ans = item.answer as Record<string, any>
-    urls.push(ans.audioUrl, ans.imageUrl, ans.mediaUrl)
-  }
-  return urls.filter((u): u is string => typeof u === 'string' && /api-cloud-u4v8\.onrender\.com\/files\//i.test(u))
-}
-
-async function generateKoreanTts(text: string, voice: TtsVoice, speed: number = 1): Promise<string> {
-  const apiVoice = voice === 'ko-KR-HyunSuNeural' ? 'ko-KR-HyunsuNeural' : voice
-  const data = await adminApi<{ id: string }>('/tts', {
-    method: 'POST',
-    body: JSON.stringify({ text, voice: apiVoice, speed }),
-  })
-  if (!data?.id) throw new Error('Không thể thêm yêu cầu tạo giọng vào hàng chờ.')
-  for (;;) {
-    await new Promise((resolve) => setTimeout(resolve, 10000 + Math.random() * 5000))
-    const job = await adminApi<{ status: string; url?: string; message?: string }>(`/tts/${data.id}`)
-    if (job.status === 'completed' && job.url) return normalizeAssetUrl(job.url)
-    if (job.status === 'failed') throw new Error(job.message || 'Không thể tạo audio phát âm.')
-  }
-}
-
-function VoiceSelect({
-  value,
-  onChange,
-  onPreview,
-  previewing,
+function AudioUploadPanel({
+  audioUrl,
+  fileName,
+  uploading,
+  onSelectFile,
+  onClear,
 }: {
-  value: TtsVoice
-  onChange: (value: TtsVoice) => void
-  onPreview: (value: TtsVoice) => void
-  previewing: boolean
+  audioUrl: string
+  fileName: string
+  uploading: boolean
+  onSelectFile: (file?: File) => void
+  onClear: () => void
 }) {
-  const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState('')
-  const [menuStyle, setMenuStyle] = useState<CSSProperties>({})
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const selected = ttsVoices.find((voice) => voice.value === value) || ttsVoices[0]
-  const filtered = ttsVoices.filter((voice) =>
-    `${voice.gender} ${voice.label} ${voice.description} ${voice.value}`.toLowerCase().includes(query.trim().toLowerCase()),
-  )
+  const [dragging, setDragging] = useState(false)
+  const dragDepthRef = useRef(0)
 
-  useEffect(() => {
-    if (!open) return
-    const positionMenu = () => {
-      const rect = triggerRef.current?.getBoundingClientRect()
-      if (!rect) return
-      const desktop = window.matchMedia('(min-width: 901px)').matches
-      const availableBelow = Math.max(120, window.innerHeight - rect.bottom - 16)
-      const maxHeight = Math.min(280, desktop ? availableBelow : window.innerHeight - 32)
-      const openUp = !desktop && window.innerHeight - rect.bottom < Math.min(300, maxHeight) && rect.top > window.innerHeight - rect.bottom
-      setMenuStyle(openUp
-        ? { left: rect.left, width: rect.width, maxHeight, bottom: window.innerHeight - rect.top + 8, top: 'auto' }
-        : { left: rect.left, width: rect.width, maxHeight, top: rect.bottom + 8, bottom: 'auto' })
-    }
-    positionMenu()
-    window.addEventListener('resize', positionMenu)
-    window.addEventListener('scroll', positionMenu, true)
-    return () => {
-      window.removeEventListener('resize', positionMenu)
-      window.removeEventListener('scroll', positionMenu, true)
-    }
-  }, [open])
-
-  const menu = open && <div className="admin-voice-menu" style={menuStyle} role="listbox">
-    <label className="admin-voice-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm giọng đọc…" autoFocus /></label>
-    {(['Nữ', 'Nam'] as const).map((gender) => {
-      const voices = filtered.filter((voice) => voice.gender === gender)
-      if (!voices.length) return null
-      return <div key={gender} className="admin-voice-group">
-        <div className="admin-voice-group-title">{gender}</div>
-        {voices.map((voice) => <button
-          type="button"
-          key={voice.value}
-          className={`admin-voice-option${voice.value === value ? ' selected' : ''}`}
-          onClick={() => { onChange(voice.value); setOpen(false); setQuery('') }}
-          role="option"
-          aria-selected={voice.value === value}
-        >
-          <span className="admin-voice-check">{voice.value === value && <Check size={14} />}</span>
-          <span className="admin-voice-copy"><strong>{voice.label}</strong><small>{voice.description}</small></span>
-          <span className="admin-voice-item-preview" role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); onPreview(voice.value) }} aria-label={`Nghe thử ${voice.label}`}>
-            {previewing ? <LoaderCircle className="spin" size={14} /> : <Volume2 size={14} />}
-          </span>
-        </button>)}
-      </div>
-    })}
-    {!filtered.length && <div className="admin-voice-empty">Không tìm thấy giọng đọc phù hợp.</div>}
-  </div>
-
-  return <div className={`admin-voice-select${open ? ' open' : ''}`}>
-    <button ref={triggerRef} type="button" className="admin-voice-trigger" onClick={() => setOpen((current) => !current)} aria-expanded={open}>
-      <span><strong>{selected.gender} · {selected.label}</strong><small>{selected.description}</small></span>
-      <ChevronDown size={17} />
-    </button>
-    {menu && createPortal(menu, document.body)}
-  </div>
-}
-
-function TtsPanel({
-  draft,
-  setDraft,
-  previewVoice,
-  previewing,
-  showSpeed = false,
-}: {
-  draft: Draft
-  setDraft: Dispatch<SetStateAction<Draft>>
-  previewVoice: (voice?: TtsVoice) => Promise<void>
-  previewing: boolean
-  showSpeed?: boolean
-}) {
-  return <aside className="admin-tts-panel">
+  return <aside className="admin-tts-panel admin-audio-upload-panel">
     <div className="admin-tts-heading">
       <span className="admin-tts-icon-badge"><Volume2 size={15} /></span>
       <div>
         <strong>Audio mẫu</strong>
-        <small>Tự động tạo khi lưu bài</small>
+        <small>Tải file nghe lên cho học viên</small>
       </div>
     </div>
     <div className="admin-tts-body">
-      <label className="admin-tts-label"><span>Giọng đọc</span>
-        <VoiceSelect
-          value={draft.ttsVoice}
-          onChange={(value) => setDraft((current) => ({ ...current, ttsVoice: value, audioUrl: '' }))}
-          onPreview={(value) => void previewVoice(value)}
-          previewing={previewing}
+      <label
+        className={`admin-audio-dropzone${dragging ? ' is-dragging' : ''}${uploading ? ' is-uploading' : ''}`}
+        onDragEnter={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          dragDepthRef.current += 1
+          setDragging(true)
+        }}
+        onDragOver={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          event.dataTransfer.dropEffect = 'copy'
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+          if (dragDepthRef.current === 0) setDragging(false)
+        }}
+        onDrop={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          dragDepthRef.current = 0
+          setDragging(false)
+          onSelectFile(event.dataTransfer.files?.[0])
+        }}
+      >
+        <span className="admin-audio-dropzone-icon">
+          {uploading ? <LoaderCircle className="spin" size={18} /> : <Upload size={18} />}
+        </span>
+        <strong>{audioUrl ? 'Đổi file nghe' : 'Kéo thả hoặc nhấn để chọn file nghe'}</strong>
+        <small>MP3, WAV, M4A, OGG · tối đa 100 MB</small>
+        <input
+          type="file"
+          accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm,.aac"
+          onChange={(event) => {
+            onSelectFile(event.target.files?.[0])
+            event.target.value = ''
+          }}
         />
       </label>
-      {showSpeed && (
-        <div className="admin-speed-field">
-          <span>Tốc độ đọc</span>
-          <div>
-            {([0.75, 1, 1.25] as const).map((speed) => (
-              <button
-                type="button"
-                key={speed}
-                className={draft.ttsSpeed === speed ? 'active' : ''}
-                onClick={() => setDraft((current) => ({ ...current, ttsSpeed: speed, audioUrl: '' }))}
-              >
-                {speed === 1 ? '1x (chuẩn)' : `${speed}x`}
-              </button>
-            ))}
+      {audioUrl
+        ? <>
+          {fileName && <div className="admin-audio-file-name" title={fileName}><Music size={13} /><span>{fileName}</span></div>}
+          <div className="admin-tts-audio-wrap">
+            <audio className="admin-tts-audio" controls src={audioUrl} />
+            <button type="button" className="admin-tts-audio-clear" title="Xóa file nghe" aria-label="Xóa file nghe" onClick={onClear}><X size={13} /></button>
           </div>
-        </div>
-      )}
-      <button
-        type="button"
-        className="admin-tts-preview"
-        disabled={previewing || !draft.promptKo.trim()}
-        onClick={() => void previewVoice()}
-      >
-        {previewing ? <LoaderCircle className="spin" size={16} /> : <Volume2 size={16} />}
-        {previewing ? 'Đang tạo…' : 'Nghe thử câu này'}
-      </button>
-      {draft.audioUrl
-        ? <div className="admin-tts-audio-wrap"><audio className="admin-tts-audio" controls src={draft.audioUrl} /><button type="button" className="admin-tts-audio-clear" title="Xóa audio, tạo lại khi lưu" onClick={() => { if (draft.audioUrl && !draft.audioUrl.startsWith('blob:')) void deleteStorageAsset(draft.audioUrl); setDraft((cur) => ({ ...cur, audioUrl: '' })) }}><X size={13} /></button></div>
-        : <p className="admin-tts-empty"><Music size={14} /> Chưa có audio · hệ thống sẽ tạo sau khi lưu</p>
+        </>
+        : <p className="admin-tts-empty"><Music size={14} /> Chưa có file nghe · có thể tải lên ngay hoặc bổ sung sau</p>
       }
     </div>
   </aside>
@@ -488,10 +364,9 @@ export default function AdminExercises() {
   const [deleteTarget, setDeleteTarget] = useState<Exercise | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [uploading, setUploading] = useState<'image' | 'audio' | null>(null)
-  const [previewingVoice, setPreviewingVoice] = useState(false)
-  const [playingPreviewVoice, setPlayingPreviewVoice] = useState<TtsVoice | null>(null)
-  const voicePreviewAudioRef = useRef<HTMLAudioElement | null>(null)
   const [pendingImage, setPendingImage] = useState<File | null>(null)
+  const [pendingAudio, setPendingAudio] = useState<File | null>(null)
+  const [pendingAudioName, setPendingAudioName] = useState('')
   const [draggedFormulaIndex, setDraggedFormulaIndex] = useState<number | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [moveDialogOpen, setMoveDialogOpen] = useState(false)
@@ -577,9 +452,20 @@ export default function AdminExercises() {
   const isReview = draft.skillType === 'review'
 
   useEffect(() => {
-    if (isGrammarExercise || isReview) setDraft((current) => current.imageUrl || current.audioUrl ? { ...current, imageUrl: '', audioUrl: '' } : current)
-    if (draft.skillType === 'dictation' || draft.skillType === 'shadowing') setDraft((current) => current.imageUrl ? { ...current, imageUrl: '' } : current)
-  }, [draft.skillType, draft.vocabularyGrammarKind, isGrammarExercise, isReview, isVocabularyExercise])
+    if (isGrammarExercise || isReview) {
+      setPendingImage(null)
+      setPendingAudio(null)
+      setPendingAudioName('')
+      setDraft((current) => current.imageUrl || current.audioUrl ? { ...current, imageUrl: '', audioUrl: '' } : current)
+    } else if (isVocabularyExercise) {
+      setPendingAudio(null)
+      setPendingAudioName('')
+      setDraft((current) => current.audioUrl ? { ...current, audioUrl: '' } : current)
+    } else if (isDictation || isShadowing) {
+      setPendingImage(null)
+      setDraft((current) => current.imageUrl ? { ...current, imageUrl: '' } : current)
+    }
+  }, [draft.skillType, draft.vocabularyGrammarKind, isDictation, isGrammarExercise, isReview, isShadowing, isVocabularyExercise])
 
   const load = async () => {
     try {
@@ -599,6 +485,7 @@ export default function AdminExercises() {
   }
 
   useEffect(() => { void load() }, [])
+  useEffect(() => { setPage(1) }, [book, lesson, skill, search])
 
   const filtered = items.filter((item) =>
     (book === 'all' || item.lessons?.textbook_id === book)
@@ -693,6 +580,8 @@ export default function AdminExercises() {
     setActiveExamLevelTab(0)
     setExamLevelViewMode('detail')
     setPendingImage(null)
+    setPendingAudio(null)
+    setPendingAudioName('')
     setEditing(item || null)
     if (!item) {
       const defaultKind = skill === 'grammar' ? 'grammar' : 'vocabulary'
@@ -701,7 +590,7 @@ export default function AdminExercises() {
         ...emptyDraft,
         skillType: defaultSkillType,
         vocabularyGrammarKind: defaultKind,
-        lessonId: availableLessons[0]?.id || lessons[0]?.id || '',
+        lessonId: lesson !== 'all' ? lesson : availableLessons[0]?.id || lessons[0]?.id || '',
       })
       return
     }
@@ -749,8 +638,6 @@ export default function AdminExercises() {
       grammarExamples: Array.isArray(answer.examples) && answer.examples.length ? answer.examples.map((entry) => { const example = asRecord(entry); return { ko: String(example.ko || ''), vi: String(example.vi || '') } }) : [{ ko: '', vi: '' }],
       imageUrl: item.image_url || item.media_url || '',
       audioUrl: item.audio_url || String(answer.audioUrl || ''),
-      ttsVoice: normalizeTtsVoice(answer.ttsVoice),
-      ttsSpeed: Number(answer.ttsSpeed) === 0.75 || Number(answer.ttsSpeed) === 1.25 ? Number(answer.ttsSpeed) as 0.75 | 1.25 : 1,
       examDuration: Number(answer.durationMinutes) || 15,
       examVocabCount: Number(examCounts.vocabulary) || 12,
       examGrammarCount: Number(examCounts.grammar) || 2,
@@ -779,6 +666,22 @@ export default function AdminExercises() {
     setPendingImage(file)
   }
 
+  const previewAudioUpload = (file?: File) => {
+    if (!file) return
+    const isAudio = file.type.startsWith('audio/') || /\.(mp3|wav|m4a|ogg|webm|aac)$/i.test(file.name)
+    if (!isAudio) return setError('Vui lòng chọn đúng tệp âm thanh (MP3, WAV, M4A, OGG…).')
+    const limit = 100 * 1024 * 1024
+    if (file.size > limit) return setError('File âm thanh không được vượt quá 100 MB.')
+    const previewUrl = URL.createObjectURL(file)
+    setError('')
+    setDraft((current) => {
+      if (current.audioUrl?.startsWith('blob:')) URL.revokeObjectURL(current.audioUrl)
+      return { ...current, audioUrl: previewUrl }
+    })
+    setPendingAudio(file)
+    setPendingAudioName(file.name)
+  }
+
   const buildAnswer = (imageUrl: string, audioUrl: string) => {
     if (isVocabularyExercise) {
       const dialogues = draft.dialogues
@@ -800,7 +703,6 @@ export default function AdminExercises() {
         example: firstDialogue ? { ko: firstDialogue.ko, vi: firstDialogue.vi } : null,
         imageUrl,
         audioUrl,
-        ttsVoice: draft.ttsVoice,
       }
     }
     if (isGrammarExercise) {
@@ -829,84 +731,26 @@ export default function AdminExercises() {
       correct: draft.promptKo.trim(),
       transcript: draft.promptKo.trim(),
       audioUrl,
-      ttsVoice: draft.ttsVoice,
-      ttsSpeed: draft.ttsSpeed,
       note: draft.note.trim(),
       pronunciation: draft.pronunciation.trim(),
-    }
-  }
-
-  useEffect(() => () => {
-    const audio = voicePreviewAudioRef.current
-    if (!audio) return
-    audio.pause()
-    audio.removeAttribute('src')
-    audio.load()
-    voicePreviewAudioRef.current = null
-  }, [])
-
-  const stopVoicePreview = () => {
-    const audio = voicePreviewAudioRef.current
-    if (audio) {
-      audio.pause()
-      audio.currentTime = 0
-      voicePreviewAudioRef.current = null
-    }
-    setPlayingPreviewVoice(null)
-  }
-
-  const previewVoice = async (voice: TtsVoice = draft.ttsVoice) => {
-    if (playingPreviewVoice === voice && voicePreviewAudioRef.current) {
-      stopVoicePreview()
-      return
-    }
-
-    stopVoicePreview()
-    setPreviewingVoice(true)
-    setError('')
-    try {
-      const configuredPreview = ttsVoices.find((item) => item.value === voice)?.previewUrl
-      let audioUrl = configuredPreview ? normalizeAssetUrl(configuredPreview) : voicePreviewCache.get(voice)
-      if (!audioUrl) {
-        audioUrl = await generateKoreanTts(VOICE_PREVIEW_TEXT, voice, 1)
-        voicePreviewCache.set(voice, audioUrl)
-      }
-
-      const audio = new Audio(audioUrl)
-      audio.preload = 'auto'
-      voicePreviewAudioRef.current = audio
-      audio.addEventListener('ended', () => {
-        if (voicePreviewAudioRef.current === audio) voicePreviewAudioRef.current = null
-        setPlayingPreviewVoice(null)
-      }, { once: true })
-      audio.addEventListener('error', () => {
-        if (voicePreviewAudioRef.current === audio) voicePreviewAudioRef.current = null
-        setPlayingPreviewVoice(null)
-        setError('Không tải được file nghe thử. Vui lòng thử lại.')
-      }, { once: true })
-      await audio.play()
-      setPlayingPreviewVoice(voice)
-    } catch (cause) {
-      voicePreviewAudioRef.current = null
-      setPlayingPreviewVoice(null)
-      setError(cause instanceof Error ? cause.message : 'Không thể nghe thử giọng đọc.')
-    } finally {
-      setPreviewingVoice(false)
     }
   }
 
   const save = async () => {
     if (!draft.lessonId || !draft.promptKo.trim()) return setError('Vui lòng chọn bài học và nhập nội dung bài tập.')
     setSaving(true)
-    let ttsWarning = ''
     try {
       let imageUrl = isVocabularyExercise ? draft.imageUrl : ''
-      let audioUrl = isVocabularyExercise || isDictation || isShadowing ? draft.audioUrl : ''
+      let audioUrl = isDictation || isShadowing ? draft.audioUrl : ''
       if (isVocabularyExercise && pendingImage && imageUrl.startsWith('blob:')) {
         setUploading('image')
         imageUrl = await uploadImageToApi(pendingImage)
       }
-      const needsAudio = (isVocabularyExercise || isDictation || isShadowing) && !audioUrl
+      if ((isDictation || isShadowing) && pendingAudio && audioUrl.startsWith('blob:')) {
+        setUploading('audio')
+        const uploaded = await uploadCloudinaryAsset(pendingAudio, 'audio')
+        audioUrl = uploaded.url
+      }
       const body = {
         lessonId: draft.lessonId,
         skillType: draft.skillType,
@@ -921,16 +765,10 @@ export default function AdminExercises() {
         sortOrder: editing?.sort_order ?? 0,
         status: editing?.status ?? 'published',
       }
-      const savedExercise = await adminApi<{ id: string }>(`/exercises${editing?.id ? `/${editing.id}` : ''}`, {
+      await adminApi<{ id: string }>(`/exercises${editing?.id ? `/${editing.id}` : ''}`, {
         method: editing?.id ? 'PATCH' : 'POST',
         body: JSON.stringify(body),
       })
-      if (needsAudio) {
-        try {
-          const voice = draft.ttsVoice === 'ko-KR-HyunSuNeural' ? 'ko-KR-HyunsuNeural' : draft.ttsVoice
-          await adminApi('/tts', { method: 'POST', body: JSON.stringify({ text: draft.promptKo.trim(), voice, speed: draft.ttsSpeed, exerciseId: savedExercise.id }) })
-        } catch (cause) { ttsWarning = cause instanceof Error ? cause.message : 'không thể đưa audio vào hàng chờ.' }
-      }
       if (editing) {
         const oldAudio = editing.audio_url || (editing.answer as any)?.audioUrl
         if (oldAudio && oldAudio !== audioUrl && !oldAudio.startsWith('blob:')) {
@@ -944,9 +782,10 @@ export default function AdminExercises() {
       if (draft.imageUrl.startsWith('blob:')) URL.revokeObjectURL(draft.imageUrl)
       if (draft.audioUrl.startsWith('blob:')) URL.revokeObjectURL(draft.audioUrl)
       setPendingImage(null)
+      setPendingAudio(null)
+      setPendingAudioName('')
       setEditing(undefined)
       await load()
-      if (ttsWarning) setError(`Đã lưu bài tập, nhưng ${ttsWarning}`)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Không thể lưu bài tập.')
     } finally {
@@ -959,8 +798,6 @@ export default function AdminExercises() {
     if (!deleteTarget) return
     setDeleting(true)
     try {
-      const urls = extractExerciseStorageUrls(deleteTarget)
-      await Promise.allSettled(urls.map((u) => deleteStorageAsset(u)))
       await adminApi(`/exercises/${deleteTarget.id}`, { method: 'DELETE' })
       setSelectedIds((current) => { const next = new Set(current); next.delete(deleteTarget.id); return next })
       setDeleteTarget(null)
@@ -1568,14 +1405,13 @@ export default function AdminExercises() {
             </>}
             {isVocabularyExercise && <>
               <div className="admin-vocab-main">
-                <label className="admin-ko-field">Nội dung tiếng Hàn *<textarea rows={3} value={draft.promptKo} onChange={(event) => setDraft({ ...draft, promptKo: event.target.value, audioUrl: '' })} /></label>
+                <label className="admin-ko-field">Nội dung tiếng Hàn *<textarea rows={3} value={draft.promptKo} onChange={(event) => setDraft({ ...draft, promptKo: event.target.value })} /></label>
                 <label className="admin-vi-field">Nội dung tiếng Việt<input value={draft.promptVi} onChange={(event) => setDraft({ ...draft, promptVi: event.target.value })} /></label>
                 <label className="admin-vocab-input">Loại từ<input value={draft.partOfSpeech} onChange={(event) => setDraft({ ...draft, partOfSpeech: event.target.value })} placeholder="Ví dụ: Danh từ, Động từ…" /></label>
                 <label className="admin-vocab-input">Phát âm chuẩn<input value={draft.pronunciation} onChange={(event) => setDraft({ ...draft, pronunciation: event.target.value })} placeholder="Ví dụ: [꼳따발]" /></label>
-                <label className="admin-vocab-input admin-voice-field">Phát âm thanh (TTS)<div className="admin-voice-preview-row"><VoiceSelect value={draft.ttsVoice} onChange={(value) => setDraft({ ...draft, ttsVoice: value, audioUrl: '' })} onPreview={(value) => void previewVoice(value)} previewing={previewingVoice} /><button type="button" className={`admin-voice-preview${playingPreviewVoice === draft.ttsVoice ? ' is-playing' : ''}`} disabled={previewingVoice} onClick={() => void previewVoice()}>{previewingVoice ? <LoaderCircle className="spin" size={16} /> : <Volume2 size={16} />} {playingPreviewVoice === draft.ttsVoice ? 'Dừng nghe' : 'Nghe thử giọng'}</button></div></label>
               </div>
               <div className="admin-vocab-side">
-                <div className="admin-upload-field admin-image-field"><span>Hình ảnh</span><label className={uploading === 'image' ? 'uploading' : ''}>{uploading === 'image' ? <LoaderCircle className="spin" /> : <Image />}<strong>{draft.imageUrl ? 'Đổi hình ảnh' : 'Tải hình ảnh'}</strong><small>PNG, JPG, WEBP · tối đa 10 MB</small><input type="file" accept="image/*" onChange={(event) => previewUpload('image', event.target.files?.[0])} /></label>{draft.imageUrl && <div className="admin-uploaded-file image-preview"><img src={draft.imageUrl} alt="Xem trước hình bài tập" /><a href={draft.imageUrl} target="_blank" rel="noreferrer">Xem hình đã tải</a><button onClick={() => { if (draft.imageUrl && !draft.imageUrl.startsWith('blob:')) void deleteStorageAsset(draft.imageUrl); setDraft({ ...draft, imageUrl: '' }) }}><X size={15} /></button></div>}{draft.audioUrl && <div className="admin-uploaded-file"><audio controls src={draft.audioUrl} /><button title="Tạo lại audio khi lưu" onClick={() => { if (draft.audioUrl && !draft.audioUrl.startsWith('blob:')) void deleteStorageAsset(draft.audioUrl); setDraft({ ...draft, audioUrl: '' }) }}><X size={15} /></button></div>}</div>
+                <div className="admin-upload-field admin-image-field"><span>Hình ảnh</span><label className={uploading === 'image' ? 'uploading' : ''}>{uploading === 'image' ? <LoaderCircle className="spin" /> : <Image />}<strong>{draft.imageUrl ? 'Đổi hình ảnh' : 'Tải hình ảnh'}</strong><small>PNG, JPG, WEBP · tối đa 10 MB</small><input type="file" accept="image/*" onChange={(event) => previewUpload('image', event.target.files?.[0])} /></label>{draft.imageUrl && <div className="admin-uploaded-file image-preview"><img src={draft.imageUrl} alt="Xem trước hình bài tập" /><a href={draft.imageUrl} target="_blank" rel="noreferrer">Xem hình đã tải</a><button type="button" onClick={() => { if (draft.imageUrl.startsWith('blob:')) URL.revokeObjectURL(draft.imageUrl); setPendingImage(null); setDraft({ ...draft, imageUrl: '' }) }}><X size={15} /></button></div>}</div>
               </div>
               <label className="admin-mnemonic-field">Mẹo nhớ<textarea rows={2} value={draft.mnemonic} onChange={(event) => setDraft({ ...draft, mnemonic: event.target.value })} placeholder="Ví dụ: 꽃(hoa) + 다발(bó) = bó hoa" /></label>
               <div className="admin-vocab-enrichment">
@@ -1725,14 +1561,14 @@ export default function AdminExercises() {
             </>}
             {isDictation && <>
               <div className="admin-listening-main admin-listening-card">
-                <div className="admin-listening-card-head"><span className="admin-listening-step">1</span><div><strong>Nội dung câu nghe</strong><small>Nhập câu gốc trước để có thể nghe thử audio</small></div></div>
+                <div className="admin-listening-card-head"><span className="admin-listening-step">1</span><div><strong>Nội dung câu nghe</strong><small>Nhập câu gốc chuẩn làm đáp án cho học viên</small></div></div>
                 <label className="admin-ko-field">
                   <span>Câu tiếng Hàn * <em className={draft.promptKo.length >= 180 ? 'is-near-limit' : ''}>{draft.promptKo.length}/200</em></span>
                   <textarea
                     maxLength={200}
                     rows={4}
                     value={draft.promptKo}
-                    onChange={(event) => setDraft({ ...draft, promptKo: event.target.value, audioUrl: '' })}
+                    onChange={(event) => setDraft({ ...draft, promptKo: event.target.value })}
                     placeholder="Ví dụ: 날씨가 추워서 목도리를 했어요."
                   />
                   <small>Đây cũng là đáp án chuẩn để chấm bài của học viên.</small>
@@ -1758,7 +1594,18 @@ export default function AdminExercises() {
                   </label>
                 </details>
               </div>
-              <TtsPanel draft={draft} setDraft={setDraft} previewVoice={previewVoice} previewing={previewingVoice} />
+              <AudioUploadPanel
+                audioUrl={draft.audioUrl}
+                fileName={pendingAudioName}
+                uploading={uploading === 'audio'}
+                onSelectFile={previewAudioUpload}
+                onClear={() => {
+                  if (draft.audioUrl?.startsWith('blob:')) URL.revokeObjectURL(draft.audioUrl)
+                  setPendingAudio(null)
+                  setPendingAudioName('')
+                  setDraft((cur) => ({ ...cur, audioUrl: '' }))
+                }}
+              />
             </>}
             {isShadowing && <>
               <div className="admin-listening-main admin-listening-card">
@@ -1769,7 +1616,7 @@ export default function AdminExercises() {
                     maxLength={200}
                     rows={4}
                     value={draft.promptKo}
-                    onChange={(event) => setDraft({ ...draft, promptKo: event.target.value, audioUrl: '' })}
+                    onChange={(event) => setDraft({ ...draft, promptKo: event.target.value })}
                     placeholder="Ví dụ: 제 꿈은 한국어를 유창하게 말하는 것이에요."
                   />
                   <small>Câu chuẩn người bản xứ đọc — học viên nghe và nhái lại theo đúng ngữ điệu.</small>
@@ -1803,7 +1650,18 @@ export default function AdminExercises() {
                   </label>
                 </details>
               </div>
-              <TtsPanel draft={draft} setDraft={setDraft} previewVoice={previewVoice} previewing={previewingVoice} showSpeed />
+              <AudioUploadPanel
+                audioUrl={draft.audioUrl}
+                fileName={pendingAudioName}
+                uploading={uploading === 'audio'}
+                onSelectFile={previewAudioUpload}
+                onClear={() => {
+                  if (draft.audioUrl?.startsWith('blob:')) URL.revokeObjectURL(draft.audioUrl)
+                  setPendingAudio(null)
+                  setPendingAudioName('')
+                  setDraft((cur) => ({ ...cur, audioUrl: '' }))
+                }}
+              />
             </>}
           </section>
         </div>

@@ -2,8 +2,6 @@ import type { FastifyPluginAsync } from 'fastify'
 import { supabaseAdmin } from '../lib/supabase.js'
 import { requireAdmin } from '../plugins/admin.js'
 import { adminBodySchema } from '../lib/adminValidation.js'
-import { randomUUID } from 'node:crypto'
-import { startTtsWorker } from '../lib/ttsWorker.js'
 
 type Status = 'draft' | 'published' | 'locked' | 'no_content'
 type ReportStatus = 'pending' | 'resolved' | 'dismissed'
@@ -35,7 +33,6 @@ function shiftDateKey(key: string, days: number) {
 }
 
 export const adminRoutes: FastifyPluginAsync = async (app) => {
-  startTtsWorker(app.log)
   app.addHook('preHandler', requireAdmin)
   app.addHook('preHandler', async (request, reply) => {
     const schema = adminBodySchema(request.method, request.routeOptions.url || '')
@@ -43,33 +40,6 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const parsed = schema.safeParse(request.body)
     if (!parsed.success) return reply.code(400).send({ code: 'INVALID_ADMIN_INPUT', message: 'Dữ liệu không hợp lệ. Kiểm tra các trường bắt buộc, kiểu dữ liệu và trạng thái.', requestId: request.id })
     request.body = parsed.data
-  })
-
-  app.post<{ Body: { text?: unknown; voice?: unknown; speed?: unknown; exerciseId?: unknown } }>('/admin/tts', async (request, reply) => {
-    const { text, voice, speed, exerciseId } = request.body || {}
-    const voices = ['ko-KR-SunHiNeural', 'ko-KR-InJoonNeural', 'ko-KR-HyunsuNeural', 'ko-KR-HyunsuMultilingualNeural']
-    if (typeof text !== 'string' || !text.trim() || text.length > 5000 || typeof voice !== 'string' || !voices.includes(voice) || typeof speed !== 'number' || ![0.75, 1, 1.25].includes(speed)) {
-      return reply.code(400).send({ code: 'INVALID_TTS_INPUT', message: 'Nội dung hoặc giọng đọc không hợp lệ.', requestId: request.id })
-    }
-    let exerciseUpdatedAt = null
-    if (exerciseId !== undefined) {
-      if (typeof exerciseId !== 'string' || !/^[0-9a-f-]{36}$/i.test(exerciseId)) return reply.code(400).send({ message: 'Mã bài tập không hợp lệ.' })
-      const { data: exercise, error: lookupError } = await supabaseAdmin.from('lesson_exercises').select('prompt_ko,audio_url,updated_at').eq('id', exerciseId).maybeSingle()
-      if (lookupError || !exercise || exercise.prompt_ko?.trim() !== text.trim() || exercise.audio_url) return reply.code(409).send({ message: 'Bài tập đã thay đổi hoặc đã có audio. Vui lòng tải lại.' })
-      exerciseUpdatedAt = exercise.updated_at
-    }
-    const id = randomUUID()
-    const { error } = await supabaseAdmin.from('tts_jobs').insert({ id, requested_by: request.userId, text_content: text.trim(), voice, speed, exercise_id: exerciseId ?? null, exercise_updated_at: exerciseUpdatedAt })
-    if (error) { request.log.error({ err: error }, 'Cannot enqueue TTS'); return reply.code(503).send({ code: 'TTS_QUEUE_UNAVAILABLE', message: 'Hàng chờ tạo giọng chưa sẵn sàng. Vui lòng thử lại sau.', requestId: request.id }) }
-    return reply.code(202).send({ data: { id, status: 'queued' } })
-  })
-
-  app.get<{ Params: { id: string } }>('/admin/tts/:id', async (request, reply) => {
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(request.params.id)) return reply.code(400).send({ message: 'Mã yêu cầu không hợp lệ.' })
-    const { data, error } = await supabaseAdmin.from('tts_jobs').select('id,status,audio_url,error_message').eq('id', request.params.id).eq('requested_by', request.userId).maybeSingle()
-    if (error) return reply.code(503).send({ message: 'Không thể kiểm tra trạng thái tạo giọng.' })
-    if (!data) return reply.code(404).send({ message: 'Không tìm thấy yêu cầu tạo giọng.' })
-    return { data: { id: data.id, status: data.status, url: data.audio_url, message: data.error_message } }
   })
 
   app.get<{ Querystring: { days?: string; refresh?: string } }>('/admin/dashboard', async (request, reply) => {

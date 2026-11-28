@@ -965,6 +965,17 @@
 .admin-speed-field > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 12px; background: var(--ks-surface-eae6f4, #eae6f4); }
 .admin-speed-field button { min-height: 32px; border: 0; border-radius: 8px; color: var(--ks-text-7268a0, #7268a0); background: transparent; font: 600 12px inherit; cursor: pointer; transition: background .13s, color .13s, box-shadow .13s; }
 .admin-speed-field button.active { color: var(--ks-text-5f50d7, #5f50d7); background: var(--ks-surface-ffffff, #fff); box-shadow: 0 2px 8px rgba(72,58,137,.12); font-weight: 700; }
+.admin-audio-dropzone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 118px; padding: 16px 14px; border: 1.5px dashed var(--ks-border-cfc6f4, #cfc6f4); border-radius: 14px; background: var(--ks-surface-faf9fe, #faf9fe); color: var(--ks-text-6758cf, #6758cf); text-align: center; cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
+.admin-audio-dropzone:hover, .admin-audio-dropzone.is-dragging { border-color: var(--ks-border-7c6fe4, #7c6fe4); background: var(--ks-surface-f3efff, #f3efff); }
+.admin-audio-dropzone.is-dragging { transform: scale(1.01); box-shadow: 0 0 0 3px rgba(124, 111, 228, .14); }
+.admin-audio-dropzone.is-uploading { opacity: .7; cursor: wait; }
+.admin-audio-dropzone input { display: none; }
+.admin-audio-dropzone-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px; background: var(--ks-surface-eeeafd, #eeeafd); color: var(--ks-text-6e60d8, #6e60d8); }
+.admin-audio-dropzone strong { color: var(--ks-text-2d2848, #2d2848); font-size: 13px; font-weight: 700; }
+.admin-audio-dropzone small { color: var(--ks-text-9489b8, #9489b8); font-size: 11px; font-weight: 500; }
+.admin-audio-file-name { display: flex; align-items: center; gap: 6px; padding: 0 2px; color: var(--ks-text-5f50cf, #5f50cf); font-size: 11px; font-weight: 600; overflow: hidden; }
+.admin-audio-file-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-audio-file-name svg { flex: 0 0 auto; }
 
 @media (max-width: 900px) {
   .admin-exercise-modal .admin-content-section.is-dictation,
@@ -3791,7 +3802,19 @@
   .admin-menu button, .admin-sidebar .admin-theme-toggle, .admin-sidebar .admin-signout { flex: 1 0 44px; }
 }
 .admin-course-progress-tools small { flex-basis: 100%; color: var(--ks-text-847da5, #847da5); font-size: 12px; }
-.admin-curriculum-ranking { margin: 24px 0; }
+.admin-curriculum-ranking { margin: 0; }
+.admin-stats-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 5px; margin-bottom: 20px; border: 1px solid var(--ks-border-eae5f5, #eae5f5); border-radius: 14px; background: var(--ks-surface-faf9fe, #faf9fe); width: fit-content; max-width: 100%; }
+.admin-stats-tabs button { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 8px 14px; border: 0; border-radius: 10px; background: transparent; color: var(--ks-text-756d91, #756d91); font: 700 13px 'Quicksand', sans-serif; cursor: pointer; transition: background .16s ease, color .16s ease, box-shadow .16s ease; }
+.admin-stats-tabs button:hover { color: var(--ks-text-5f50cf, #5f50cf); }
+.admin-stats-tabs button.active { background: var(--ks-surface-ffffff, #fff); color: var(--ks-text-6255d8, #6255d8); box-shadow: 0 2px 8px rgba(72, 58, 137, .1); }
+.admin-ranking-filters.is-single { grid-template-columns: minmax(0, 380px); }
+.admin-course-rank-link { padding: 0; border: 0; background: transparent; color: var(--ks-text-6255d8, #6255d8); font: 700 12px 'Quicksand', sans-serif; cursor: pointer; }
+.admin-course-rank-link:hover { text-decoration: underline; }
+@media (max-width: 640px) {
+  .admin-stats-tabs { width: 100%; }
+  .admin-stats-tabs button { flex: 1 1 auto; justify-content: center; }
+  .admin-ranking-filters.is-single { grid-template-columns: minmax(0, 1fr); }
+}
 
 @media (max-width: 860px) {
   .admin-combobox-menu { width: 100%; min-width: 0; max-width: 100%; }
