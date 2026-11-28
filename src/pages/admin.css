@@ -976,6 +976,40 @@
 .admin-audio-file-name { display: flex; align-items: center; gap: 6px; padding: 0 2px; color: var(--ks-text-5f50cf, #5f50cf); font-size: 11px; font-weight: 600; overflow: hidden; }
 .admin-audio-file-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-audio-file-name svg { flex: 0 0 auto; }
+.admin-audio-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.admin-audio-trim-btn, .admin-audio-restore-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 1 1 auto; min-height: 34px; padding: 6px 10px; border: 1px solid var(--ks-border-ded8f1, #ded8f1); border-radius: 10px; background: var(--ks-surface-ffffff, #fff); color: var(--ks-text-5f50cf, #5f50cf); font: 700 12px inherit; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.admin-audio-trim-btn:hover, .admin-audio-restore-btn:hover { border-color: var(--ks-border-8a7bef, #8a7bef); background: var(--ks-surface-f5f2ff, #f5f2ff); }
+.admin-audio-restore-btn { color: var(--ks-text-756d91, #756d91); }
+.admin-trimmer { display: flex; flex-direction: column; gap: 10px; padding: 11px; border: 1px solid var(--ks-border-ded8f1, #ded8f1); border-radius: 12px; background: var(--ks-surface-ffffff, #fff); }
+.admin-trimmer-state { flex-direction: row; align-items: center; justify-content: center; min-height: 110px; color: var(--ks-text-756d91, #756d91); font-size: 12px; font-weight: 600; }
+.admin-trimmer-state.is-error { flex-direction: column; color: var(--ks-text-d94f62, #d94f62); text-align: center; }
+.admin-trimmer-head { display: flex; align-items: center; gap: 8px; }
+.admin-trimmer-head strong { font-size: 12px; color: var(--ks-text-2d2848, #2d2848); }
+.admin-trimmer-head span { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--ks-text-6255d8, #6255d8); }
+.admin-trimmer-head button { display: grid; place-items: center; width: 24px; height: 24px; border: 0; border-radius: 7px; background: var(--ks-surface-f2eff8, #f2eff8); color: var(--ks-text-756d91, #756d91); cursor: pointer; }
+.admin-trimmer-wave { position: relative; height: 68px; border-radius: 10px; background: var(--ks-surface-faf9fe, #faf9fe); border: 1px solid var(--ks-border-ede9f9, #ede9f9); overflow: hidden; cursor: pointer; user-select: none; touch-action: none; }
+.admin-trimmer-bars { position: relative; z-index: 1; display: flex; align-items: center; gap: 1.5px; height: 100%; padding: 8px 4px; }
+.admin-trimmer-bar { flex: 1 1 0; min-width: 1px; border-radius: 2px; background: var(--ks-border-d8d1f0, #d8d1f0); transition: background .1s ease; }
+.admin-trimmer-bar.is-active { background: #7c6fe4; }
+.admin-trimmer-mask { position: absolute; top: 0; bottom: 0; z-index: 2; background: rgba(25, 20, 50, .14); pointer-events: none; }
+.admin-trimmer-mask.is-left { left: 0; }
+.admin-trimmer-mask.is-right { right: 0; }
+.admin-trimmer-selection { position: absolute; top: 0; bottom: 0; z-index: 3; border-top: 2px solid #6c5ce7; border-bottom: 2px solid #6c5ce7; pointer-events: none; }
+.admin-trimmer-handle { position: absolute; top: 0; bottom: 0; width: 12px; padding: 0; border: 0; background: #6c5ce7; pointer-events: auto; cursor: ew-resize; }
+.admin-trimmer-handle.is-start { left: -6px; border-radius: 4px 0 0 4px; }
+.admin-trimmer-handle.is-end { right: -6px; border-radius: 0 4px 4px 0; }
+.admin-trimmer-handle::after { content: ''; position: absolute; top: 50%; left: 50%; width: 2px; height: 18px; transform: translate(-50%, -50%); border-radius: 2px; background: #fff; }
+.admin-trimmer-playhead { position: absolute; top: 0; bottom: 0; z-index: 4; width: 2px; margin-left: -1px; background: #e11d48; pointer-events: none; }
+.admin-trimmer-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.admin-trimmer-play { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 5px 12px; border: 0; border-radius: 9px; background: #6c5ce7; color: #fff; font: 700 12px inherit; cursor: pointer; }
+.admin-trimmer-clock { font-size: 11px; font-weight: 600; color: var(--ks-text-756d91, #756d91); font-variant-numeric: tabular-nums; }
+.admin-trimmer-times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.admin-trimmer-times label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 700; color: var(--ks-text-47405f, #47405f); }
+.admin-trimmer-time-input { display: flex; align-items: center; gap: 4px; }
+.admin-trimmer-time-input input { min-width: 0; width: 100%; height: 32px; padding: 0 7px; border: 1px solid var(--ks-border-ded8f1, #ded8f1); border-radius: 8px; background: var(--ks-surface-faf9fe, #faf9fe); color: var(--ks-text-2d2848, #2d2848); font: 600 12px inherit; }
+.admin-trimmer-time-input button { flex: 0 0 auto; height: 32px; padding: 0 7px; border: 1px solid var(--ks-border-ded8f1, #ded8f1); border-radius: 8px; background: var(--ks-surface-f5f2ff, #f5f2ff); color: var(--ks-text-5f50cf, #5f50cf); font: 700 10px inherit; cursor: pointer; white-space: nowrap; }
+.admin-trimmer-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 2px; }
+.admin-trimmer-footer button { min-height: 34px; padding: 6px 12px; font-size: 12px; }
 
 @media (max-width: 900px) {
   .admin-exercise-modal .admin-content-section.is-dictation,

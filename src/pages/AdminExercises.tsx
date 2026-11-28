@@ -22,6 +22,7 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  Scissors,
   Search,
   Sliders,
   Sparkles,
@@ -34,6 +35,8 @@ import {
 } from 'lucide-react'
 import { adminApi } from '../lib/adminApi'
 import { uploadCloudinaryAsset } from '../lib/cloudinary'
+import { formatAudioTime } from '../lib/audioTrimmer'
+import AudioTrimmer from '../components/admin/AudioTrimmer'
 import { AdminSelect } from './AdminPage'
 import { BlockingLoader } from '../components/common/AppDialog'
 
@@ -270,17 +273,32 @@ function AudioUploadPanel({
   audioUrl,
   fileName,
   uploading,
+  trimSource,
+  isTrimmed,
+  canRestoreOriginal,
   onSelectFile,
+  onApplyTrim,
+  onRestoreOriginal,
   onClear,
 }: {
   audioUrl: string
   fileName: string
   uploading: boolean
+  trimSource: File | string | null
+  isTrimmed: boolean
+  canRestoreOriginal: boolean
   onSelectFile: (file?: File) => void
+  onApplyTrim: (trimmedFile: File, startSec: number, endSec: number) => void
+  onRestoreOriginal: () => void
   onClear: () => void
 }) {
   const [dragging, setDragging] = useState(false)
+  const [trimming, setTrimming] = useState(false)
   const dragDepthRef = useRef(0)
+
+  useEffect(() => {
+    if (!audioUrl) setTrimming(false)
+  }, [audioUrl])
 
   return <aside className="admin-tts-panel admin-audio-upload-panel">
     <div className="admin-tts-heading">
@@ -315,6 +333,7 @@ function AudioUploadPanel({
           event.stopPropagation()
           dragDepthRef.current = 0
           setDragging(false)
+          setTrimming(false)
           onSelectFile(event.dataTransfer.files?.[0])
         }}
       >
@@ -327,19 +346,38 @@ function AudioUploadPanel({
           type="file"
           accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm,.aac"
           onChange={(event) => {
+            setTrimming(false)
             onSelectFile(event.target.files?.[0])
             event.target.value = ''
           }}
         />
       </label>
       {audioUrl
-        ? <>
-          {fileName && <div className="admin-audio-file-name" title={fileName}><Music size={13} /><span>{fileName}</span></div>}
-          <div className="admin-tts-audio-wrap">
-            <audio className="admin-tts-audio" controls src={audioUrl} />
-            <button type="button" className="admin-tts-audio-clear" title="Xóa file nghe" aria-label="Xóa file nghe" onClick={onClear}><X size={13} /></button>
-          </div>
-        </>
+        ? trimming && trimSource
+          ? <AudioTrimmer
+            source={trimSource}
+            fileName={fileName}
+            onApplyTrim={(trimmedFile, startSec, endSec) => {
+              onApplyTrim(trimmedFile, startSec, endSec)
+              setTrimming(false)
+            }}
+            onCancel={() => setTrimming(false)}
+          />
+          : <>
+            {fileName && <div className="admin-audio-file-name" title={fileName}><Music size={13} /><span>{fileName}</span></div>}
+            <div className="admin-tts-audio-wrap">
+              <audio className="admin-tts-audio" controls src={audioUrl} />
+              <button type="button" className="admin-tts-audio-clear" title="Xóa file nghe" aria-label="Xóa file nghe" onClick={onClear}><X size={13} /></button>
+            </div>
+            <div className="admin-audio-actions">
+              {trimSource && <button type="button" className="admin-audio-trim-btn" onClick={() => setTrimming(true)}>
+                <Scissors size={13} /> Cắt đoạn nghe
+              </button>}
+              {isTrimmed && canRestoreOriginal && <button type="button" className="admin-audio-restore-btn" onClick={onRestoreOriginal}>
+                <RotateCcw size={13} /> Khôi phục file gốc
+              </button>}
+            </div>
+          </>
         : <p className="admin-tts-empty"><Music size={14} /> Chưa có file nghe · có thể tải lên ngay hoặc bổ sung sau</p>
       }
     </div>
@@ -366,6 +404,8 @@ export default function AdminExercises() {
   const [uploading, setUploading] = useState<'image' | 'audio' | null>(null)
   const [pendingImage, setPendingImage] = useState<File | null>(null)
   const [pendingAudio, setPendingAudio] = useState<File | null>(null)
+  const [originalAudioFile, setOriginalAudioFile] = useState<File | null>(null)
+  const [isTrimmedAudio, setIsTrimmedAudio] = useState(false)
   const [pendingAudioName, setPendingAudioName] = useState('')
   const [draggedFormulaIndex, setDraggedFormulaIndex] = useState<number | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -455,10 +495,14 @@ export default function AdminExercises() {
     if (isGrammarExercise || isReview) {
       setPendingImage(null)
       setPendingAudio(null)
+      setOriginalAudioFile(null)
+      setIsTrimmedAudio(false)
       setPendingAudioName('')
       setDraft((current) => current.imageUrl || current.audioUrl ? { ...current, imageUrl: '', audioUrl: '' } : current)
     } else if (isVocabularyExercise) {
       setPendingAudio(null)
+      setOriginalAudioFile(null)
+      setIsTrimmedAudio(false)
       setPendingAudioName('')
       setDraft((current) => current.audioUrl ? { ...current, audioUrl: '' } : current)
     } else if (isDictation || isShadowing) {
@@ -581,6 +625,8 @@ export default function AdminExercises() {
     setExamLevelViewMode('detail')
     setPendingImage(null)
     setPendingAudio(null)
+    setOriginalAudioFile(null)
+    setIsTrimmedAudio(false)
     setPendingAudioName('')
     setEditing(item || null)
     if (!item) {
@@ -678,8 +724,35 @@ export default function AdminExercises() {
       if (current.audioUrl?.startsWith('blob:')) URL.revokeObjectURL(current.audioUrl)
       return { ...current, audioUrl: previewUrl }
     })
+    setOriginalAudioFile(file)
     setPendingAudio(file)
+    setIsTrimmedAudio(false)
     setPendingAudioName(file.name)
+  }
+
+  const applyTrimmedAudio = (trimmedFile: File, startSec: number, endSec: number) => {
+    const previewUrl = URL.createObjectURL(trimmedFile)
+    setError('')
+    setDraft((current) => {
+      if (current.audioUrl?.startsWith('blob:')) URL.revokeObjectURL(current.audioUrl)
+      return { ...current, audioUrl: previewUrl }
+    })
+    setPendingAudio(trimmedFile)
+    setIsTrimmedAudio(true)
+    setPendingAudioName(`${trimmedFile.name} (${formatAudioTime(startSec)} – ${formatAudioTime(endSec)})`)
+  }
+
+  const restoreOriginalAudio = () => {
+    if (!originalAudioFile) return
+    const previewUrl = URL.createObjectURL(originalAudioFile)
+    setError('')
+    setDraft((current) => {
+      if (current.audioUrl?.startsWith('blob:')) URL.revokeObjectURL(current.audioUrl)
+      return { ...current, audioUrl: previewUrl }
+    })
+    setPendingAudio(originalAudioFile)
+    setIsTrimmedAudio(false)
+    setPendingAudioName(originalAudioFile.name)
   }
 
   const buildAnswer = (imageUrl: string, audioUrl: string) => {
@@ -783,6 +856,8 @@ export default function AdminExercises() {
       if (draft.audioUrl.startsWith('blob:')) URL.revokeObjectURL(draft.audioUrl)
       setPendingImage(null)
       setPendingAudio(null)
+      setOriginalAudioFile(null)
+      setIsTrimmedAudio(false)
       setPendingAudioName('')
       setEditing(undefined)
       await load()
@@ -1598,10 +1673,17 @@ export default function AdminExercises() {
                 audioUrl={draft.audioUrl}
                 fileName={pendingAudioName}
                 uploading={uploading === 'audio'}
+                trimSource={originalAudioFile || (draft.audioUrl && !draft.audioUrl.startsWith('blob:') ? draft.audioUrl : pendingAudio)}
+                isTrimmed={isTrimmedAudio}
+                canRestoreOriginal={Boolean(originalAudioFile)}
                 onSelectFile={previewAudioUpload}
+                onApplyTrim={applyTrimmedAudio}
+                onRestoreOriginal={restoreOriginalAudio}
                 onClear={() => {
                   if (draft.audioUrl?.startsWith('blob:')) URL.revokeObjectURL(draft.audioUrl)
                   setPendingAudio(null)
+                  setOriginalAudioFile(null)
+                  setIsTrimmedAudio(false)
                   setPendingAudioName('')
                   setDraft((cur) => ({ ...cur, audioUrl: '' }))
                 }}
@@ -1654,10 +1736,17 @@ export default function AdminExercises() {
                 audioUrl={draft.audioUrl}
                 fileName={pendingAudioName}
                 uploading={uploading === 'audio'}
+                trimSource={originalAudioFile || (draft.audioUrl && !draft.audioUrl.startsWith('blob:') ? draft.audioUrl : pendingAudio)}
+                isTrimmed={isTrimmedAudio}
+                canRestoreOriginal={Boolean(originalAudioFile)}
                 onSelectFile={previewAudioUpload}
+                onApplyTrim={applyTrimmedAudio}
+                onRestoreOriginal={restoreOriginalAudio}
                 onClear={() => {
                   if (draft.audioUrl?.startsWith('blob:')) URL.revokeObjectURL(draft.audioUrl)
                   setPendingAudio(null)
+                  setOriginalAudioFile(null)
+                  setIsTrimmedAudio(false)
                   setPendingAudioName('')
                   setDraft((cur) => ({ ...cur, audioUrl: '' }))
                 }}
